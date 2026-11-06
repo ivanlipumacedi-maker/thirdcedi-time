@@ -4,7 +4,7 @@
   const pares = [
     // Comida y bebida
     ['Choripán', 'Bondiola'], ['Mate', 'Tereré'], ['Asado', 'Parrillada'], ['Empanada', 'Calzone'],
-    ['Milanesa', 'Suprema'], ['Alfajor', 'Conito'], ['Dulce de leche', 'Mermelada'], ['Medialuna', 'Vigilante'],
+    ['Milanesa', 'Suprema'], ['Alfajor', 'Galletita'], ['Dulce de leche', 'Mermelada'], ['Medialuna', 'Cañoncito'],
     ['Pizza', 'Fainá'], ['Fernet', 'Gancia'], ['Helado', 'Licuado'], ['Café', 'Té'],
     ['Ñoquis', 'Ravioles'], ['Fideos', 'Arroz'], ['Hamburguesa', 'Pancho'], ['Sushi', 'Ceviche'],
     ['Provoleta', 'Fondue'], ['Chimichurri', 'Salsa criolla'], ['Locro', 'Guiso de lentejas'], ['Flan', 'Budín de pan'],

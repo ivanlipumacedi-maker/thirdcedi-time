@@ -116,6 +116,9 @@ test('hay al menos 150 pares de palabras, bien formados y sin repetir', function
     const k = normalizar(par.palabra.trim());
     assert.ok(!vistas.has(k), 'palabra repetida: ' + par.palabra);
     vistas.add(k);
+    const ki = normalizar(par.impostor.trim());
+    assert.ok(!vistas.has(ki), 'impostor repetido o ya usado como palabra: ' + par.impostor);
+    vistas.add(ki);
     const malas = palabrasProhibidas(par.palabra + ' ' + par.impostor);
     assert.deepEqual(malas, [], par.palabra + ' usa: ' + malas.join(', '));
   }
