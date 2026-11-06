@@ -1,10 +1,9 @@
 // Pruebas contra el proyecto real (solo con la clave publicable): el hook de dominio y las RLS sin sesión.
-// Uso: node dev/tests/auth-rls.mjs [--hook-activo [--mail-externo=<mail>]]
+// Uso: node dev/tests/auth-rls.mjs [--hook-activo]
 // Sin argumentos corre solo los chequeos de RLS y NO llama a /auth/v1/otp.
 // (a) y (a2) piden un código de verdad: con el hook apagado crean usuarios y pueden mandar mail a terceros.
-//   --hook-activo        corre (a2) con prueba@example.com (RFC 2606, no entrega mail a nadie).
-//   --mail-externo=<m>   corre (a): un mail fuera del grupo que controle Ivan y que GoTrue acepte (no sabemos
-//                        si valida example.com/.invalid antes del hook; la doc de Supabase no lo aclara).
+//   --hook-activo   corre (a) y (a2) con prueba@example.com (RFC 2606, no entrega mail a nadie).
+//                   Verificado 2026-11-06: GoTrue acepta example.com y el que lo rechaza es el hook (403).
 import assert from 'node:assert/strict';
 
 const BASE = 'https://qvezbnkrfqewanlcejha.supabase.co';
@@ -16,23 +15,20 @@ const paso = async (nombre, fn) => {
 };
 
 const hookActivo = process.argv.includes('--hook-activo');
-const externo = (process.argv.find((x) => x.startsWith('--mail-externo=')) || '').slice('--mail-externo='.length);
+const MAIL_EXTERNO = 'prueba@example.com';
 const otp = (email) => fetch(`${BASE}/auth/v1/otp`, { method: 'POST', headers: h(), body: JSON.stringify({ email, create_user: true }) });
 const saltear = (nombre, por) => console.log(`SALTEADO ${nombre} (${por})`);
 
 if (!hookActivo) {
-  saltear('(a) hook rechaza mail externo con 403', 'correr con --hook-activo --mail-externo=<mail> cuando el hook esté activado');
+  saltear('(a) hook rechaza mail externo con 403', 'correr con --hook-activo cuando el hook esté activado');
   saltear('(a2) mail no entregable rechazado', 'correr con --hook-activo cuando el hook esté activado');
 } else {
-  if (!externo) saltear('(a) hook rechaza mail externo con 403', 'falta --mail-externo=<mail fuera del grupo que controle Ivan>');
-  else {
-    await paso('(a) mail fuera del grupo: el hook rechaza con 403 "Solo cuentas del Grupo CEDI"', async () => {
-      const r = await otp(externo);
-      const t = await r.text();
-      assert.equal(r.status, 403, `esperaba 403 y vino ${r.status}: ${t} (¿el hook "Before User Created" está activado?)`);
-      assert.match(t, /Solo cuentas del Grupo CEDI/);
-    });
-  }
+  await paso(`(a) ${MAIL_EXTERNO}: el hook rechaza con 403 "Solo cuentas del Grupo CEDI"`, async () => {
+    const r = await otp(MAIL_EXTERNO);
+    const t = await r.text();
+    assert.equal(r.status, 403, `esperaba 403 y vino ${r.status}: ${t} (¿el hook "Before User Created" está activado?)`);
+    assert.match(t, /Solo cuentas del Grupo CEDI/);
+  });
   await paso('(a2) prueba@example.com queda rechazado (400 de GoTrue o 403 del hook)', async () => {
     const r = await otp('prueba@example.com');
     assert.ok(r.status === 400 || r.status === 403, 'esperaba 400 o 403 y vino ' + r.status);
