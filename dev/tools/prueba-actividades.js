@@ -69,7 +69,7 @@ const texto = (p, sel) => p.$eval(sel, (e) => e.textContent);
     await A.screenshot({ path: path.join(shots, 'actividades-form-claro.png') });
     await A.click('#btn-guardar-act');
     await A.waitForSelector('#btn-voy');
-    assert.match(await A.$eval('h1', (e) => e.textContent), /Pádel zz/);
+    assert.match(await A.evaluate(() => [...document.querySelectorAll('h1')].find((e) => e.offsetParent !== null)?.textContent || ''), /Pádel zz/); // el primer h1 visible (los de login están ocultos)
     await A.screenshot({ path: path.join(shots, 'actividades-detalle-claro.png') });
 
     // B ve aparecer la actividad en vivo, sin recargar
@@ -88,9 +88,14 @@ const texto = (p, sel) => p.$eval(sel, (e) => e.textContent);
 
     // A, que está viendo el detalle, ve a B en el tercer tiempo sin recargar
     await A.waitForFunction(() => /Tercer tiempo \(1\)/.test(document.body.innerText), { timeout: 15000 });
-    const anotadosA = await A.evaluate(() => [...document.querySelectorAll('.anotados')].map((u) => u.innerText));
-    assert.ok(/ZZ Prueba B/.test(anotadosA[1] || ''), 'A debe ver a B en el tercer tiempo: ' + JSON.stringify(anotadosA));
-    assert.ok(!/ZZ Prueba B/.test(anotadosA[0] || ''), 'B no debe estar en la actividad');
+    // Cada parte es un h2 seguido de su lista (o de "Todavía no se anotó nadie."): se lee el texto entre los h2.
+    const anotadosA = await A.evaluate(() => {
+      const [hAct, hTer] = [...document.querySelectorAll('#pantalla-actividades h2.sub')].filter((e) => /^La actividad|Tercer tiempo/.test(e.textContent));
+      const hasta = (desde, fin) => { let t = ''; for (let n = desde.nextElementSibling; n && n !== fin && n.tagName !== 'H2'; n = n.nextElementSibling) t += n.innerText + '\n'; return t; };
+      return [hasta(hAct, hTer), hasta(hTer, null)];
+    });
+    assert.ok(/ZZ Prueba B/.test(anotadosA[1]), 'A debe ver a B en el tercer tiempo: ' + JSON.stringify(anotadosA));
+    assert.ok(!/ZZ Prueba B/.test(anotadosA[0]), 'B no debe estar en la actividad: ' + JSON.stringify(anotadosA));
     await A.screenshot({ path: path.join(shots, 'actividades-anotados-a-claro.png') });
     await B.screenshot({ path: path.join(shots, 'actividades-detalle-b-claro.png') });
 
