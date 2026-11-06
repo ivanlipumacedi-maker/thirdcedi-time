@@ -11,6 +11,9 @@
   let tRefresco = null;
   let cargado = false;
   let confirmando = null;         // 'cancelar' mientras se espera el segundo toque
+  let chatEl = null;              // contenedor del chat de la actividad abierta (se conserva entre repintados)
+  let chatSala = null;
+  let chatCerrar = null;
 
   const raiz = () => document.getElementById('pantalla-actividades');
   const sb = () => g.App.sb;
@@ -66,6 +69,7 @@
   }
   function desuscribir() {
     if (canal && sb()) sb().removeChannel(canal);
+    cerrarChat();
     canal = null; cargado = false; actividades = []; asistencias = []; vista = { tipo: 'lista' };
     clearTimeout(tRefresco);
   }
@@ -76,15 +80,40 @@
     if (!r) return;
     // el formulario no se repinta por eventos en vivo: se perdería lo que la persona está escribiendo
     if (vista.tipo === 'form' && r.querySelector('form.form-act') && !vista.nuevoRender) return;
+    const lch = chatEl && chatEl.querySelector('.chat-lista');
+    const antes = { scroll: lch ? lch.scrollTop : 0, foco: !!(chatEl && chatEl.contains(document.activeElement) && document.activeElement.tagName === 'TEXTAREA') };
     r.textContent = '';
-    if (!g.App.yo()) return;
+    if (!g.App.yo()) { cerrarChat(); return; }
     if (vista.tipo === 'detalle') {
       const a = actividades.find((x) => x.id === vista.id);
-      if (a) { r.append(...detalle(a)); return; }
+      if (a) {
+        r.append(...detalle(a));
+        // el chat sigue vivo entre repintados: se recupera dónde estaba el scroll y el foco del teclado
+        const nl = chatEl && chatEl.querySelector('.chat-lista');
+        if (nl && chatEl.isConnected) { nl.scrollTop = antes.scroll; if (antes.foco) chatEl.querySelector('textarea').focus({ preventScroll: true }); }
+        return;
+      }
       vista = { tipo: 'lista' };
     }
+    cerrarChat();
     if (vista.tipo === 'form') { vista.nuevoRender = false; r.append(formulario(vista.id ? actividades.find((x) => x.id === vista.id) : null)); return; }
     r.append(...lista());
+  }
+  function cerrarChat() {
+    if (chatCerrar) chatCerrar();
+    chatCerrar = null; chatEl = null; chatSala = null;
+  }
+  // El chat de la actividad: solo para quien está anotado a alguna de las partes. Se abre una vez y se reusa.
+  function chatDe(a, anotado) {
+    const sala = 'act:' + a.id;
+    if (!anotado || !g.Chat) { cerrarChat(); return null; }
+    if (chatSala !== sala) {
+      cerrarChat();
+      chatEl = h('div', { class: 'chat-cont', id: 'chat-act' });
+      chatSala = sala;
+      chatCerrar = g.Chat.abrir(chatEl, sala);
+    }
+    return chatEl;
   }
   function irA(v) { vista = v; if (v.tipo === 'form') vista.nuevoRender = true; confirmando = null; pintar(); }
 
@@ -182,6 +211,7 @@
         cancelada ? null : h('button', { type: 'button', id: 'btn-voy-tercer', class: voyTer ? 'btn-sec btn-ancho' : 'btn-primario btn-ancho', on: { click: alternar('tercer', voyTer) } }, voyTer ? 'Ya no voy al tercer tiempo' : 'Voy al tercer tiempo'),
         anotadosLista(enTer));
     }
+    out.push(chatDe(a, voy || voyTer));
     if (a.creador === yo && !cancelada) {
       out.push(h('h2', { class: 'sub' }, 'Organizar'), h('div', { class: 'fila-botones' },
         h('button', { type: 'button', class: 'btn-sec', on: { click: () => irA({ tipo: 'form', id: a.id }) } }, 'Editar'),
