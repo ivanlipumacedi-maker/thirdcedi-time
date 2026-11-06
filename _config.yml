@@ -1,0 +1,12 @@
+# GitHub Pages (Jekyll): publica la app pero NO el banco de la Trivia ni las palabras del Impostor (tienen las
+# respuestas; la app las lee de tablas privadas en Supabase), ni las herramientas, docs y notas internas.
+# Decisión de Ivan (2026-11-06): repo público con Pages; el banco sigue legible en el historial de git, se acepta.
+# No agregar un archivo .nojekyll: sin Jekyll este exclude no se aplica y se publicaría todo.
+exclude:
+  - contenido
+  - dev
+  - docs
+  - CLAUDE.md
+  - HANDOFF.md
+  - package.json
+  - package-lock.json
