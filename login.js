@@ -1,7 +1,7 @@
 // Acceso con código por mail (OTP de Supabase), alta de perfil (nombre + foto) y panel de perfil propio.
 (function (g) {
   const $ = (id) => document.getElementById(id);
-  const MSG_DOMINIO = 'Usá tu mail del Grupo CEDI';
+  const MSG_DOMINIO = 'Usá tu mail del Grupo CEDI'; // igual a Errores.MSG_DOMINIO
   let mail = '';
   let fotoPendiente = null; // Blob listo para subir en el alta
   let tReenvio = null;
@@ -25,17 +25,9 @@
     if (si) { b.dataset.texto = b.textContent; b.textContent = textoEn; } else if (b.dataset.texto) b.textContent = b.dataset.texto;
     b.disabled = si;
   }
-  function traducir(e) {
-    const m = String((e && e.message) || '').toLowerCase();
-    const st = e && e.status;
-    if (st === 403 || m.indexOf('grupo cedi') >= 0) return MSG_DOMINIO;
-    if (st === 429 || m.indexOf('rate limit') >= 0 || m.indexOf('security purposes') >= 0) return 'Pediste muchos códigos seguidos. Esperá un ratito y probá de nuevo.';
-    if (m.indexOf('expired') >= 0 || m.indexOf('invalid') >= 0) return 'El código no es válido o venció. Pedí uno nuevo.';
-    if (m.indexOf('failed to fetch') >= 0 || m.indexOf('network') >= 0) return 'No hay conexión. Revisá tu señal y probá de nuevo.';
-    return 'No pudimos hacerlo. Probá de nuevo en un momento.';
-  }
+  const traducir = (e, paso) => g.Errores.traducir(e, paso);
 
-  // ---------- Foto: recorte cuadrado centrado, 512x512, WebP (JPEG si el navegador no codifica WebP) ----------
+  // ---------- Foto: recorte cuadrado centrado, 512x512, WebP (JPEG si el navegador no codifica WebP); ruta <uid>/avatar ----------
   async function procesarFoto(file) {
     const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
     const r = g.Perfiles.recorteCuadrado(bmp.width, bmp.height);
@@ -109,7 +101,7 @@
   }
   function cooldownReenvio() {
     const b = $('btn-reenviar');
-    let n = 45;
+    let n = 60; // mínimo entre envíos que pone Supabase por defecto
     b.disabled = true;
     clearInterval(tReenvio);
     const pintar = () => { b.textContent = n > 0 ? 'Reenviar código (' + n + ' s)' : 'Reenviar código'; };
@@ -131,12 +123,12 @@
       error('err-codigo', '');
       pasos('paso-codigo');
       cooldownReenvio();
-    } catch (e) { error('err-mail', traducir(e)); }
+    } catch (e) { error('err-mail', traducir(e, 'mail')); }
     ocupado('btn-mail', false);
   }
   async function onReenviar() {
     error('err-codigo', '');
-    try { await enviarCodigo(mail); g.App.toast('Te mandamos un código nuevo'); cooldownReenvio(); } catch (e) { error('err-codigo', traducir(e)); }
+    try { await enviarCodigo(mail); g.App.toast('Te mandamos un código nuevo'); cooldownReenvio(); } catch (e) { error('err-codigo', traducir(e, 'mail')); }
   }
   async function onCodigo(ev) {
     ev.preventDefault();
@@ -148,7 +140,7 @@
       const { data, error: e } = await sb().auth.verifyOtp({ email: mail, token, type: 'email' });
       if (e) throw e;
       await despuesDeEntrar(data.user || (data.session && data.session.user));
-    } catch (e) { error('err-codigo', traducir(e)); }
+    } catch (e) { error('err-codigo', traducir(e, 'codigo')); }
     ocupado('btn-codigo', false);
   }
 
@@ -160,7 +152,7 @@
   async function despuesDeEntrar(user) {
     if (!user) throw new Error('Sesión incompleta');
     const p = await cargarPerfil(user.id);
-    if (p) { entrar(p); return; }
+    if (p) { await entrar(p); return; }
     mail = user.email || mail;
     fotoPendiente = null;
     $('in-nombre').value = '';
@@ -189,14 +181,15 @@
           if (!e2) p = act;
         } catch (e3) { g.App.toast('Tu perfil quedó creado, pero la foto no se pudo subir. Probá de nuevo desde Perfil.'); }
       }
-      entrar(p);
-    } catch (e) { error('err-alta', traducir(e)); }
+      await entrar(p);
+    } catch (e) { error('err-alta', traducir(e, 'otro')); }
     ocupado('btn-alta', false);
   }
 
-  function entrar(p) {
+  async function entrar(p) {
     g.App.setPerfil(p);
     g.App.modoAcceso(false);
+    await g.Perfiles.prepararAvatares([p], sb()).catch(() => {});
     pintarPerfil();
     g.App.ir(g.App.rutaActual());
   }
@@ -226,13 +219,15 @@
         const foto = await subirFoto(p.id, blob);
         const { data, error: e } = await sb().from('perfiles').update({ foto }).eq('id', p.id).select().single();
         if (e) throw e;
+        await g.Perfiles.prepararAvatares([data], sb()).catch(() => {});
         g.App.setPerfil(data); editorPerfil.pintar(data); g.App.toast('Foto actualizada');
       },
       onQuitar: async () => {
-        const { error: e1 } = await sb().storage.from(g.Perfiles.BUCKET).remove([g.Perfiles.rutaAvatar(p.id)]);
+        // primero la base (es lo que ven los demás); borrar el archivo es de mejor esfuerzo
         const { data, error: e } = await sb().from('perfiles').update({ foto: null }).eq('id', p.id).select().single();
-        if (e || e1) { g.App.toast('No pudimos quitar la foto. Probá de nuevo.'); return; }
+        if (e) { g.App.toast('No pudimos quitar la foto. Probá de nuevo.'); return; }
         g.App.setPerfil(data); editorPerfil.pintar(data); g.App.toast('Quitamos tu foto');
+        sb().storage.from(g.Perfiles.BUCKET).remove([g.Perfiles.rutaAvatar(p.id)]).catch(() => {});
       },
     });
     editorPerfil.pintar(p);
@@ -243,7 +238,7 @@
       err.hidden = true;
       if (!nombre) { err.textContent = 'Escribí tu nombre.'; err.hidden = false; return; }
       const { data, error: e } = await sb().from('perfiles').update({ nombre }).eq('id', p.id).select().single();
-      if (e) { err.textContent = traducir(e); err.hidden = false; return; }
+      if (e) { err.textContent = traducir(e, 'otro'); err.hidden = false; return; }
       g.App.setPerfil(data); nom.textContent = data.nombre; editorPerfil.pintar(data); g.App.toast('Nombre guardado');
     });
     salir.addEventListener('click', () => { sb().auth.signOut(); });
@@ -275,7 +270,7 @@
     if (!sb()) { error('err-mail', 'La app no está configurada. Avisale a Ivan.'); return; }
 
     sb().auth.onAuthStateChange((evento) => {
-      if (evento === 'SIGNED_OUT') { g.App.setPerfil(null); aPantallaDeMail(); g.App.modoAcceso(true); pintarPerfil(); }
+      if (evento === 'SIGNED_OUT') { g.App.setPerfil(null); g.Perfiles.limpiarCache(); aPantallaDeMail(); g.App.modoAcceso(true); pintarPerfil(); }
     });
     try {
       const { data: { session } } = await sb().auth.getSession();

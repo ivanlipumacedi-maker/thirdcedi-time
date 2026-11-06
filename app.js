@@ -77,6 +77,6 @@
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
   }
 
-  g.App = { ir, sb, yo: () => perfil, setPerfil, modoAcceso, toast, SUPABASE_URL };
+  g.App = { ir, rutaActual, sb, yo: () => perfil, setPerfil, modoAcceso, toast, SUPABASE_URL };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar();
 })(window);

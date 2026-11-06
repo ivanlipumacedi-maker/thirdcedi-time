@@ -1,5 +1,6 @@
 // Pruebas contra el proyecto real (solo con la clave publicable): el hook de dominio y las RLS sin sesión.
 // (a) el rechazo del hook solo anda cuando Ivan lo activa en Dashboard > Authentication > Hooks.
+// OJO: (a) manda un pedido de OTP real a un mail de outlook.com. Con el hook activo no crea usuario ni manda mail; con el hook apagado SÍ los crea (hay que borrar el usuario a mano). Corrélo solo con el hook activado.
 // Uso: node dev/tests/auth-rls.mjs
 import assert from 'node:assert/strict';
 
@@ -11,11 +12,19 @@ const paso = async (nombre, fn) => {
   try { await fn(); console.log('ok', nombre); } catch (e) { fallas++; console.log('FALLA', nombre, '-', e.message); }
 };
 
-await paso('(a) mail fuera del grupo: el hook rechaza con 403', async () => {
-  const r = await fetch(`${BASE}/auth/v1/otp`, { method: 'POST', headers: h(), body: JSON.stringify({ email: 'prueba@gmail.com', create_user: true }) });
+const otp = (email) => fetch(`${BASE}/auth/v1/otp`, { method: 'POST', headers: h(), body: JSON.stringify({ email, create_user: true }) });
+
+// Dominio fuera del grupo que GoTrue acepta (outlook.com). Con el hook activo no se crea usuario ni se manda mail.
+await paso('(a) mail fuera del grupo: el hook rechaza con 403 "Solo cuentas del Grupo CEDI"', async () => {
+  const r = await otp('prueba-thirdcedi@outlook.com');
   const t = await r.text();
   assert.equal(r.status, 403, `esperaba 403 y vino ${r.status}: ${t} (¿el hook "Before User Created" está activado?)`);
-  assert.match(t, /Grupo CEDI/);
+  assert.match(t, /Solo cuentas del Grupo CEDI/);
+});
+
+await paso('(a2) gmail también queda rechazado (400 de GoTrue o 403 del hook)', async () => {
+  const r = await otp('prueba@gmail.com');
+  assert.ok(r.status === 400 || r.status === 403, 'esperaba 400 o 403 y vino ' + r.status);
 });
 
 await paso('(b) anon sin sesión lee perfiles -> []', async () => {
