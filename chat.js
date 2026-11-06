@@ -5,7 +5,6 @@
   const M = g.ChatMedios;
   const TAM = 50;
   const CAMPOS = 'id,sala,autor,tipo,texto,archivo,ancho,alto,editado,creado';
-  const perfiles = new Map(); // id -> { id, nombre, foto }, compartido entre chats abiertos
 
   function h(tag, props, ...hijos) {
     const el = document.createElement(tag);
@@ -32,8 +31,16 @@
     let editandoId = null;
     let cerrado = false;
     let enVuelo = null;               // sincronización en curso (se comparte entre llamadas)
+    let llegados = null;              // con una sincronización en vuelo: ids que entraron a la lista mientras tanto
+    let pendientes = null;            // con una sincronización en vuelo: UPDATEs de mensajes que todavía no están
+    let guardando = false;            // RPC de edición en vuelo
+    let cargandoMas = false;          // "Ver mensajes anteriores" en vuelo
     let canal = null;
     let visor = null;
+    let focoAntes = null;             // a dónde vuelve el foco al cerrar el visor
+    // Perfiles de esta apertura (nombre y foto): se piden de nuevo cada vez que se abre un chat,
+    // así un cambio de nombre o de foto se ve al volver a entrar.
+    const perfiles = new Map();       // id -> { id, nombre, foto }
     const medios = new Map();         // id -> <img> reutilizada entre redibujos
     const locales = new Set();        // blob: URLs a soltar al cerrar
 
@@ -44,7 +51,7 @@
     const elLista = h('div', { class: 'chat-lista', role: 'log', 'aria-live': 'polite', 'aria-label': 'Mensajes' });
     const inTexto = h('textarea', { class: 'chat-texto', rows: 1, maxLength: L.MAX_TEXTO, placeholder: 'Escribí un mensaje', 'aria-label': 'Mensaje', enterKeyHint: tactil ? 'enter' : 'send' });
     const inFoto = h('input', { type: 'file', accept: 'image/*', hidden: true, id: 'chat-foto-' + Math.random().toString(36).slice(2) });
-    const btnFoto = h('label', { class: 'chat-adj', for: inFoto.id, 'aria-label': 'Mandar una foto', role: 'button', tabindex: '0' }, '📷');
+    const btnFoto = h('button', { type: 'button', class: 'chat-adj', 'aria-label': 'Mandar una foto', on: { click: () => inFoto.click() } }, '📷');
     const btnEnviar = h('button', { type: 'submit', class: 'chat-enviar', 'aria-label': 'Enviar' }, '➤');
     const barraEdicion = h('div', { class: 'chat-edicion', hidden: true },
       h('span', null, 'Editando mensaje'),
@@ -59,8 +66,9 @@
     function nodoFoto(m) {
       let img = medios.get(m.id);
       if (!img) {
-        img = h('img', { class: 'chat-foto', alt: 'Foto', decoding: 'async', loading: 'lazy', draggable: false });
+        img = h('img', { class: 'chat-foto', alt: 'Foto (tocá para agrandar)', decoding: 'async', loading: 'lazy', draggable: false, tabindex: '0', role: 'button' });
         img.addEventListener('click', () => abrirVisor(m.id));
+        img.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrirVisor(m.id); } });
         img.addEventListener('error', () => {
           const mm = lista.find((x) => x.id === m.id);
           if (!mm || mm.local || img.dataset.reintento) return;
@@ -120,7 +128,7 @@
           h('button', { type: 'button', id: 'chat-reintentar', class: 'btn-sec btn-chico', on: { click: () => { estado = 'cargando'; pintar(); sincronizar(); } } }, 'Reintentar')));
         return;
       }
-      if (hayMas) elLista.append(h('button', { type: 'button', class: 'btn-link chat-anteriores', on: { click: cargarMas } }, 'Ver mensajes anteriores'));
+      if (hayMas) elLista.append(h('button', { type: 'button', class: 'btn-link chat-anteriores', disabled: cargandoMas, on: { click: cargarMas } }, cargandoMas ? 'Cargando…' : 'Ver mensajes anteriores'));
       if (!lista.length) elLista.append(h('p', { class: 'vacio' }, 'Todavía no hay mensajes. ¡Escribí el primero!'));
       lista.forEach((m) => elLista.append(filaMensaje(m)));
       if (alFondo) elLista.scrollTop = elLista.scrollHeight;
@@ -137,44 +145,75 @@
 
     // Trae la última página y la reconcilia con lo que hay: sirve para la carga inicial y para
     // ponerse al día después de una reconexión (los mensajes llegados con el socket caído aparecen, sin duplicar).
+    // Mete un mensaje (respuesta propia o evento) en la lista. Si hay una sincronización en vuelo, lo anota
+    // para que la reconciliación no lo pierda.
+    function meter(m) {
+      lista = L.fusionar(lista, m);
+      if (llegados) llegados.add(m.id);
+    }
+
     function sincronizar() {
       if (enVuelo) return enVuelo;
+      llegados = new Set(); pendientes = new Map();
       enVuelo = (async () => {
         try {
-          const { data, error } = await sb.from('mensajes').select(CAMPOS).eq('sala', sala).order('creado', { ascending: false }).limit(TAM);
+          const { data, error } = await sb.from('mensajes').select(CAMPOS).eq('sala', sala)
+            .order('creado', { ascending: false }).order('id', { ascending: false }).limit(TAM);
           if (error) throw error;
           if (cerrado) return;
           await asegurarPerfiles(data);
+          if (cerrado) return;
           const primera = estado !== 'ok';
           const tmps = lista.filter(esTmp);
-          lista = L.fusionarLote(L.reconciliar(lista.filter((m) => !esTmp(m)), data, TAM), tmps);
+          let nueva = L.fusionarLote(L.reconciliar(lista.filter((m) => !esTmp(m)), data, TAM, llegados), tmps);
+          pendientes.forEach((m) => { nueva = L.aplicarEvento(nueva, 'UPDATE', m); }); // ediciones/eliminaciones que llegaron antes que la página
+          lista = nueva;
           if (primera) hayMas = data.length >= TAM;
           estado = 'ok';
         } catch (e) {
           if (!cerrado && estado !== 'ok') estado = 'error';
-        } finally { enVuelo = null; if (!cerrado) pintar(); }
+        } finally { enVuelo = null; llegados = null; pendientes = null; if (!cerrado) pintar(); }
       })();
       return enVuelo;
     }
     async function cargarMas() {
-      const antes = lista.find((m) => !esTmp(m));
-      if (!antes) return;
+      if (cargandoMas) return;
+      const c = L.cursor(lista);
+      if (!c) return;
+      cargandoMas = true; pintar();
       const alto = elLista.scrollHeight;
-      const { data, error } = await sb.from('mensajes').select(CAMPOS).eq('sala', sala).lt('creado', antes.creado).order('creado', { ascending: false }).limit(TAM);
-      if (error || cerrado) { if (!cerrado) g.App.toast('No pudimos traer los mensajes anteriores.'); return; }
-      await asegurarPerfiles(data);
-      lista = L.fusionarLote(lista, data);
-      hayMas = data.length >= TAM;
-      pintar();
-      elLista.scrollTop = elLista.scrollHeight - alto;
+      try {
+        const { data, error } = await sb.from('mensajes').select(CAMPOS).eq('sala', sala).or(L.filtroAntes(c))
+          .order('creado', { ascending: false }).order('id', { ascending: false }).limit(TAM);
+        if (cerrado) return;
+        if (error) { g.App.toast('No pudimos traer los mensajes anteriores.'); return; }
+        await asegurarPerfiles(data);
+        if (cerrado) return;
+        lista = L.fusionarLote(lista, data);
+        hayMas = data.length >= TAM;
+      } catch (e) {
+        if (!cerrado) g.App.toast('No pudimos traer los mensajes anteriores.');
+      } finally {
+        cargandoMas = false;
+        if (!cerrado) { pintar(); elLista.scrollTop = elLista.scrollHeight - alto; }
+      }
     }
 
     async function alLlegar(payload) {
       const m = payload && payload.new;
-      if (!m || m.sala !== sala || cerrado) return;
+      if (!m || m.sala !== sala || cerrado) return; // además del filtro del canal
+      const evento = payload.eventType || 'INSERT';
+      if (evento === 'UPDATE' && !lista.some((x) => x.id === m.id)) {
+        // no lo tenemos: se ignora (si no, quedaría arriba de todo y haría de cursor). Si hay una
+        // sincronización en vuelo, se guarda por si la página que llega lo trae.
+        if (pendientes) pendientes.set(m.id, m);
+        return;
+      }
       await asegurarPerfiles([m]);
       if (cerrado) return;
-      lista = L.fusionar(lista, m);
+      if (evento === 'UPDATE' && !lista.some((x) => x.id === m.id)) return;
+      lista = L.aplicarEvento(lista, evento, m);
+      if (llegados) llegados.add(m.id);
       pintar();
     }
 
@@ -188,6 +227,7 @@
 
     form.addEventListener('submit', async (ev) => {
       ev.preventDefault();
+      if (guardando) return; // la edición anterior todavía está en vuelo
       const t = inTexto.value;
       if (!L.textoValido(t)) return;
       if (editandoId) return guardarEdicion(t);
@@ -200,7 +240,7 @@
         if (!cerrado) { if (!inTexto.value) { inTexto.value = t; crecer(); } g.App.toast('No pudimos mandar el mensaje. Probá de nuevo.'); pintar(); }
         return;
       }
-      lista = L.fusionar(lista, data); pintar(); abajo();
+      meter(data); pintar(); abajo();
     });
 
     inFoto.addEventListener('change', () => { const f = inFoto.files && inFoto.files[0]; inFoto.value = ''; enviarFoto(f); });
@@ -220,11 +260,11 @@
         const up = await sb.storage.from(M.BUCKET).upload(archivo, c.blob, { contentType: c.tipo });
         if (up.error) throw up.error;
         const upMini = await sb.storage.from(M.BUCKET).upload(archivoMini, mini.blob, { contentType: mini.tipo });
-        if (upMini.error) { sb.storage.from(M.BUCKET).remove([archivo]); throw upMini.error; }
+        if (upMini.error) { borrarArchivos([archivo]); throw upMini.error; }
         const { data, error } = await sb.from('mensajes').insert({ sala, tipo: 'foto', archivo, ancho: c.ancho, alto: c.alto }).select(CAMPOS).single();
-        if (error) { sb.storage.from(M.BUCKET).remove([archivo, archivoMini]); throw error; }
+        if (error) { borrarArchivos([archivo, archivoMini]); throw error; }
         medios.delete(tmp.id);
-        lista = L.fusionar(L.quitar(lista, tmp.id), data); pintar(); abajo();
+        lista = L.quitar(lista, tmp.id); meter(data); pintar(); abajo();
       } catch (e) {
         quitarTmp(); g.App.toast('No pudimos mandar la foto. Revisá la conexión y probá de nuevo.');
       }
@@ -239,16 +279,34 @@
     }
     function cancelarEdicion() { editandoId = null; barraEdicion.hidden = true; inTexto.value = ''; crecer(); }
     async function guardarEdicion(t) {
+      if (guardando) return;
       const id = editandoId;
-      const { data, error } = await sb.rpc('editar_mensaje', { p_id: id, p_texto: t });
-      if (error) {
-        g.App.toast(error.code === 'P0002' ? 'Ya no se puede editar: pasaron los 15 minutos.' : 'No pudimos editar el mensaje. Probá de nuevo.');
-        if (error.code === 'P0002') cancelarEdicion();
-        return;
+      const m = lista.find((x) => x.id === id);
+      const nuevo = L.textoEditado(t, m && m.texto);
+      if (nuevo == null) { cancelarEdicion(); return; } // no cambió: no se manda nada ni queda "Editado"
+      guardando = true; btnEnviar.disabled = true;
+      try {
+        const { data, error } = await sb.rpc('editar_mensaje', { p_id: id, p_texto: nuevo });
+        if (cerrado) return;
+        if (error) {
+          // P0002: pasaron los 15 minutos, no es tuyo o ya no estás en la sala
+          g.App.toast(error.code === 'P0002' ? 'Ya no se puede editar este mensaje.' : 'No pudimos editar el mensaje. Probá de nuevo.');
+          if (error.code === 'P0002') cancelarEdicion();
+          return;
+        }
+        if (editandoId === id) cancelarEdicion();
+        const fila = Array.isArray(data) ? data[0] : data;
+        if (fila) { meter(fila); pintar(); }
+      } catch (e) {
+        if (!cerrado) g.App.toast('No pudimos editar el mensaje. Probá de nuevo.');
+      } finally { guardando = false; btnEnviar.disabled = false; }
+    }
+    // Borra de Storage la foto y su miniatura; si falla, reintenta una vez y deja aviso en la consola.
+    async function borrarArchivos(paths) {
+      const intentar = async () => { const r = await sb.storage.from(M.BUCKET).remove(paths); if (r && r.error) throw r.error; };
+      try { await intentar(); } catch (e1) {
+        try { await intentar(); } catch (e2) { console.warn('chat: no se pudieron borrar archivos de Storage', paths, e2); }
       }
-      cancelarEdicion();
-      const fila = Array.isArray(data) ? data[0] : data;
-      if (fila) { lista = L.fusionar(lista, fila); pintar(); }
     }
     async function eliminar(id) {
       confirmandoId = null; menuId = null;
@@ -256,9 +314,9 @@
       if (error) { g.App.toast('No pudimos eliminar el mensaje. Probá de nuevo.'); pintar(); return; }
       if (editandoId === id) cancelarEdicion();
       medios.delete(id);
-      if (data && data.fila) lista = L.fusionar(lista, data.fila); else lista = lista.map((m) => (m.id === id ? { ...m, tipo: 'eliminado', texto: null, archivo: null } : m));
+      if (data && data.fila) meter(data.fila); else lista = lista.map((m) => (m.id === id ? { ...m, tipo: 'eliminado', texto: null, archivo: null } : m));
       pintar();
-      if (data && data.archivo_antes) sb.storage.from(M.BUCKET).remove([data.archivo_antes, M.rutaMini(data.archivo_antes)]);
+      if (data && data.archivo_antes) borrarArchivos([data.archivo_antes, M.rutaMini(data.archivo_antes)]);
     }
 
     // ---------- Visor de fotos ----------
@@ -268,20 +326,38 @@
       let url = m.local || M.firmada(m.archivo);
       if (!url) { try { await M.firmar(sb, [m.archivo]); url = M.firmada(m.archivo); } catch (e) { /* sin red */ } }
       if (!url) { g.App.toast('No pudimos abrir la foto. Revisá la conexión.'); return; }
-      cerrarVisor();
-      visor = h('div', { class: 'chat-visor', role: 'dialog', 'aria-label': 'Foto', on: { click: cerrarVisor } }, h('img', { src: url, alt: '' }),
-        h('button', { type: 'button', class: 'chat-visor-x', 'aria-label': 'Cerrar', on: { click: cerrarVisor } }, '✕'));
+      if (cerrado) return;
+      cerrarVisor(false);
+      focoAntes = medios.get(id) || document.activeElement;
+      const x = h('button', { type: 'button', class: 'chat-visor-x', 'aria-label': 'Cerrar', on: { click: (e) => { e.stopPropagation(); cerrarVisor(); } } }, '✕');
+      visor = h('div', { class: 'chat-visor', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Foto', on: { click: () => cerrarVisor() } }, h('img', { src: url, alt: 'Foto' }), x);
       document.body.append(visor);
+      document.addEventListener('keydown', teclaVisor, true);
+      x.focus();
     }
-    function cerrarVisor() { if (visor) { visor.remove(); visor = null; } }
+    function teclaVisor(e) {
+      if (!visor) return;
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cerrarVisor(); }
+      else if (e.key === 'Tab') { e.preventDefault(); visor.querySelector('.chat-visor-x').focus(); } // el ✕ es lo único enfocable
+    }
+    function cerrarVisor(devolverFoco = true) {
+      if (!visor) return;
+      visor.remove(); visor = null;
+      document.removeEventListener('keydown', teclaVisor, true);
+      const f = focoAntes; focoAntes = null;
+      if (devolverFoco && f && f.isConnected && typeof f.focus === 'function') f.focus();
+    }
 
     // ---------- Realtime (nada de polling): al (re)conectar se pone al día ----------
     const alVolver = () => { if (!document.hidden) { M.reintentarYa(); sincronizar(); } };
     document.addEventListener('visibilitychange', alVolver);
     g.addEventListener('online', alVolver);
-    canal = sb.channel('chat-' + sala)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mensajes' }, alLlegar)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'mensajes' }, alLlegar)
+    // topic único por apertura: realtime.channel() reutiliza un canal con el mismo topic mientras el anterior
+    // todavía se está yendo ("leaving"), y reabrir enseguida dejaría el chat sin tiempo real.
+    const filtro = 'sala=eq.' + sala; // además del filtro del cliente en alLlegar
+    canal = sb.channel('chat-' + sala + '-' + crypto.randomUUID())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mensajes', filter: filtro }, alLlegar)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'mensajes', filter: filtro }, alLlegar)
       .subscribe((st) => { if (st === 'SUBSCRIBED') sincronizar(); });
 
     pintar();

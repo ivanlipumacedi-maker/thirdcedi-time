@@ -39,13 +39,25 @@ function emitir(evento, fila) {
   }
 }
 function cumple(fila, filtros) {
-  return filtros.every(([op, col, v]) => (op === 'eq' ? fila[col] === v : op === 'lt' ? fila[col] < v : op === 'in' ? v.includes(fila[col]) : true));
+  return filtros.every(([op, col, v]) => (op === 'eq' ? fila[col] === v : op === 'lt' ? fila[col] < v : op === 'in' ? v.includes(fila[col])
+    : op === 'or' ? orAntes(fila, v) : true));
 }
+// solo entiende el filtro de "Ver mensajes anteriores": creado.lt."X",and(creado.eq."X",id.lt."Y")
+function orAntes(fila, expr) {
+  const m = /^creado\.lt\."([^"]+)",and\(creado\.eq\."([^"]+)",id\.lt\."([^"]+)"\)$/.exec(expr);
+  if (!m) throw new Error('filtro .or desconocido: ' + expr);
+  return fila.creado < m[1] || (fila.creado === m[2] && fila.id < m[3]);
+}
+let demorarMensajes = 0; // ms que tarda en volver la próxima lectura de mensajes de A (la foto del servidor se toma al pedir)
 function consulta(uid, s) {
   if (s.rpc) {
     const m = db.mensajes.find((x) => x.id === s.args.p_id);
     if (!m || m.autor !== uid || !enSala(uid, m.sala)) return { error: { code: 'P0002', message: 'No se puede' } };
-    if (s.rpc === 'editar_mensaje') { Object.assign(m, { texto: s.args.p_texto, editado: true }); emitir('UPDATE', m); return { data: m }; }
+    if (s.rpc === 'editar_mensaje') {
+      const t = String(s.args.p_texto || '').trim(); // igual que la 09: recorta y, si no cambió, no marca editado
+      if (t === m.texto) return { data: { ...m } };
+      Object.assign(m, { texto: t, editado: true }); emitir('UPDATE', m); return { data: m };
+    }
     const antes = m.archivo; Object.assign(m, { tipo: 'eliminado', texto: null, archivo: null, ancho: null, alto: null }); emitir('UPDATE', m);
     return { data: { fila: m, archivo_antes: antes } };
   }
@@ -62,7 +74,7 @@ function consulta(uid, s) {
     filas = filas.filter((m) => enSala(uid, m.sala));
   }
   let r = filas.filter((f) => cumple(f, s.filtros));
-  if (s.orden) r = [...r].sort((a, b) => (a[s.orden.col] < b[s.orden.col] ? -1 : 1) * (s.orden.asc ? 1 : -1));
+  if (s.ordenes.length) r = [...r].sort((a, b) => { for (const o of s.ordenes) { if (a[o.col] !== b[o.col]) return (a[o.col] < b[o.col] ? -1 : 1) * (o.asc ? 1 : -1); } return 0; });
   if (s.limite) r = r.slice(0, s.limite);
   return { data: s.single ? r[0] || null : r.map((x) => ({ ...x })) };
 }
@@ -72,7 +84,7 @@ const STUB = `
 (function () {
   const Q = (spec) => window.__q(JSON.stringify(spec)).then((r) => JSON.parse(r));
   function Builder(table) {
-    const s = { table, action: 'select', filtros: [], orden: null, limite: 0, single: false, values: null };
+    const s = { table, action: 'select', filtros: [], ordenes: [], limite: 0, single: false, values: null };
     const b = {
       select() { return b; },
       insert(v) { s.action = 'insert'; s.values = v; return b; },
@@ -80,7 +92,8 @@ const STUB = `
       eq(c, v) { s.filtros.push(['eq', c, v]); return b; },
       lt(c, v) { s.filtros.push(['lt', c, v]); return b; },
       in(c, v) { s.filtros.push(['in', c, v]); return b; },
-      order(col, o) { s.orden = { col, asc: !(o && o.ascending === false) }; return b; },
+      or(expr) { s.filtros.push(['or', null, expr]); return b; },
+      order(col, o) { s.ordenes.push({ col, asc: !(o && o.ascending === false) }); return b; },
       limit(n) { s.limite = n; return b; },
       single() { s.single = true; return b; },
       maybeSingle() { s.single = true; return b; },
@@ -89,14 +102,18 @@ const STUB = `
     return b;
   }
   const canales = new Set();
-  window.__emitir = (evento, fila) => canales.forEach((c) => c.cbs.filter((x) => x.evento === evento).forEach((x) => x.fn({ eventType: evento, new: fila })));
+  // respeta el filtro del canal (solo 'col=eq.valor'), como Realtime
+  const pasa = (filtro, fila) => { if (!filtro) return true; const m = /^([a-z_]+)=eq\\.(.*)$/.exec(filtro); if (!m) throw new Error('filtro de canal desconocido: ' + filtro); return String(fila[m[1]]) === m[2]; };
+  window.__topics = [];
+  window.__emitir = (evento, fila) => canales.forEach((c) => c.cbs.filter((x) => x.evento === evento && pasa(x.filtro, fila)).forEach((x) => x.fn({ eventType: evento, new: fila })));
   window.__estadoCanales = (st) => canales.forEach((c) => c.estado && c.estado(st));
   window.supabase = { createClient() {
     return {
       from: Builder,
       rpc(fn, args) { return Q({ rpc: fn, args }).then((r) => ({ data: r.data === undefined ? null : r.data, error: r.error || null })); },
-      channel() {
-        const c = { cbs: [], on(_t, f, fn) { c.cbs.push({ evento: f.event, fn }); return c; }, subscribe(cb) { c.estado = cb; canales.add(c); if (cb) setTimeout(() => cb('SUBSCRIBED'), 0); return c; } };
+      channel(topic) {
+        window.__topics.push(topic);
+        const c = { cbs: [], on(_t, f, fn) { c.cbs.push({ evento: f.event, filtro: f.filter, fn }); return c; }, subscribe(cb) { c.estado = cb; canales.add(c); if (cb) setTimeout(() => cb('SUBSCRIBED'), 0); return c; } };
         return c;
       },
       removeChannel(c) { canales.delete(c); },
@@ -121,7 +138,12 @@ async function abrir(_ignorado, uid, tema) {
   page.errores = [];
   page.on('pageerror', (e) => page.errores.push(e.message));
   if (process.env.DEPURAR) page.on('console', (m) => console.log('[' + uid.slice(0, 2) + ']', m.text()));
-  await page.exposeFunction('__q', async (j) => JSON.stringify(consulta(uid, JSON.parse(j))));
+  await page.exposeFunction('__q', async (j) => {
+    const s = JSON.parse(j);
+    const r = consulta(uid, s); // la "foto" del servidor se toma acá, antes de la demora
+    if (s.table === 'mensajes' && s.action === 'select' && !s.single && demorarMensajes && uid === UA) { const ms = demorarMensajes; demorarMensajes = 0; await new Promise((ok) => setTimeout(ok, ms)); }
+    return JSON.stringify(r);
+  });
   await page.setBypassServiceWorker(true); // el service worker serviría el supabase.js real de la caché
   await page.setRequestInterception(true);
   page.on('request', (rq) => {
@@ -229,6 +251,67 @@ const sinToast = (p) => p.waitForFunction(() => document.getElementById('toast')
       await pa.evaluate(() => window.__estadoCanales('SUBSCRIBED'));
       await new Promise((r) => setTimeout(r, 300));
       assert.equal(await cuantos(pa, '#chat-act .chat-msg'), n, 'otra reconexión no duplica');
+    });
+
+    await paso('fix 1: lo que llega en vivo mientras la sincronización está en vuelo no se pierde', async () => {
+      demorarMensajes = 1500; // la próxima lectura de A tarda; la página ya no trae lo que manda B
+      await pa.evaluate(() => window.__estadoCanales('SUBSCRIBED')); // reconexión: arranca la sync de A
+      await new Promise((r) => setTimeout(r, 200));
+      await pb.type('#chat-act .chat-texto', 'Llegó durante la sync');
+      await pb.click('#chat-act .chat-enviar');
+      await esperar(pa, () => /Llegó durante la sync/.test(document.querySelector('#chat-act .chat-lista').textContent));
+      await new Promise((r) => setTimeout(r, 1800)); // termina la sync demorada
+      assert.match(await texto(pa, '#chat-act .chat-lista'), /Llegó durante la sync/, 'la reconciliación lo borró');
+      assert.equal(await cuantos(pa, '#chat-act .chat-msg'), db.mensajes.length);
+    });
+
+    await paso('fix 2: un UPDATE de un mensaje que no está cargado se ignora', async () => {
+      const n = await cuantos(pa, '#chat-act .chat-msg');
+      await pa.evaluate((sala) => window.__emitir('UPDATE', { id: 'viejo-0000-4000-8000-000000000000', sala, autor: 'x', tipo: 'texto', texto: 'mensaje viejo editado', editado: true, creado: '2026-01-01T00:00:00.000Z' }), 'act:' + ACT);
+      await new Promise((r) => setTimeout(r, 300));
+      assert.equal(await cuantos(pa, '#chat-act .chat-msg'), n);
+      assert.doesNotMatch(await texto(pa, '#chat-act .chat-lista'), /mensaje viejo editado/);
+    });
+
+    await paso('fix 12: el filtro del canal deja afuera los eventos de otra sala', async () => {
+      const n = await cuantos(pa, '#chat-act .chat-msg');
+      await pa.evaluate(() => window.__emitir('INSERT', { id: 'otra-0000-4000-8000-000000000000', sala: 'act:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', autor: 'x', tipo: 'texto', texto: 'de otra sala', editado: false, creado: new Date().toISOString() }));
+      await new Promise((r) => setTimeout(r, 300));
+      assert.equal(await cuantos(pa, '#chat-act .chat-msg'), n);
+    });
+
+    await paso('fix 3: cada apertura usa un topic único', async () => {
+      const topics = await pa.evaluate(() => window.__topics);
+      const chat = topics.filter((t) => t.startsWith('chat-'));
+      assert.ok(chat.length >= 1);
+      assert.equal(new Set(topics).size, topics.length, 'topics repetidos: ' + topics.join(' '));
+      assert.ok(chat.every((t) => /^chat-act:[0-9a-f-]{36}-[0-9a-f-]{36}$/.test(t)), 'topic sin sufijo único: ' + chat[0]);
+      assert.ok(topics.some((t) => /^actividades-vivo-[0-9a-f-]{36}$/.test(t)), 'actividades sin sufijo único');
+    });
+
+    await paso('fix 6: editar con el mismo texto (con espacios) no marca "Editado"', async () => {
+      await pb.type('#chat-act .chat-texto', 'Texto fijo');
+      await pb.click('#chat-act .chat-enviar');
+      await esperar(pb, () => [...document.querySelectorAll('#chat-act .chat-msg.mio')].some((e) => /Texto fijo/.test(e.textContent)) && !document.querySelector('#chat-act .subiendo'));
+      const btns = await pb.$$('#chat-act .chat-msg.mio .chat-mas-acc');
+      await btns[btns.length - 1].click();
+      await pb.click('#chat-act .chat-menu .btn-sec');
+      await pb.$eval('#chat-act .chat-texto', (e) => { e.value = '  Texto fijo  '; });
+      await pb.click('#chat-act .chat-enviar');
+      await new Promise((r) => setTimeout(r, 300));
+      assert.equal(await pb.$eval('#chat-act .chat-edicion', (e) => e.hidden), true, 'la edición se cierra');
+      assert.equal(db.mensajes.find((x) => x.texto === 'Texto fijo').editado, false);
+    });
+
+    await paso('fix 9 y 10: botón de foto real; el visor cierra con Escape y devuelve el foco', async () => {
+      assert.equal(await pa.$eval('#chat-act .chat-adj', (e) => e.tagName), 'BUTTON');
+      await pa.focus('#chat-act img.chat-foto');
+      await pa.keyboard.press('Enter');
+      await pa.waitForSelector('.chat-visor');
+      assert.equal(await pa.evaluate(() => document.activeElement && document.activeElement.className), 'chat-visor-x');
+      await pa.keyboard.press('Escape');
+      await esperar(pa, () => !document.querySelector('.chat-visor'));
+      assert.equal(await pa.evaluate(() => !!document.activeElement && document.activeElement.classList.contains('chat-foto')), true, 'el foco no volvió a la foto');
     });
 
     await paso('quien no está anotado no ve el chat', async () => {

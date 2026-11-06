@@ -57,6 +57,7 @@ const B = await entrar('B');
 const C = await entrar('C');
 let actId = null;
 const mios = { A: [], B: [] };
+let fotoA = null; // foto de A en la sala (se borra al final)
 try {
   const r = await A.api('POST', 'actividades', { tipo: 'padel', titulo: 'zz prueba chat', fecha: en(24), lugar: 'Club de prueba', tiene_tercer: true, tercer_lugar: 'Bar de prueba', tercer_fecha: en(26) });
   assert.equal(r.status, 201, 'crear actividad: ' + JSON.stringify(r.data));
@@ -126,6 +127,24 @@ try {
     assert.equal((await B.api('GET', `mensajes?id=eq.${mA.id}`)).data[0].texto, 'hola desde A (editado)');
   });
 
+  await paso('C (no anotado) no puede usar las RPC sobre un mensaje de la sala', async () => {
+    assert.ok((await C.rpc('editar_mensaje', { p_id: mA.id, p_texto: 'intruso' })).status >= 400, 'C editó');
+    assert.ok((await C.rpc('eliminar_mensaje', { p_id: mA.id })).status >= 400, 'C eliminó');
+    assert.notEqual((await A.api('GET', `mensajes?id=eq.${mA.id}`)).data[0].tipo, 'eliminado');
+  });
+
+  await paso('editar recorta el texto y, si no cambió, no marca "editado" (09)', async () => {
+    const x = await A.api('POST', 'mensajes', txt(sala, 'igual'));
+    assert.equal(x.status, 201, JSON.stringify(x.data));
+    const id = x.data[0].id; mios.A.push(id);
+    const same = await A.rpc('editar_mensaje', { p_id: id, p_texto: '  igual  ' });
+    assert.equal(same.status, 200, JSON.stringify(same.data));
+    assert.equal(same.data.editado, false, 'sin cambios no queda editado');
+    const otro = await A.rpc('editar_mensaje', { p_id: id, p_texto: '  distinto  ' });
+    assert.equal(otro.data.texto, 'distinto');
+    assert.equal(otro.data.editado, true);
+  });
+
   let foto;
   await paso('B sube una foto a la carpeta de la sala y la manda; C no puede subir ni firmar', async () => {
     foto = `${sala}/fotos/${crypto.randomUUID()}.webp`;
@@ -142,6 +161,16 @@ try {
     assert.ok((await B.api('POST', 'mensajes', { sala, tipo: 'foto', archivo: `${otra}/fotos/x.webp`, ancho: 1, alto: 1 })).status >= 400, 'foto que apunta a otra sala');
   });
 
+  await paso('miniatura .t.webp: B la sube junto a la foto; A la firma y C no', async () => {
+    const mini = foto.replace(/\.webp$/, '.t.webp');
+    const up = await B.subir(mini);
+    assert.equal(up.status, 200, await up.text());
+    assert.equal((await A.firmar(mini)).status, 200, 'A (en la sala) ve la miniatura');
+    assert.ok((await C.firmar(mini)).status >= 400, 'C firmó la miniatura');
+    await B.borrar(mini);
+    assert.ok((await B.firmar(mini)).status >= 400, 'la miniatura debería haberse borrado');
+  });
+
   await paso('A no borra la foto de B del bucket; B sí, al eliminar su mensaje', async () => {
     await A.borrar(foto);
     assert.equal((await B.firmar(foto)).status, 200, 'la foto de B tendría que seguir ahí');
@@ -155,15 +184,27 @@ try {
     assert.ok((await B.firmar(foto)).status >= 400, 'la foto debería haberse borrado');
   });
 
-  await paso('salir de la actividad cierra el chat: B se baja y ya no lee ni escribe', async () => {
+  await paso('salir de la actividad cierra el chat: B se baja y ya no lee, ni escribe, ni firma fotos, ni usa las RPC', async () => {
     for (const id of mios.B) await B.rpc('eliminar_mensaje', { p_id: id }); // limpieza antes de bajarse (después ya no podría)
+    fotoA = `${sala}/fotos/${crypto.randomUUID()}.webp`;
+    assert.equal((await A.subir(fotoA)).status, 200, 'A sube una foto a la sala');
+    assert.equal((await A.subir(fotoA.replace(/\.webp$/, '.t.webp'))).status, 200, 'A sube la miniatura');
+    assert.equal((await B.firmar(fotoA)).status, 200, 'B (todavía anotado) firma la foto de A');
+    const ultimo = await B.api('POST', 'mensajes', txt(sala, 'me bajo'));
+    assert.equal(ultimo.status, 201, JSON.stringify(ultimo.data));
+    const idUltimo = ultimo.data[0].id;
     assert.equal((await B.api('DELETE', `asistencias?actividad=eq.${actId}&persona=eq.${B.id}&parte=eq.tercer`)).status, 200);
     assert.equal((await B.api('GET', `mensajes?sala=eq.${salaQ}`)).data.length, 0);
     assert.ok((await B.api('POST', 'mensajes', txt(sala, 'ya no estoy'))).status >= 400);
+    assert.ok((await B.firmar(fotoA)).status >= 400, 'B firmó una foto después de bajarse');
+    assert.ok((await B.firmar(fotoA.replace(/\.webp$/, '.t.webp'))).status >= 400, 'B firmó una miniatura después de bajarse');
+    assert.ok((await B.rpc('editar_mensaje', { p_id: idUltimo, p_texto: 'x' })).status >= 400, 'B editó después de bajarse');
+    assert.ok((await B.rpc('eliminar_mensaje', { p_id: idUltimo })).status >= 400, 'B eliminó después de bajarse');
   });
 } finally {
   // Los mensajes y las actividades no se borran: los mensajes quedan marcados como eliminados por su autor
   // y la actividad queda cancelada con título "zz ..." (se limpia a mano con SQL: delete from public.actividades where titulo like 'zz %').
+  if (fotoA) { await A.borrar(fotoA); await A.borrar(fotoA.replace(/\.webp$/, '.t.webp')); }
   for (const id of mios.A) await A.rpc('eliminar_mensaje', { p_id: id });
   for (const id of mios.B) await B.rpc('eliminar_mensaje', { p_id: id });
   if (actId) await A.api('PATCH', `actividades?id=eq.${actId}`, { estado: 'cancelada' });

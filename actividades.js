@@ -62,7 +62,8 @@
   }
   function suscribir() {
     if (canal || !sb()) return;
-    canal = sb().channel('actividades-vivo')
+    // topic único por suscripción: channel() reutiliza un canal con el mismo topic mientras el anterior se está yendo
+    canal = sb().channel('actividades-vivo-' + crypto.randomUUID())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'actividades' }, programarRefresco)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'asistencias' }, programarRefresco)
       .subscribe();
