@@ -1,0 +1,11 @@
+{
+  "name": "thirdcedi-time",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PWA de actividades, juegos y cuentas claras para los compañeros del Grupo CEDI (JavaScript vainilla, sin bundler).",
+  "scripts": {
+    "test": "node --test \"dev/tests/*.test.js\"",
+    "test:supabase": "node dev/tests/auth-rls.mjs",
+    "serve": "npx --yes http-server -p 8080 -c-1"
+  }
+}

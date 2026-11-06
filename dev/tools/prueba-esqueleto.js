@@ -9,7 +9,7 @@ const shots = path.join(__dirname, '..', 'shots');
 fs.mkdirSync(shots, { recursive: true });
 
 (async () => {
-  const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
+  const b = await puppeteer.launch({ executablePath: process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
   try {
     const p = await b.newPage();
     const errores = [];
@@ -21,6 +21,7 @@ fs.mkdirSync(shots, { recursive: true });
     assert.equal(await p.evaluate(() => document.documentElement.dataset.tema), 'claro');
     assert.equal(await p.evaluate(() => typeof App.ir + typeof App.toast + typeof App.yo), 'functionfunctionfunction');
     assert.equal(await p.evaluate(() => App.yo()), null);
+    await p.evaluate(() => App.modoAcceso(false)); // sin sesión se ve el login; acá probamos el esqueleto de la app
 
     for (const ruta of ['actividades', 'juegos', 'perfil']) {
       await p.click(`.pestanas a[data-ruta="${ruta}"]`);
@@ -33,6 +34,8 @@ fs.mkdirSync(shots, { recursive: true });
     await p.evaluate(() => App.ir('actividades'));
     await p.waitForFunction(() => document.querySelector('.pantalla:not([hidden])').dataset.ruta === 'actividades');
     assert.equal(await p.evaluate(() => document.querySelector('.pantalla:not([hidden])').dataset.ruta), 'actividades');
+    await p.evaluate(() => App.ir('no-existe'));
+    assert.equal(await p.evaluate(() => location.hash), '#/actividades');
     await p.evaluate(() => App.toast('Hola desde la prueba'));
     await p.screenshot({ path: path.join(shots, 'esqueleto-claro.png') });
 
