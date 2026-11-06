@@ -1,0 +1,82 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const T = require('../../trivia-logica.js');
+const Preguntas = require('../../contenido/preguntas.js');
+
+test('elegir: misma semilla → mismo orden, sin ids repetidos', () => {
+  const a = T.elegir(Preguntas, 10, 1234);
+  const b = T.elegir(Preguntas, 10, 1234);
+  assert.equal(a.length, 10);
+  assert.deepEqual(a.map((q) => q.id), b.map((q) => q.id));
+  assert.equal(new Set(a.map((q) => q.id)).size, 10);
+});
+
+test('elegir: otra semilla da otra selección', () => {
+  const a = T.elegir(Preguntas, 10, 1).map((q) => q.id).join();
+  const b = T.elegir(Preguntas, 10, 2).map((q) => q.id).join();
+  assert.notEqual(a, b);
+});
+
+test('elegir: mezcla dificultades (4 fáciles, 4 medias, 2 difíciles en 10)', () => {
+  for (const s of [1, 7, 99, 2026]) {
+    const difs = T.elegir(Preguntas, 10, s).map((q) => q.dif);
+    assert.equal(difs.filter((d) => d === 1).length, 4);
+    assert.equal(difs.filter((d) => d === 2).length, 4);
+    assert.equal(difs.filter((d) => d === 3).length, 2);
+  }
+});
+
+test('elegir: no repite aunque el banco sea chico, y completa con otras dificultades', () => {
+  const banco = [
+    { id: 'a', dif: 1 }, { id: 'b', dif: 1 }, { id: 'c', dif: 1 }, { id: 'd', dif: 2 }, { id: 'e', dif: 1 },
+  ];
+  const r = T.elegir(banco, 4, 5);
+  assert.equal(r.length, 4);
+  assert.equal(new Set(r.map((q) => q.id)).size, 4);
+  assert.equal(T.elegir(banco, 10, 5).length, 5, 'si piden más que el banco, devuelve todo el banco una vez');
+});
+
+test('elegir: no modifica el banco', () => {
+  const antes = Preguntas.map((q) => q.id).join();
+  T.elegir(Preguntas, 10, 3);
+  assert.equal(Preguntas.map((q) => q.id).join(), antes);
+});
+
+test('puntos: 1000 al instante, 500 al límite, 0 si es incorrecta', () => {
+  assert.equal(T.puntos(true, 0, 15000), 1000);
+  assert.equal(T.puntos(true, 15000, 15000), 500);
+  assert.equal(T.puntos(false, 0, 15000), 0);
+  assert.equal(T.puntos(false, 15000, 15000), 0);
+});
+
+test('puntos: lineal por rapidez, entero, y recortado fuera de rango', () => {
+  assert.equal(T.puntos(true, 7500, 15000), 750);
+  assert.equal(T.puntos(true, 1, 15000), 1000); // 999.97 → 1000
+  assert.equal(T.puntos(true, 20000, 15000), 500);
+  assert.equal(T.puntos(true, -50, 15000), 1000);
+  assert.ok(Number.isInteger(T.puntos(true, 1234, 15000)));
+});
+
+test('ranking: empate 1000/1000/500 → puestos 1, 1, 3', () => {
+  const r = T.ranking([{ persona: 'c', puntos: 500 }, { persona: 'a', puntos: 1000 }, { persona: 'b', puntos: 1000 }]);
+  assert.deepEqual(r.map((x) => x.puesto), [1, 1, 3]);
+  assert.deepEqual(r.map((x) => x.puntos), [1000, 1000, 500]);
+  assert.deepEqual(r.map((x) => x.persona).slice(0, 2).sort(), ['a', 'b']);
+  assert.equal(r[2].persona, 'c');
+});
+
+test('ranking: vacío y uno solo', () => {
+  assert.deepEqual(T.ranking([]), []);
+  assert.deepEqual(T.ranking([{ persona: 'x', puntos: 0 }]), [{ persona: 'x', puntos: 0, puesto: 1 }]);
+});
+
+test('restante: cuenta regresiva con el desfase del reloj del servidor, nunca negativa', () => {
+  // el servidor va 2 s adelantado: el cliente ve 10.000 cuando el servidor ya está en 12.000
+  assert.equal(T.restante(20000, 10000, 2000), 8000);
+  assert.equal(T.restante(20000, 30000, 0), 0);
+});
+
+test('constantes del juego', () => {
+  assert.equal(T.PREGUNTAS_POR_PARTIDA, 10);
+  assert.equal(T.PREGUNTA_MS, 15000);
+});
