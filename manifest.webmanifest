@@ -1,0 +1,17 @@
+{
+  "name": "ThirdCEDI Time",
+  "short_name": "ThirdCEDI",
+  "description": "Actividades, juegos y cuentas claras para los compañeros del Grupo CEDI.",
+  "lang": "es-AR",
+  "start_url": "./?app=1",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FFFFFF",
+  "theme_color": "#002F68",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+<meta charset="utf-8">
+<title>ThirdCEDI Time</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#002F68">
+<meta name="description" content="Actividades, juegos y cuentas claras para los compañeros del Grupo CEDI.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ThirdCEDI">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="estilos.css">
+<script>
+// El tema se fija antes de pintar para que no parpadee: lo guardado, o el del sistema.
+(function () {
+  var t = null;
+  try { t = localStorage.getItem('tema'); } catch (e) {}
+  if (t !== 'claro' && t !== 'oscuro') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'oscuro' : 'claro';
+  document.documentElement.setAttribute('data-tema', t);
+})();
+</script>
+</head>
+<body>
+<header class="barra-sup">
+  <div class="marca">
+    <img class="logo logo-claro" src="img/logo-cedi.png" alt="CEDI">
+    <img class="logo logo-oscuro" src="img/logo-cedi-light.png" alt="CEDI">
+    <span class="titulo-app">ThirdCEDI Time</span>
+  </div>
+  <button id="btn-tema" class="btn-icono" type="button" aria-label="Cambiar entre tema claro y oscuro"><span id="ico-tema" aria-hidden="true">☾</span></button>
+</header>
+
+<main id="pantallas">
+  <section class="pantalla" id="pantalla-actividades" data-ruta="actividades" hidden>
+    <h1>Actividades</h1>
+    <p class="vacio">Acá van a aparecer las actividades de tus compañeros.</p>
+  </section>
+  <section class="pantalla" id="pantalla-juegos" data-ruta="juegos" hidden>
+    <h1>Juegos</h1>
+    <p class="vacio">Acá vas a poder jugar con tus compañeros.</p>
+  </section>
+  <section class="pantalla" id="pantalla-perfil" data-ruta="perfil" hidden>
+    <h1>Perfil</h1>
+    <p class="vacio">Acá vas a ver y editar tus datos.</p>
+  </section>
+</main>
+
+<nav class="pestanas" aria-label="Secciones">
+  <a href="#/actividades" data-ruta="actividades"><span class="ico" aria-hidden="true">📅</span><span>Actividades</span></a>
+  <a href="#/juegos" data-ruta="juegos"><span class="ico" aria-hidden="true">🎲</span><span>Juegos</span></a>
+  <a href="#/perfil" data-ruta="perfil"><span class="ico" aria-hidden="true">👤</span><span>Perfil</span></a>
+</nav>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="vendor/supabase.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
