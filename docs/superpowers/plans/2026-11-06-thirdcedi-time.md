@@ -80,6 +80,7 @@ assert.equal(D.empresa('a@wemox.com.ar'), 'Wemox');
 - [ ] **Step 5:** `01-perfiles.sql`: tabla `perfiles`, `es_miembro()`, RLS: select si `es_miembro()`; insert/update solo la propia fila. Aplicar por MCP `apply_migration`.
 - [ ] **Step 6:** Ivan configura SMTP de Resend en Auth (host `smtp.resend.com`, puerto 465, user `resend`, su API key, remitente de su dominio) y la plantilla del mail con el código de 6 dígitos (`{{ .Token }}`) en español. Guiarlo paso a paso; no pedir la clave.
 - [ ] **Step 7:** `login.js`: pantalla mail → `signInWithOtp({ email, options: { shouldCreateUser: true } })` → pantalla código → `verifyOtp({ email, token, type: 'email' })` → si no hay perfil, pide nombre y crea fila con `empresa = Dominios.empresa(email)`. Valida `Dominios.permitido` antes de enviar ("Usá tu mail del Grupo CEDI").
+- [ ] **Step 7b: Foto de perfil.** En el alta y en la pestaña Perfil: elegir foto (cámara o galería), recorte cuadrado centrado, achicada a 512×512 WebP en el cliente, subida al bucket público-de-lectura-para-miembros `avatares` en la ruta `<auth.uid()>/avatar.webp` (upsert; RLS de Storage: escribir solo en tu carpeta, leer si `es_miembro()`), guarda la ruta en `perfiles.foto`. Helper `Perfiles.avatarUrl(perfil): string` (foto o círculo con iniciales en `--accent`), usado por chat, listas de anotados y juegos. Botón "Quitar foto".
 - [ ] **Step 8:** `auth-rls.mjs`: (a) `signInWithOtp` con `prueba@gmail.com` → error 403 del hook; (b) anon sin sesión lee `perfiles` → `[]`. Run: `node dev/tests/auth-rls.mjs` → todo `ok`.
 - [ ] **Step 9:** Prueba real: Ivan entra con su mail de CEDI y uno de otra empresa del grupo; confirmar que el código llega a la bandeja (no cuarentena). Commit.
 
@@ -137,6 +138,22 @@ assert.deepEqual(C.transferencias(new Map([['A',666],['B',-333],['C',-333]])), [
 - [ ] **Step 3:** SQL + RLS: leer/escribir si `en_sala('act:'||actividad)`; borrar gasto solo quien lo cargó; pago lo registra el deudor o el acreedor. Realtime.
 - [ ] **Step 4:** `cuentas.js`: pestaña "Cuentas claras" en el detalle, con selector Actividad / Tercer tiempo si `tiene_tercer`; cargar gasto (por defecto divide entre los anotados a esa parte, checkboxes para cambiar); resumen "Te deben / Debés"; lista de transferencias con botón "Ya pagué" / "Me pagó".
 - [ ] **Step 5:** RLS test + prueba en navegador con 3 usuarios. Commit.
+
+### Task 5b: Álbum y cámara por actividad, con copia en Drive
+
+**Files:**
+- Create: `album.js`, `album-logica.js`, `album-cola.js`, `camara.js`, `editor.js` (copiados de Rumbo al Sur y adaptados), `dev/supabase/05b-album.sql`, `dev/supabase/drive-apps-script.gs`, `dev/tests/album-logica.test.js` (copiado), `dev/tests/album-rls.mjs`
+- Modify: `dev/supabase/avisos/index.ts` (tipos `drive` y `liberar`, se crea en Task 6: si Task 6 todavía no existe, crear la función `avisos` mínima con estos dos tipos y que Task 6 la extienda)
+
+**Interfaces:**
+- Consumes: `en_sala()`, `Chat.abrir` (botón "Mandar al chat"), `perfiles`.
+- Produces: tabla `fotos(id uuid pk generado en el cliente, actividad uuid, autor uuid, ruta text, mini text, media text, ancho, alto, creado, drive_id text null, drive_error text null, drive_tomado timestamptz null, liberada bool default false)`; bucket privado `album` con carpetas `<actividad>/`. `Album.abrir(contenedor, actividadId): () => void`.
+
+- [ ] **Step 1:** Copiar los módulos y el test de Rumbo al Sur; cambiar `viaje`→`actividad`, autor A/B→`auth.uid()` con avatar y nombre de `perfiles`. Mantener: cola offline en IndexedDB (BD `thirdcedi-album`), cámara completa, editor, grilla por día en hora Argentina, visor, guardar, mandar al chat, borrar solo el autor. `node --test dev/tests/` → PASS.
+- [ ] **Step 2:** SQL + RLS: leer/subir si `en_sala('act:'||actividad)`; insert solo columnas propias (no `drive_*` ni `liberada`); borrar solo el autor. Storage con la misma regla por carpeta. Realtime. RPCs `drive_tomar(p_cuantas)`, `liberables(p_cuantas)`, `espacio_proyecto()` solo para service_role, como en Rumbo al Sur.
+- [ ] **Step 3:** Drive: `drive-apps-script.gs` (lo publica Ivan como Web App en su cuenta, con secreto compartido) que recibe `{secreto, carpeta, nombre, base64, mime}`, crea si no existe la subcarpeta `"<fecha> <titulo>"` dentro de la carpeta raíz "ThirdCEDI Time", sube el archivo y devuelve `{id, carpetaUrl}`. Columna `actividades.drive_url` con el link de la subcarpeta. En `avisos/index.ts`, tipo `drive` (trigger after insert de `fotos` + cron cada 5 min) y `liberar` (pasado el 70 % del espacio, borrar originales ya en Drive que tengan versión media, hasta 60 %). Secretos `DRIVE_FOTOS_URL` y `DRIVE_FOTOS_SECRETO` los carga Ivan en el Dashboard.
+- [ ] **Step 4:** En el detalle de actividad, pestaña "Álbum" con botones Cámara / Galería y el link "Ver en Drive" (si `drive_url` existe).
+- [ ] **Step 5:** `album-rls.mjs` (no anotado no ve ni sube) + prueba real: sacar foto en el teléfono sin señal, que suba al volver, aparezca en vivo en el otro teléfono y llegue a la subcarpeta de Drive. Commit.
 
 ### Task 6: Avisos push y recordatorio de las 12
 

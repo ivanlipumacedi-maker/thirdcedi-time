@@ -58,6 +58,10 @@ Por actividad (y/o su tercer tiempo):
 - Pesos argentinos.
 - Decisión de Claude (v1): solo participan usuarios con cuenta; no hay invitados sin cuenta (+1). Mantiene simple el modelo de saldos.
 
+## Álbum y cámara (pedido de Ivan, igual a Rumbo al Sur)
+
+Cada actividad tiene su álbum compartido con la cámara completa de Rumbo al Sur (cola offline, editor, mandar al chat). Las fotos se copian a Drive vía un Apps Script de Ivan, en una subcarpeta por actividad dentro de "ThirdCEDI Time", y el álbum muestra el link "Ver en Drive". Decisión de Claude: subcarpeta por actividad. Cuando el storage de Supabase pasa el 70 %, se liberan originales que ya están en Drive.
+
 ## Avisos push
 
 - Nueva actividad creada (a todos).
