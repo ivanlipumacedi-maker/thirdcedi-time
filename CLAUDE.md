@@ -15,4 +15,4 @@ PWA en JavaScript vainilla (sin framework ni bundler) para que los compañeros d
 - URL: `https://qvezbnkrfqewanlcejha.supabase.co`
 - Clave publicable (pública por diseño, va en `app.js`): `sb_publishable_nHg5W-1bGZwudTST-ejzeA_w_gUNYXQ`
 - Migraciones SQL en `dev/supabase/` (01 perfiles, 02 hook de dominio, 03 avatares, 04 endurecer). Ya aplicadas en el proyecto.
-- Tests: `node --test "dev/tests/*.test.js"` (unitarios) y `node dev/tests/auth-rls.mjs` (contra el proyecto real).
+- Tests: `node --test "dev/tests/*.test.js"` (unitarios) y `node dev/tests/auth-rls.mjs` (contra el proyecto real; no pide códigos). Las pruebas del hook piden un OTP real: solo con `--hook-activo --mail-externo=<mail de Ivan fuera del grupo>`, y recién con el hook activado.

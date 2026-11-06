@@ -1,7 +1,6 @@
 // Acceso con código por mail (OTP de Supabase), alta de perfil (nombre + foto) y panel de perfil propio.
 (function (g) {
   const $ = (id) => document.getElementById(id);
-  const MSG_DOMINIO = 'Usá tu mail del Grupo CEDI'; // igual a Errores.MSG_DOMINIO
   let mail = '';
   let fotoPendiente = null; // Blob listo para subir en el alta
   let tReenvio = null;
@@ -113,7 +112,7 @@
     ev.preventDefault();
     const email = $('in-mail').value.trim().toLowerCase();
     error('err-mail', '');
-    if (!g.Dominios.permitido(email)) { error('err-mail', MSG_DOMINIO); return; }
+    if (!g.Dominios.permitido(email)) { error('err-mail', g.Errores.MSG_DOMINIO); return; }
     ocupado('btn-mail', true, 'Enviando…');
     try {
       await enviarCodigo(email);
