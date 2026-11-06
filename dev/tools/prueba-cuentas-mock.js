@@ -401,6 +401,29 @@ async function cargarGastoUI(p, { monto, concepto, pagador, sacar = [] }) {
       await enCuentasHay(pb, /Estás al día/);
     });
 
+    await paso('quien se anota a una actividad con gastos ya cargados los ve sin recargar', async () => {
+      const PIZZA = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+      const act = actividad(PIZZA, 'Pizza del martes', { tipo: 'after' });
+      db.actividades.push(act);
+      db.asistencias.push({ actividad: PIZZA, persona: UA, parte: 'actividad' }, { actividad: PIZZA, persona: UC, parte: 'actividad' });
+      const g = { id: nuevoId(), actividad: PIZZA, parte: 'actividad', pagador: UA, monto: 900, concepto: 'Pizzas', creado: iso(Date.now()), cargado_por: UA };
+      db.gastos.push(g);
+      db.gasto_partes.push({ gasto: g.id, persona: UA }, { gasto: g.id, persona: UC });
+      await volver(pb);
+      emitir('actividades', 'INSERT', act);
+      await esperar(pb, () => [...document.querySelectorAll('.tarjeta-act')].some((e) => e.textContent.includes('Pizza del martes')));
+      await abrirTarjeta(pb, 'Pizza del martes');
+      await pb.waitForSelector('#btn-voy');
+      await dormir(300);
+      assert.equal(await cuentasTxt(pb), '[oculta]', 'antes de anotarse no ve las cuentas');
+      await clic(pb, '#btn-voy');
+      await enCuentasHay(pb, /Pizzas/);
+      assert.doesNotMatch(await pantalla(pb), /Todavía no hay gastos/);
+      await volver(pb);
+      await abrirTarjeta(pb, 'Asado del viernes');
+      await enCuentasHay(pb, /Estás al día/);
+    });
+
     await paso('al reconectar (SUBSCRIBED) se pone al día con lo que cambió con el socket caído', async () => {
       A.desconectada = true;
       const g = { id: nuevoId(), actividad: ACT, parte: 'actividad', pagador: UC, monto: 900, concepto: 'Carbón', creado: new Date().toISOString(), cargado_por: UC };

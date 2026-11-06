@@ -392,7 +392,8 @@
 
     pintar();
     return {
-      actualizar(nuevo) { if (cerrado) return; ctx = nuevo; pintar(); },
+      // Si cambió si estoy anotado, la RLS (en_cuentas) ahora deja ver otra cosa: hay que volver a leer, no solo repintar.
+      actualizar(nuevo) { if (cerrado) return; const antes = !!ctx.anotado; ctx = nuevo; pintar(); if (!!ctx.anotado !== antes) programar(); },
       cerrar() {
         if (cerrado) return;
         cerrado = true; clearTimeout(tRef);
