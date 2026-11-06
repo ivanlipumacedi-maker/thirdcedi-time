@@ -259,9 +259,10 @@ try {
 } finally {
   // Las RLS no permiten borrar actividades: las de la prueba quedan canceladas con el título "zz prueba rls"
   // (las que ya estaban canceladas rechazan este PATCH: da igual, ya están como tienen que quedar)
-  // (se pueden limpiar a mano con SQL: delete from public.actividades where titulo like 'zz %').
+  // (se borran después con dev/supabase/limpiar-pruebas.sql).
   for (const id of creadas) await A.api('PATCH', `actividades?id=eq.${id}`, { estado: 'cancelada' });
 }
 
+console.log('Para borrar las actividades de prueba (las RLS no dejan): correr dev/supabase/limpiar-pruebas.sql con el MCP supabase-thirdcedi o en el SQL Editor.');
 console.log(fallas ? `${fallas} falla(s)` : 'todo ok');
 process.exit(fallas ? 1 : 0);

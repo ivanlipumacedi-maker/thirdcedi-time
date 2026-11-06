@@ -255,3 +255,4 @@ select, textarea, input[type="datetime-local"], input[type="number"] {
 .cu-entre legend { padding: 0 .25rem; font-size: .9rem; }
 .cu-entre .check { margin: .35rem 0; }
 #cu-reparto:empty { display: none; }
+.aviso-confirmar.neutro, [data-tema="oscuro"] .aviso-confirmar.neutro { border-color: var(--accent); }

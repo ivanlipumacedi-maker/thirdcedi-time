@@ -1,5 +1,5 @@
 // Service worker de ThirdCEDI Time: caché del shell (red primero, caché si no hay señal) y notificaciones push.
-const CACHE = 'thirdcedi-shell-v12';
+const CACHE = 'thirdcedi-shell-v13';
 const SHELL = ['./', 'index.html', 'estilos.css', 'app.js', 'dominios.js', 'errores.js', 'perfiles.js', 'actividades-logica.js', 'chat-logica.js', 'chat-medios.js', 'chat.js', 'cuentas-logica.js', 'cuentas.js', 'actividades.js', 'login.js', 'vendor/supabase.js', 'manifest.webmanifest', 'icon-192.png', 'badge-96.png', 'img/logo-cedi.png', 'img/logo-cedi-light.png'];
 
 self.addEventListener('install', (e) => {

@@ -17,6 +17,9 @@
   let chatEl = null;              // contenedor del chat de la actividad abierta (se conserva entre repintados)
   let chatSala = null;
   let chatCerrar = null;
+  let cuentasEl = null;           // sección de Cuentas claras de la actividad abierta (se conserva entre repintados)
+  let cuentasAct = null;
+  let cuentasApi = null;
 
   const raiz = () => document.getElementById('pantalla-actividades');
   const sb = () => g.App.sb;
@@ -99,7 +102,7 @@
   }
   function desuscribir() {
     if (canal && sb()) sb().removeChannel(canal);
-    cerrarChat();
+    cerrarAnexos();
     canal = null; cargado = false; actividades = []; asistencias = []; vista = { tipo: 'lista' };
     sesion++; enVuelo = null; otraVez = false; estadoCarga = 'cargando';
     clearTimeout(tRefresco);
@@ -114,9 +117,10 @@
     const editada = vista.tipo === 'form' && vista.id ? actividades.find((x) => x.id === vista.id) : null;
     if (vista.tipo === 'form' && r.querySelector('form.form-act') && !vista.nuevoRender && !(editada && !L.editable(editada))) return;
     const lch = chatEl && chatEl.querySelector('.chat-lista');
-    const antes = { scroll: lch ? lch.scrollTop : 0, foco: !!(chatEl && chatEl.contains(document.activeElement) && document.activeElement.tagName === 'TEXTAREA') };
+    const antes = { scroll: lch ? lch.scrollTop : 0, foco: !!(chatEl && chatEl.contains(document.activeElement) && document.activeElement.tagName === 'TEXTAREA'),
+      focoCu: cuentasEl && cuentasEl.contains(document.activeElement) ? document.activeElement : null };
     r.textContent = '';
-    if (!g.App.yo()) { cerrarChat(); return; }
+    if (!g.App.yo()) { cerrarAnexos(); return; }
     if (vista.tipo === 'detalle') {
       const a = actividades.find((x) => x.id === vista.id);
       if (a) {
@@ -124,17 +128,36 @@
         // el chat sigue vivo entre repintados: se recupera dónde estaba el scroll y el foco del teclado
         const nl = chatEl && chatEl.querySelector('.chat-lista');
         if (nl && chatEl.isConnected) { nl.scrollTop = antes.scroll; if (antes.foco) chatEl.querySelector('textarea').focus({ preventScroll: true }); }
+        if (antes.focoCu && antes.focoCu.isConnected) antes.focoCu.focus({ preventScroll: true });
         return;
       }
       vista = { tipo: 'lista' };
     }
-    cerrarChat();
+    cerrarAnexos();
     if (vista.tipo === 'form') { vista.nuevoRender = false; r.append(formulario(vista.id ? actividades.find((x) => x.id === vista.id) : null)); return; }
     r.append(...nodos(lista()));
   }
   function cerrarChat() {
     if (chatCerrar) chatCerrar();
     chatCerrar = null; chatEl = null; chatSala = null;
+  }
+  function cerrarCuentas() {
+    if (cuentasApi) cuentasApi.cerrar();
+    cuentasApi = null; cuentasEl = null; cuentasAct = null;
+  }
+  function cerrarAnexos() { cerrarChat(); cerrarCuentas(); }
+  // Cuentas claras: se abre para cualquiera que mire el detalle. La sección se muestra si estás anotado o si figurás
+  // en las cuentas (quien se bajó y debe plata la sigue viendo); si no, queda oculta. Se abre una vez y se reusa.
+  function cuentasDe(a, enAct, enTer, anotado) {
+    if (!g.Cuentas) return null;
+    const ctx = { actividad: a, anotados: { actividad: enAct, tercer: enTer }, perfilDe, yo: yoId(), anotado };
+    if (cuentasAct !== a.id) {
+      cerrarCuentas();
+      cuentasEl = h('section', { class: 'cuentas', id: 'cuentas-act' });
+      cuentasAct = a.id;
+      cuentasApi = g.Cuentas.abrir(cuentasEl, ctx);
+    } else cuentasApi.actualizar(ctx);
+    return cuentasEl;
   }
   // El chat de la actividad: solo para quien está anotado a alguna de las partes. Se abre una vez y se reusa.
   function chatDe(a, anotado) {
@@ -249,6 +272,7 @@
         cancelada ? null : h('button', { type: 'button', id: 'btn-voy-tercer', class: voyTer ? 'btn-sec btn-ancho' : 'btn-primario btn-ancho', on: { click: alternar('tercer', voyTer) } }, voyTer ? 'Ya no voy al tercer tiempo' : 'Voy al tercer tiempo'),
         anotadosLista(enTer));
     }
+    out.push(cuentasDe(a, enAct, enTer, voy || voyTer));
     out.push(chatDe(a, voy || voyTer));
     if (a.creador === yo && L.editable(a)) {
       out.push(h('h2', { class: 'sub' }, 'Organizar'), h('div', { class: 'fila-botones' },
@@ -357,7 +381,14 @@
       const { data, error } = res;
       guardando = false; confirmado = false;
       if (error) {
-        err.textContent = /cancelada/.test((error && error.message) || '') ? MSG_CANCELADA : 'No pudimos guardar la actividad. Revisá los datos y probá de nuevo.';
+        const m = (error && error.message) || '';
+        if (/^El tercer tiempo tiene (gastos|pagos)/.test(m)) {
+          // la base no deja sacar el tercer tiempo con cuentas cargadas: se vuelve a prender y se explica por qué
+          chkTer.checked = true; sync();
+          err.textContent = m + '.'; err.hidden = false;
+          return;
+        }
+        err.textContent = /cancelada/.test(m) ? MSG_CANCELADA : 'No pudimos guardar la actividad. Revisá los datos y probá de nuevo.';
         err.hidden = false; return;
       }
       g.App.toast(editando ? 'Cambios guardados' : 'Actividad creada');

@@ -51,7 +51,7 @@ const texto = (p, sel) => p.$eval(sel, (e) => e.textContent);
   try {
     const A = await abrir(b, 'A');
     const B = await abrir(b, 'B');
-    const titulo = 'Pádel zz ' + Date.now();
+    const titulo = 'zz Pádel ' + Date.now();
 
     // A crea el pádel con tercer tiempo
     await A.click('#btn-nueva-act');
@@ -69,7 +69,7 @@ const texto = (p, sel) => p.$eval(sel, (e) => e.textContent);
     await A.screenshot({ path: path.join(shots, 'actividades-form-claro.png') });
     await A.click('#btn-guardar-act');
     await A.waitForSelector('#btn-voy');
-    assert.match(await A.evaluate(() => [...document.querySelectorAll('h1')].find((e) => e.offsetParent !== null)?.textContent || ''), /Pádel zz/); // el primer h1 visible (los de login están ocultos)
+    assert.match(await A.evaluate(() => [...document.querySelectorAll('h1')].find((e) => e.offsetParent !== null)?.textContent || ''), /zz Pádel/); // el primer h1 visible (los de login están ocultos)
     await A.screenshot({ path: path.join(shots, 'actividades-detalle-claro.png') });
 
     // B ve aparecer la actividad en vivo, sin recargar
@@ -124,5 +124,6 @@ const texto = (p, sel) => p.$eval(sel, (e) => e.textContent);
     console.log('ok');
   } finally {
     await b.close();
+    console.log('Para borrar las actividades de prueba (las RLS no dejan): correr dev/supabase/limpiar-pruebas.sql con el MCP supabase-thirdcedi o en el SQL Editor.');
   }
 })().catch((e) => { console.error(e); process.exit(1); });

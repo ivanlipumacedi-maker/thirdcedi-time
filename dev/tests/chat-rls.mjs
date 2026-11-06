@@ -268,12 +268,13 @@ try {
   });
 } finally {
   // Los mensajes y las actividades no se borran: los mensajes quedan marcados como eliminados por su autor
-  // y la actividad queda cancelada con título "zz ..." (se limpia a mano con SQL: delete from public.actividades where titulo like 'zz %').
+  // y la actividad queda cancelada con título "zz ..." (se borra después con dev/supabase/limpiar-pruebas.sql).
   if (fotoA) { await A.borrar(fotoA); await A.borrar(fotoA.replace(/\.webp$/, '.t.webp')); }
   for (const id of mios.A) await A.rpc('eliminar_mensaje', { p_id: id });
   for (const id of mios.B) await B.rpc('eliminar_mensaje', { p_id: id });
   if (actId) await A.api('PATCH', `actividades?id=eq.${actId}`, { estado: 'cancelada' });
 }
 
+console.log('Para borrar las actividades de prueba (las RLS no dejan): correr dev/supabase/limpiar-pruebas.sql con el MCP supabase-thirdcedi o en el SQL Editor.');
 console.log(fallas ? `${fallas} falla(s)` : 'todo ok');
 process.exit(fallas ? 1 : 0);
