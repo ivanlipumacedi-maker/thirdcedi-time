@@ -74,7 +74,7 @@ assert.equal(D.permitido('x@gmail.com'), false);
 assert.equal(D.permitido(''), false);
 assert.equal(D.empresa('a@wemox.com.ar'), 'Wemox');
 ```
-- [ ] **Step 2:** `node --test dev/tests/` → FAIL. Implementar `dominios.js` (comparación exacta del dominio después de la última `@`, en minúsculas). → PASS.
+- [ ] **Step 2:** `node --test "dev/tests/*.test.js"` → FAIL. Implementar `dominios.js` (comparación exacta del dominio después de la última `@`, en minúsculas). → PASS.
 - [ ] **Step 3:** Crear el proyecto Supabase por MCP (`create_project`, org Cedi, `us-east-2`, nombre `thirdcedi-time`) — confirmar costo con Ivan antes (debería ser $0 en plan gratis). Anotar ref y publishable key en `CLAUDE.md` y en `app.js`.
 - [ ] **Step 4:** `02-hook-dominio.sql`: función `public.hook_dominio(event jsonb) returns jsonb` para el Auth Hook "Before User Created" que devuelve error `{"error":{"http_code":403,"message":"Solo cuentas del Grupo CEDI"}}` si el dominio no está en la lista (misma lista que `dominios.js`). Pasarle a Ivan las sentencias en el chat y el paso del Dashboard para activar el hook.
 - [ ] **Step 5:** `01-perfiles.sql`: tabla `perfiles`, `es_miembro()`, RLS: select si `es_miembro()`; insert/update solo la propia fila. Aplicar por MCP `apply_migration`.
@@ -110,7 +110,7 @@ assert.equal(D.empresa('a@wemox.com.ar'), 'Wemox');
 - Produces: tabla `mensajes(id, sala text, autor uuid→perfiles, tipo, texto, ...columnas que ya usa Rumbo al Sur)` donde `sala` es `'act:<uuid>'` o `'par:<uuid>'`. Función SQL `public.en_sala(sala text) returns boolean` (anotado a cualquier parte de la actividad, o jugador de la partida — la tabla `jugadores` llega en Task 7; dejar la rama `par:` devolviendo false hasta entonces). `Chat.abrir(contenedor: HTMLElement, sala: string): () => void` (devuelve función para cerrar y desuscribir).
 
 - [ ] **Step 1:** Copiar los 3 módulos y su test; reemplazar el modelo de 2 personas (`autor` 'A'/'B', header `x-viaje`) por `autor = auth.uid()` y nombre/foto desde `perfiles`. Colores de burbuja: propias `--brand` con texto blanco, ajenas `--bg-alt`; nombre del autor arriba de la burbuja ajena (es grupal).
-- [ ] **Step 2:** `node --test dev/tests/` → PASS (ajustar los tests copiados a los nombres nuevos sin bajar su cobertura).
+- [ ] **Step 2:** `node --test "dev/tests/*.test.js"` → PASS (ajustar los tests copiados a los nombres nuevos sin bajar su cobertura).
 - [ ] **Step 3:** SQL + RLS con `en_sala(sala)` para select/insert; editar/borrar solo el autor. Storage bucket `chat` privado con la misma regla por carpeta `<sala>/`. Realtime.
 - [ ] **Step 4:** Montar el chat en el detalle de actividad, visible solo si estás anotado.
 - [ ] **Step 5:** `chat-rls.mjs`: no anotado no lee ni escribe en la sala; anotado solo al tercer tiempo sí. Prueba en 2 ventanas: mensaje llega en vivo. Commit.
@@ -149,7 +149,7 @@ assert.deepEqual(C.transferencias(new Map([['A',666],['B',-333],['C',-333]])), [
 - Consumes: `en_sala()`, `Chat.abrir` (botón "Mandar al chat"), `perfiles`.
 - Produces: tabla `fotos(id uuid pk generado en el cliente, actividad uuid, autor uuid, ruta text, mini text, media text, ancho, alto, creado, drive_id text null, drive_error text null, drive_tomado timestamptz null, liberada bool default false)`; bucket privado `album` con carpetas `<actividad>/`. `Album.abrir(contenedor, actividadId): () => void`.
 
-- [ ] **Step 1:** Copiar los módulos y el test de Rumbo al Sur; cambiar `viaje`→`actividad`, autor A/B→`auth.uid()` con avatar y nombre de `perfiles`. Mantener: cola offline en IndexedDB (BD `thirdcedi-album`), cámara completa, editor, grilla por día en hora Argentina, visor, guardar, mandar al chat, borrar solo el autor. `node --test dev/tests/` → PASS.
+- [ ] **Step 1:** Copiar los módulos y el test de Rumbo al Sur; cambiar `viaje`→`actividad`, autor A/B→`auth.uid()` con avatar y nombre de `perfiles`. Mantener: cola offline en IndexedDB (BD `thirdcedi-album`), cámara completa, editor, grilla por día en hora Argentina, visor, guardar, mandar al chat, borrar solo el autor. `node --test "dev/tests/*.test.js"` → PASS.
 - [ ] **Step 2:** SQL + RLS: leer/subir si `en_sala('act:'||actividad)`; insert solo columnas propias (no `drive_*` ni `liberada`); borrar solo el autor. Storage con la misma regla por carpeta. Realtime. RPCs `drive_tomar(p_cuantas)`, `liberables(p_cuantas)`, `espacio_proyecto()` solo para service_role, como en Rumbo al Sur.
 - [ ] **Step 3:** Drive: `drive-apps-script.gs` (lo publica Ivan como Web App en su cuenta, con secreto compartido) que recibe `{secreto, carpeta, nombre, base64, mime}`, crea si no existe la subcarpeta `"<fecha> <titulo>"` dentro de la carpeta raíz "ThirdCEDI Time", sube el archivo y devuelve `{id, carpetaUrl}`. Columna `actividades.drive_url` con el link de la subcarpeta. En `avisos/index.ts`, tipo `drive` (trigger after insert de `fotos` + cron cada 5 min) y `liberar` (pasado el 70 % del espacio, borrar originales ya en Drive que tengan versión media, hasta 60 %). Secretos `DRIVE_FOTOS_URL` y `DRIVE_FOTOS_SECRETO` los carga Ivan en el Dashboard.
 - [ ] **Step 4:** En el detalle de actividad, pestaña "Álbum" con botones Cámara / Galería y el link "Ver en Drive" (si `drive_url` existe).
@@ -214,7 +214,7 @@ assert.deepEqual(C.transferencias(new Map([['A',666],['B',-333],['C',-333]])), [
 
 - [ ] **Step 1: Test que falla:** ≥ 500 preguntas; ids únicos; 4 opciones distintas no vacías; `ok` en 0..3; cada categoría (`general`, `deportes`, `argentina`, `tecnologia`, `cine-musica`, `comida`, `geografia`, `historia`) con ≥ 40; las tres dificultades presentes en cada categoría; ningún texto con palabras de una lista de exclusión (picante/insultos). Palabras: ≥ 150 pares, sin pares iguales.
 - [ ] **Step 2:** Generar el contenido por lotes de 50 por categoría. Para cada lote, una segunda pasada de verificación de hechos que descarta lo dudoso o lo que depende de la fecha (resultados "actuales", récords que cambian). Nada sexual, político partidario, religioso ni de burla a personas.
-- [ ] **Step 3:** `node --test dev/tests/` → PASS. Reemplazar las preguntas de muestra de Task 7. Commit.
+- [ ] **Step 3:** `node --test "dev/tests/*.test.js"` → PASS. Reemplazar las preguntas de muestra de Task 7. Commit.
 
 ### Task 10: Cierre — revisión, seguridad y prueba en teléfonos
 
