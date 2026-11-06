@@ -1,5 +1,5 @@
 // Pantalla Juegos: lista de partidas (en curso, abiertas, terminadas), "Nueva partida", sala de espera con los
-// jugadores en vivo, chat de la partida ('par:<uuid>') y el juego (Trivia en trivia.js; El Impostor en la Task 8).
+// jugadores en vivo, chat de la partida ('par:<uuid>') y el juego (Trivia en trivia.js; El Impostor en impostor.js).
 // Todo se escribe por RPC (dev/supabase/12-juegos.sql); lo que se ve llega por Realtime con resync en SUBSCRIBED.
 (function (g) {
   const JUEGOS = {
@@ -231,6 +231,8 @@
         // rpc() devuelve un thenable sin .catch: se pasa a Promise
         responder: (ronda, opcion) => Promise.resolve(sb().rpc('responder', { p: p.id, p_ronda: ronda, p_opcion: opcion })),
         avanzar: (ronda, fase) => Promise.resolve(sb().rpc('avanzar_partida', { p: p.id, p_ronda: ronda, p_fase: fase })),
+        votar: (ronda, persona) => Promise.resolve(sb().rpc('votar', { p: p.id, p_ronda: ronda, p_persona: persona })),
+        miPalabra: () => Promise.resolve(sb().rpc('mi_palabra', { p: p.id })),
         volver: () => irA({ tipo: 'lista' }),
       });
     }
@@ -301,13 +303,11 @@
   function vistaNueva() {
     const opcion = (id) => {
       const j = JUEGOS[id];
-      const listo = id === 'trivia' ? !!g.Trivia : !!g.Impostor;
-      return h('button', { type: 'button', id: 'nueva-' + id, class: 'tarjeta-act tarjeta-juego', disabled: !listo || ocupado, on: { click: () => crear(id) } },
+      return h('button', { type: 'button', id: 'nueva-' + id, class: 'tarjeta-act tarjeta-juego', disabled: ocupado, on: { click: () => crear(id) } },
         h('span', { class: 'tarjeta-emoji', 'aria-hidden': 'true' }, j.emoji),
         h('span', { class: 'tarjeta-cuerpo' },
           h('span', { class: 'tarjeta-titulo' }, j.nombre),
-          h('span', { class: 'tarjeta-meta' }, j.desc),
-          !listo && h('span', { class: 'tarjeta-badges' }, badge('Próximamente'))));
+          h('span', { class: 'tarjeta-meta' }, j.desc)));
     };
     return [
       h('button', { type: 'button', class: 'btn-link', on: { click: () => irA({ tipo: 'lista' }) } }, '← Volver'),
@@ -363,7 +363,7 @@
       if (!activo) {
         out.push(h('button', { type: 'button', id: 'btn-unirme', class: 'btn-primario btn-ancho', disabled: ocupado, on: { click: () => accion('unirse_partida', { p: p.id }, '¡Adentro!') } }, 'Unirme'));
       } else if (p.creador === yo) {
-        out.push(faltan ? h('p', { class: 'ayuda', id: 'faltan-jugadores' }, 'Faltan ' + faltan + (faltan === 1 ? ' jugador' : ' jugadores') + ' para arrancar.') : null,
+        out.push(faltan ? h('p', { class: 'ayuda', id: 'faltan-jugadores' }, (faltan === 1 ? 'Falta 1 jugador' : 'Faltan ' + faltan + ' jugadores') + ' para arrancar.') : null,
           h('button', { type: 'button', id: 'btn-arrancar', class: 'btn-primario btn-ancho', disabled: ocupado || faltan > 0, on: { click: () => accion('avanzar_partida', { p: p.id, p_ronda: 0, p_fase: 'espera' }) } }, n === 1 ? 'Arrancar (jugás solo)' : 'Arrancar'));
       } else {
         out.push(h('p', { class: 'ayuda', id: 'esperando-creador' }, 'Esperando que ' + perfilDe(p.creador).nombre + ' arranque la partida.'));

@@ -282,11 +282,11 @@ async function capturas(p, nombre) {
     });
 
     let par;
-    await paso('A arma una Trivia (Impostor figura como Próximamente) y queda en la sala de espera', async () => {
+    await paso('A arma una Trivia (el Impostor ya está disponible) y queda en la sala de espera', async () => {
       await clic(pa, '#btn-nueva-partida');
       await pa.waitForSelector('#nueva-trivia');
-      assert.equal(await pa.$eval('#nueva-impostor', (b) => b.disabled), true, 'Impostor sin Task 8 debería estar deshabilitado');
-      assert.match(await texto(pa, '#nueva-impostor'), /Próximamente/);
+      assert.equal(await pa.$eval('#nueva-impostor', (b) => b.disabled), false, 'El Impostor (Task 8) debería estar disponible');
+      assert.doesNotMatch(await texto(pa, '#nueva-impostor'), /Próximamente/);
       await clic(pa, '#nueva-trivia');
       await pa.waitForSelector('#btn-arrancar');
       par = db.partidas[0].id;

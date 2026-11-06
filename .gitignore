@@ -4,3 +4,4 @@ dev/shots/
 .superpowers/
 .claude/
 dev/supabase/trivia-preguntas-datos.sql
+dev/supabase/impostor-palabras-datos.sql
