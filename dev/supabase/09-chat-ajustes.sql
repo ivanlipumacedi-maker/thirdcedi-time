@@ -20,6 +20,9 @@ as $$
   select regexp_replace(t, '^' || c.blancos || '+|' || c.blancos || '+$', '', 'g')
     from (select E'[\\u0009-\\u000d\\u0020\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000\\ufeff]'::text as blancos) as c
 $$;
+-- Sin revoke a propósito: el check mensajes_texto_valido la ejecuta con los privilegios de quien inserta
+-- (authenticated). Si algún día se le saca a public/anon, hay que volver a darle execute a authenticated,
+-- o se rompen todos los INSERT de texto. Es una función pura: no expone datos.
 
 create or replace function public.editar_mensaje(p_id uuid, p_texto text) returns public.mensajes
 language plpgsql security definer set search_path = ''
