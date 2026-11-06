@@ -2,6 +2,7 @@
 // Alcance: texto, fotos, editar y eliminar lo propio.
 (function (g) {
   const MAX_TEXTO = 2000;
+  const TAM_PAGINA = 50; // mensajes por página (carga inicial, resincronización y "Ver mensajes anteriores")
 
   const textoValido = (s) => { const t = String(s ?? '').trim(); return t.length >= 1 && t.length <= MAX_TEXTO; };
   /** texto a guardar al editar (recortado) o null si no es válido o no cambió respecto del original */
@@ -76,7 +77,7 @@
   const CARPETAS = { foto: ['fotos', 'webp'] };
   const rutaArchivo = (sala, tipo, id) => `${sala}/${CARPETAS[tipo][0]}/${id}.${CARPETAS[tipo][1]}`;
 
-  const L = { MAX_TEXTO, textoValido, textoEditado, resumen, puedeEditar, EDITAR_MS, comparar, fusionar, fusionarLote, quitar, aplicarEvento,
+  const L = { MAX_TEXTO, TAM_PAGINA, textoValido, textoEditado, resumen, puedeEditar, EDITAR_MS, comparar, fusionar, fusionarLote, quitar, aplicarEvento,
     horaCorta, reconciliar, cursor, filtroAntes, escalar, rutaArchivo };
   if (typeof module !== 'undefined' && module.exports) module.exports = L; else g.ChatLogica = L;
 })(this);

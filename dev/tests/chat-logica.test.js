@@ -164,3 +164,23 @@ test('comparar usa microsegundos (Postgres) y no solo milisegundos', () => {
   assert.ok(L.comparar(a, b) < 0);
   assert.ok(L.comparar({ id: 'a', creado: '2026-11-02T10:00:00Z' }, { id: 'b', creado: '2026-11-02T10:00:00.000+00:00' }) < 0);
 });
+
+test('09: el recorte de editar_mensaje (regex de Postgres) saca lo mismo que trim() de JS', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const sql = fs.readFileSync(path.join(__dirname, '..', 'supabase', '09-chat-ajustes.sql'), 'utf8');
+  const m = /blancos constant text := E'(\[[^']+\])';/.exec(sql);
+  assert.ok(m, 'no encontré la clase "blancos" en la 09');
+  // en E'' la barra va doblada: el motor de regex recibe \uXXXX, que JS entiende igual
+  const clase = m[1].replace(/\\\\/g, '\\');
+  assert.match(clase, /^\[(\\u[0-9a-f]{4}(-\\u[0-9a-f]{4})?)+\]$/, 'la clase tiene que ser solo escapes \\uXXXX');
+  const recorte = new RegExp('^' + clase + '+|' + clase + '+$', 'g');
+  for (let cp = 0; cp <= 0xffff; cp++) {
+    const ch = String.fromCharCode(cp);
+    const s = ch + ch + 'a' + ch + 'b' + ch;
+    assert.equal(s.replace(recorte, ''), s.trim(), 'U+' + cp.toString(16).padStart(4, '0'));
+  }
+  assert.equal(' \n\t\u00a0hola\u3000\r\n'.replace(recorte, ''), 'hola');
+  assert.equal(' \n\t '.replace(recorte, ''), '');
+  assert.match(sql, /if regexp_replace\(r\.texto, recorte, '', 'g'\) is not distinct from t then/, 'la comparación de "no cambió" también recorta');
+});

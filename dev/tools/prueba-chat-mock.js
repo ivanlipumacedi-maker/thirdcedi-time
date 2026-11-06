@@ -48,11 +48,14 @@ function orAntes(fila, expr) {
   if (!m) throw new Error('filtro .or desconocido: ' + expr);
   return fila.creado < m[1] || (fila.creado === m[2] && fila.id < m[3]);
 }
+const rpcs = {}; // llamadas por RPC (editar_mensaje, eliminar_mensaje)
 let demorarMensajes = 0; // ms que tarda en volver la próxima lectura de mensajes de A (la foto del servidor se toma al pedir)
 function consulta(uid, s) {
   if (s.rpc) {
     const m = db.mensajes.find((x) => x.id === s.args.p_id);
+    rpcs[s.rpc] = (rpcs[s.rpc] || 0) + 1;
     if (!m || m.autor !== uid || !enSala(uid, m.sala)) return { error: { code: 'P0002', message: 'No se puede' } };
+    if (s.rpc === 'eliminar_mensaje' && m.tipo === 'eliminado') return { error: { code: 'P0002', message: 'No se puede eliminar' } }; // como la 09
     if (s.rpc === 'editar_mensaje') {
       const t = String(s.args.p_texto || '').trim(); // igual que la 09: recorta y, si no cambió, no marca editado
       if (t === m.texto) return { data: { ...m } };
@@ -170,8 +173,9 @@ const sinToast = (p) => p.waitForFunction(() => document.getElementById('toast')
   let fallas = 0;
   const paso = async (n, fn) => { try { await fn(); console.log('ok', n); } catch (e) { fallas++; console.log('FALLA', n, '-', e.message); } };
   try {
-    // Ventana A (Ana, anotada a la actividad). Primero se prueba el error inicial: la 1ª lectura de mensajes falla.
-    fallarMensajes = 1;
+    // Ventana A (Ana, anotada a la actividad). Primero se prueba el error inicial: al abrir el chat hay dos lecturas
+    // de mensajes (la carga inicial y la de SUBSCRIBED, que corre de nuevo aunque la otra siga en vuelo) y fallan las dos.
+    fallarMensajes = 2;
     const A = await abrir(b, UA, 'light');
     const pa = A.page;
     await pa.click('.tarjeta-act');
@@ -301,6 +305,39 @@ const sinToast = (p) => p.waitForFunction(() => document.getElementById('toast')
       await new Promise((r) => setTimeout(r, 300));
       assert.equal(await pb.$eval('#chat-act .chat-edicion', (e) => e.hidden), true, 'la edición se cierra');
       assert.equal(db.mensajes.find((x) => x.texto === 'Texto fijo').editado, false);
+    });
+
+    await paso('fix2 punto 1: doble toque en "Tocá de nuevo para eliminar" elimina una sola vez y sin error falso', async () => {
+      await pa.type('#chat-act .chat-texto', 'Para borrar con doble toque');
+      await pa.click('#chat-act .chat-enviar');
+      await esperar(pa, () => [...document.querySelectorAll('#chat-act .chat-msg.mio')].some((e) => /doble toque/.test(e.textContent)) && !document.querySelector('#chat-act .subiendo'));
+      await sinToast(pa);
+      const btns = await pa.$$('#chat-act .chat-msg.mio .chat-mas-acc');
+      await btns[btns.length - 1].click();
+      await pa.click('#chat-act .chat-menu .btn-peligro');
+      assert.match(await texto(pa, '#chat-act .chat-menu .btn-peligro'), /Tocá de nuevo/);
+      const antes = rpcs.eliminar_mensaje || 0;
+      // dos toques seguidos sobre el mismo botón, antes de que vuelva la RPC
+      await pa.evaluate(() => { const b = document.querySelector('#chat-act .chat-menu .btn-peligro'); b.click(); b.click(); });
+      await esperar(pa, () => /Se eliminó este mensaje/.test(document.querySelector('#chat-act .chat-lista').textContent));
+      await new Promise((r) => setTimeout(r, 400));
+      assert.equal((rpcs.eliminar_mensaje || 0) - antes, 1, 'eliminar_mensaje se llamó más de una vez');
+      const toast = await pa.evaluate(() => { const t = document.getElementById('toast'); return t.hidden ? '' : t.textContent; });
+      assert.doesNotMatch(toast, /No pudimos eliminar/, 'error falso: ' + toast);
+    });
+
+    await paso('fix2 punto 3: una sync pedida con otra en vuelo (SUBSCRIBED) corre de nuevo y no pierde lo commiteado', async () => {
+      A.desconectada = true; // sin eventos en vivo: el mensaje solo puede llegar por una sincronización
+      demorarMensajes = 1500; // la sync que arranca ahora toma la foto del servidor ya y tarda en volver
+      await pa.evaluate(() => window.dispatchEvent(new Event('online')));
+      await new Promise((r) => setTimeout(r, 200));
+      await pb.type('#chat-act .chat-texto', 'Commiteado antes de SUBSCRIBED');
+      await pb.click('#chat-act .chat-enviar');
+      await esperar(pb, () => /Commiteado antes de SUBSCRIBED/.test(document.querySelector('#chat-act .chat-lista').textContent) && !document.querySelector('#chat-act .subiendo'));
+      A.desconectada = false;
+      await pa.evaluate(() => window.__estadoCanales('SUBSCRIBED')); // reconecta con la primera sync todavía en vuelo
+      await esperar(pa, () => /Commiteado antes de SUBSCRIBED/.test(document.querySelector('#chat-act .chat-lista').textContent));
+      assert.equal(await cuantos(pa, '#chat-act .chat-msg'), db.mensajes.length);
     });
 
     await paso('fix 9 y 10: botón de foto real; el visor cierra con Escape y devuelve el foco', async () => {

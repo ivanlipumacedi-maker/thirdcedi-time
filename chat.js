@@ -3,7 +3,7 @@
 (function (g) {
   const L = g.ChatLogica;
   const M = g.ChatMedios;
-  const TAM = 50;
+  const TAM = L.TAM_PAGINA;
   const CAMPOS = 'id,sala,autor,tipo,texto,archivo,ancho,alto,editado,creado';
 
   function h(tag, props, ...hijos) {
@@ -30,11 +30,13 @@
     let confirmandoId = null;         // mensaje propio esperando el segundo toque para eliminarse
     let editandoId = null;
     let cerrado = false;
-    let enVuelo = null;               // sincronización en curso (se comparte entre llamadas)
+    let enVuelo = null;               // sincronización en curso
+    let otraVez = false;              // la pidieron de nuevo con una en vuelo: al terminar se corre una más
     let llegados = null;              // con una sincronización en vuelo: ids que entraron a la lista mientras tanto
     let pendientes = null;            // con una sincronización en vuelo: UPDATEs de mensajes que todavía no están
     let guardando = false;            // RPC de edición en vuelo
     let cargandoMas = false;          // "Ver mensajes anteriores" en vuelo
+    const eliminando = new Set();     // ids con la RPC de eliminar en vuelo (un segundo toque no la repite)
     let canal = null;
     let visor = null;
     let focoAntes = null;             // a dónde vuelve el foco al cerrar el visor
@@ -110,7 +112,7 @@
       else if (m.tipo === 'foto') cuerpo = nodoFoto(m);
       else cuerpo = h('div', { class: 'chat-txt' }, m.texto || '');
       const burbuja = h('div', { class: 'chat-burbuja' + (eliminado ? ' eliminado' : '') + (m.tipo === 'foto' && !eliminado ? ' media' : '') + (m.subiendo ? ' subiendo' : '') }, cuerpo, hora);
-      if (mio && !eliminado && !esTmp(m)) {
+      if (mio && !eliminado && !esTmp(m) && !eliminando.has(m.id)) {
         burbuja.append(h('button', { type: 'button', class: 'chat-mas-acc', 'aria-label': 'Opciones del mensaje', 'aria-expanded': menuId === m.id ? 'true' : 'false',
           on: { click: () => { menuId = menuId === m.id ? null : m.id; confirmandoId = null; pintar(); } } }, '⋯'));
       }
@@ -152,8 +154,12 @@
       if (llegados) llegados.add(m.id);
     }
 
+    // Si la piden con otra en vuelo (p. ej. SUBSCRIBED mientras corre la carga inicial), no alcanza con esa:
+    // su consulta pudo salir antes de que se commiteara un mensaje que tampoco llegó en vivo. Se marca otraVez y,
+    // al terminar, se corre una sola más (varias llamadas durante el vuelo se juntan en esa).
     function sincronizar() {
-      if (enVuelo) return enVuelo;
+      if (enVuelo) { otraVez = true; return enVuelo; }
+      otraVez = false;
       llegados = new Set(); pendientes = new Map();
       enVuelo = (async () => {
         try {
@@ -172,7 +178,12 @@
           estado = 'ok';
         } catch (e) {
           if (!cerrado && estado !== 'ok') estado = 'error';
-        } finally { enVuelo = null; llegados = null; pendientes = null; if (!cerrado) pintar(); }
+        } finally {
+          enVuelo = null; llegados = null; pendientes = null;
+          const repetir = otraVez && !cerrado; otraVez = false;
+          if (!cerrado) pintar();
+          if (repetir) sincronizar();
+        }
       })();
       return enVuelo;
     }
@@ -309,8 +320,14 @@
       }
     }
     async function eliminar(id) {
-      confirmandoId = null; menuId = null;
-      const { data, error } = await sb.rpc('eliminar_mensaje', { p_id: id });
+      if (eliminando.has(id)) return; // segundo toque con la RPC en vuelo: daría P0002 y un error falso
+      eliminando.add(id);
+      confirmandoId = null; menuId = null; pintar(); // el menú se cierra ya
+      let data, error;
+      try { ({ data, error } = await sb.rpc('eliminar_mensaje', { p_id: id })); }
+      catch (e) { error = e; }
+      finally { eliminando.delete(id); }
+      if (cerrado) return;
       if (error) { g.App.toast('No pudimos eliminar el mensaje. Probá de nuevo.'); pintar(); return; }
       if (editandoId === id) cancelarEdicion();
       medios.delete(id);

@@ -6,6 +6,10 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { createRequire } from 'node:module';
+
+const L = createRequire(import.meta.url)('../../chat-logica.js'); // la misma lógica de orden, cursor y filtro que el cliente
+const CAMPOS = 'id,sala,autor,tipo,texto,archivo,ancho,alto,editado,creado'; // los de chat.js
 
 const BASE = 'https://qvezbnkrfqewanlcejha.supabase.co';
 const KEY = 'sb_publishable_nHg5W-1bGZwudTST-ejzeA_w_gUNYXQ';
@@ -143,6 +147,51 @@ try {
     const otro = await A.rpc('editar_mensaje', { p_id: id, p_texto: '  distinto  ' });
     assert.equal(otro.data.texto, 'distinto');
     assert.equal(otro.data.editado, true);
+  });
+
+  await paso('paginación: más de una página, con la consulta del cliente (cursor (creado, id) y .or(filtroAntes)), sin faltantes ni repetidos', async () => {
+    const TAM = L.TAM_PAGINA;
+    // de a uno (creado distinto) y un lote en un solo insert: el lote comparte creado (now() de la transacción),
+    // así se prueba también el desempate por id justo en el corte de página
+    for (let i = 0; i < 12; i++) {
+      const x = await A.api('POST', 'mensajes', txt(sala, 'pág ' + i));
+      assert.equal(x.status, 201, JSON.stringify(x.data));
+      mios.A.push(x.data[0].id);
+    }
+    const lote = await A.api('POST', 'mensajes', Array.from({ length: TAM + 5 }, (_, i) => txt(sala, 'lote ' + i)));
+    assert.equal(lote.status, 201, JSON.stringify(lote.data));
+    lote.data.forEach((m) => mios.A.push(m.id));
+    assert.equal(new Set(lote.data.map((m) => m.creado)).size, 1, 'el lote debería compartir creado');
+
+    // lo que hay en la sala, completo y en el orden del cliente
+    const todo = await A.api('GET', `mensajes?select=${CAMPOS}&sala=eq.${salaQ}&order=creado.asc,id.asc`);
+    assert.equal(todo.status, 200, JSON.stringify(todo.data));
+    assert.ok(todo.data.length > 2 * TAM - 10, 'tiene que haber más de una página: ' + todo.data.length);
+    const esperado = [...todo.data].sort(L.comparar).map((m) => m.id);
+    assert.deepEqual(todo.data.map((m) => m.id), esperado, 'el orden de Postgres (creado, id) coincide con L.comparar');
+
+    // como chat.js: la última página y después "Ver mensajes anteriores" hasta que venga incompleta
+    const pagina = (extra) => A.api('GET', `mensajes?select=${CAMPOS}&sala=eq.${salaQ}${extra}&order=creado.desc,id.desc&limit=${TAM}`);
+    let r = await pagina('');
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    assert.equal(r.data.length, TAM);
+    let lista = L.fusionarLote([], r.data);
+    let vistos = r.data.length, paginas = 1;
+    while (r.data.length >= TAM) {
+      const c = L.cursor(lista);
+      r = await pagina('&or=' + encodeURIComponent('(' + L.filtroAntes(c) + ')'));
+      assert.equal(r.status, 200, JSON.stringify(r.data));
+      const ids = new Set(lista.map((m) => m.id));
+      const repetidos = r.data.filter((m) => ids.has(m.id));
+      assert.equal(repetidos.length, 0, 'la página anterior repite: ' + repetidos.map((m) => m.id).join(' '));
+      assert.ok(r.data.every((m) => L.comparar(m, c) < 0), 'la página anterior trae algo que no es anterior al cursor');
+      vistos += r.data.length; paginas++;
+      lista = L.fusionarLote(lista, r.data);
+      assert.ok(paginas < 20, 'demasiadas páginas');
+    }
+    assert.ok(paginas >= 2, 'tendría que haber pedido al menos una página anterior');
+    assert.equal(vistos, esperado.length, 'cantidad traída por páginas');
+    assert.deepEqual(lista.map((m) => m.id), esperado, 'faltan o sobran mensajes');
   });
 
   let foto;
