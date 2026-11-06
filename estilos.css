@@ -175,6 +175,10 @@ button:disabled { opacity: .55; cursor: default; }
 .form-act { margin-top: .25rem; }
 .campo { display: flex; flex-direction: column; gap: .25rem; margin-bottom: .5rem; }
 .campo[hidden], .bloque-tercer[hidden] { display: none; }
+.aviso-confirmar { margin: .5rem 0; padding: .85rem; background: var(--bg-alt); border: 1px solid #B3261E; border-radius: var(--radius); }
+[data-tema="oscuro"] .aviso-confirmar { border-color: #FF8A80; }
+.aviso-confirmar p { margin: 0 0 .6rem; }
+.aviso-confirmar[hidden] { display: none; }
 select, textarea, input[type="datetime-local"], input[type="number"] {
   width: 100%; padding: .75rem .85rem; font: inherit; font-size: 1rem;
   background: var(--bg-alt); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius);

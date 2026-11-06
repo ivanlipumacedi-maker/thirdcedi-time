@@ -5,7 +5,7 @@
     { id: 'padel', nombre: 'Pádel', emoji: '🎾' },
     { id: 'trekking', nombre: 'Trekking', emoji: '🥾' },
     { id: 'asado', nombre: 'Asado', emoji: '🍖' },
-    { id: 'after', nombre: 'After', emoji: '🍻' },
+    { id: 'after', nombre: 'After office', emoji: '🍻' },
     { id: 'otra', nombre: 'Otra', emoji: '✨' },
   ];
 
@@ -56,19 +56,52 @@
     return fin > ahora;
   }
 
-  // Argentina no usa horario de verano: es siempre UTC-3. Los campos de fecha del formulario se escriben en esa hora.
-  const OFFSET_ARG_MS = -3 * 3600 * 1000;
-  function desdeInputArg(texto) {
-    const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(String(texto || ''));
-    if (!m) return null;
-    return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) - OFFSET_ARG_MS).toISOString();
-  }
-  function aInputArg(iso) {
-    if (iso == null || iso === '' || Number.isNaN(ms(iso))) return '';
-    return new Date(ms(iso) + OFFSET_ARG_MS).toISOString().slice(0, 16);
+  // Una actividad cancelada queda congelada: no se edita ni se confirma (la base también lo bloquea). Solo se reactiva.
+  function editable(a) { return !!a && a.estado !== 'cancelada'; }
+  // Una cancelada se puede reactivar (vuelve a 'abierta', con los mismos anotados y el chat): solo quien la creó
+  // y solo si sigue vigente, con el mismo criterio que esFutura (vale el tercer tiempo si termina después).
+  function reactivable(a, ahora, yo) { return !!a && a.estado === 'cancelada' && !!yo && a.creador === yo && esFutura(a, ahora); }
+
+  // Cuántas personas anotadas al tercer tiempo se quitan si la edición lo apaga (la base las borra con un trigger).
+  function anotadosQueSeQuitan(antes, despues, asistencias) {
+    if (!antes || !antes.tiene_tercer || !despues || despues.tiene_tercer) return 0;
+    return participantes(antes.id, asistencias, 'tercer').length;
   }
 
-  const ActividadesLogica = { TIPOS, validar, cupoLleno, participantes, esFutura, desdeInputArg, aInputArg };
+  // Los campos de fecha del formulario se escriben en hora de Argentina. El desfase no es fijo: se calcula con
+  // Intl para cada instante (Argentina tuvo horario de verano y podría volver a tenerlo).
+  const ZONA = 'America/Argentina/Buenos_Aires';
+  const formatos = new Map();
+  function formato(zona) {
+    if (!formatos.has(zona)) {
+      formatos.set(zona, new Intl.DateTimeFormat('en-US', { timeZone: zona, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    }
+    return formatos.get(zona);
+  }
+  // Desfase de la zona respecto de UTC en ese instante, en ms (Argentina hoy: -3 h).
+  function offsetMs(instante, zona = ZONA) {
+    const p = {};
+    formato(zona).formatToParts(new Date(instante)).forEach((x) => { p[x.type] = +x.value; });
+    const comoUTC = Date.UTC(p.year, p.month - 1, p.day, p.hour % 24, p.minute, p.second);
+    return comoUTC - (Math.floor(instante / 1000) * 1000);
+  }
+  function desdeInputArg(texto, zona = ZONA) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(String(texto || ''));
+    if (!m) return null;
+    const pared = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+    // se prueba con el desfase de la hora "de pared" y se corrige si del otro lado del cambio de hora es otro
+    let t = pared - offsetMs(pared, zona);
+    const o2 = offsetMs(t, zona);
+    if (pared - o2 !== t) t = pared - o2;
+    return new Date(t).toISOString();
+  }
+  function aInputArg(iso, zona = ZONA) {
+    if (iso == null || iso === '' || Number.isNaN(ms(iso))) return '';
+    const t = ms(iso);
+    return new Date(t + offsetMs(t, zona)).toISOString().slice(0, 16);
+  }
+
+  const ActividadesLogica = { TIPOS, ZONA, validar, cupoLleno, participantes, esFutura, editable, reactivable, anotadosQueSeQuitan, offsetMs, desdeInputArg, aInputArg };
   if (typeof module !== 'undefined' && module.exports) module.exports = ActividadesLogica;
   else g.ActividadesLogica = ActividadesLogica;
 })(typeof window !== 'undefined' ? window : globalThis);

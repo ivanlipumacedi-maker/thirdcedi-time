@@ -1,7 +1,7 @@
 // Prueba de la UI del chat SIN red ni usuarios reales: un Supabase falso en memoria (vive en este proceso y atiende a dos
 // páginas, "ventana A" y "ventana B", con la misma regla de sala que la base: solo ve y escribe quien está anotado).
 // Verifica: carga, envío, llegada en vivo entre ventanas, editar, eliminar, foto, reconexión sin duplicados,
-// error inicial con "Reintentar" y que quien no está anotado no ve el chat. Capturas en dev/shots/ (claro y oscuro, 390x844).
+// error inicial con "Reintentar", que quien no está anotado no ve el chat y que con el chat cerrado no se lee nada. Capturas en dev/shots/ (claro y oscuro, 390x844).
 // No toca el proyecto real ni necesita contraseñas.
 // Uso: servir la raíz con `npx --yes http-server -p 8080 -c-1` y correr `node dev/tools/prueba-chat-mock.js`
 const assert = require('assert/strict');
@@ -31,6 +31,7 @@ let seq = 0;
 const paginas = []; // { page, uid, desconectada }
 const enSala = (uid, sala) => { const m = /^act:(.+)$/.exec(sala || ''); return !!m && db.asistencias.some((a) => a.actividad === m[1] && a.persona === uid); };
 let fallarMensajes = 0; // cuántas lecturas de mensajes fallan (para probar el error inicial)
+const lecturasMensajes = {}; // selects a mensajes por usuario
 
 function emitir(evento, fila) {
   for (const p of paginas) {
@@ -66,6 +67,7 @@ function consulta(uid, s) {
   }
   let filas = db[s.table];
   if (s.table === 'mensajes') {
+    if (s.action === 'select') lecturasMensajes[uid] = (lecturasMensajes[uid] || 0) + 1;
     if (s.action === 'select' && fallarMensajes > 0) { fallarMensajes--; return { error: { message: 'sin red' } }; }
     if (s.action === 'insert') {
       const v = s.values;
@@ -105,18 +107,20 @@ const STUB = `
     return b;
   }
   const canales = new Set();
+  const todos = []; // también los ya quitados: para simular un SUBSCRIBED que llega tarde a un canal cerrado
   // respeta el filtro del canal (solo 'col=eq.valor'), como Realtime
   const pasa = (filtro, fila) => { if (!filtro) return true; const m = /^([a-z_]+)=eq\\.(.*)$/.exec(filtro); if (!m) throw new Error('filtro de canal desconocido: ' + filtro); return String(fila[m[1]]) === m[2]; };
   window.__topics = [];
   window.__emitir = (evento, fila) => canales.forEach((c) => c.cbs.filter((x) => x.evento === evento && pasa(x.filtro, fila)).forEach((x) => x.fn({ eventType: evento, new: fila })));
   window.__estadoCanales = (st) => canales.forEach((c) => c.estado && c.estado(st));
+  window.__estadoTodos = (st) => todos.forEach((c) => c.estado && c.estado(st));
   window.supabase = { createClient() {
     return {
       from: Builder,
       rpc(fn, args) { return Q({ rpc: fn, args }).then((r) => ({ data: r.data === undefined ? null : r.data, error: r.error || null })); },
       channel(topic) {
         window.__topics.push(topic);
-        const c = { cbs: [], on(_t, f, fn) { c.cbs.push({ evento: f.event, filtro: f.filter, fn }); return c; }, subscribe(cb) { c.estado = cb; canales.add(c); if (cb) setTimeout(() => cb('SUBSCRIBED'), 0); return c; } };
+        const c = { cbs: [], on(_t, f, fn) { c.cbs.push({ evento: f.event, filtro: f.filter, fn }); return c; }, subscribe(cb) { c.estado = cb; canales.add(c); todos.push(c); if (cb) setTimeout(() => cb('SUBSCRIBED'), 0); return c; } };
         return c;
       },
       removeChannel(c) { canales.delete(c); },
@@ -364,6 +368,15 @@ const sinToast = (p) => p.waitForFunction(() => document.getElementById('toast')
       await pb.evaluate(() => document.querySelector('#pantalla-actividades > .btn-link').click());
       await pb.waitForSelector('.tarjeta-act');
       assert.equal(await cuantos(pb, '#chat-act'), 0);
+    });
+
+    await paso('carry Task 4: con el chat cerrado, ni volver a la app (visibilitychange / online) ni un SUBSCRIBED tardío leen mensajes', async () => {
+      await new Promise((r) => setTimeout(r, 300));
+      const antes = lecturasMensajes[UB] || 0;
+      assert.ok(antes > 0, 'B tendría que haber leído mensajes con el chat abierto');
+      await pb.evaluate(() => { document.dispatchEvent(new Event('visibilitychange')); window.dispatchEvent(new Event('online')); window.__estadoTodos('SUBSCRIBED'); });
+      await new Promise((r) => setTimeout(r, 600));
+      assert.equal(lecturasMensajes[UB] || 0, antes, 'se leyeron mensajes con el chat cerrado');
     });
 
     // capturas: claro y oscuro con la conversación

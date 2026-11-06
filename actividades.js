@@ -10,6 +10,10 @@
   let canal = null;
   let tRefresco = null;
   let cargado = false;
+  let estadoCarga = 'cargando';   // 'cargando' | 'ok' | 'error' (solo importa mientras no hubo una carga buena)
+  let enVuelo = null;             // la recarga en curso (una sola a la vez)
+  let otraVez = false;            // la pidieron de nuevo con una en vuelo: al terminar se corre una más
+  let sesion = 0;                 // sube al cerrar la pantalla: lo que vuelva de una sesión vieja se descarta
   let confirmando = null;         // 'cancelar' mientras se espera el segundo toque
   let chatEl = null;              // contenedor del chat de la actividad abierta (se conserva entre repintados)
   let chatSala = null;
@@ -40,20 +44,41 @@
   const perfilDe = (id) => perfiles.get(id) || { id, nombre: 'Compañero', foto: null };
 
   // ---------- Datos ----------
-  async function cargar() {
+  async function cargar(mia) {
     const [a, s, p] = await Promise.all([
       sb().from('actividades').select('*').order('fecha', { ascending: true }),
       sb().from('asistencias').select('actividad, persona, parte'),
       sb().from('perfiles').select('id, nombre, foto, empresa'),
     ]);
     if (a.error || s.error || p.error) throw (a.error || s.error || p.error);
+    if (mia !== sesion) return; // la pantalla se cerró mientras tanto
     actividades = a.data; asistencias = s.data;
     perfiles = new Map(p.data.map((x) => [x.id, x]));
     await g.Perfiles.prepararAvatares(p.data, sb()).catch(() => {});
-    cargado = true;
+    if (mia !== sesion) return;
+    cargado = true; estadoCarga = 'ok';
   }
-  async function refrescar() {
-    try { await cargar(); pintar(); } catch (e) { /* sin red queda lo último; el próximo cambio en vivo reintenta */ }
+  const abierta = () => !!canal && !!g.App.yo();
+  // Recarga todo y repinta. Si la piden con otra en vuelo (p. ej. SUBSCRIBED mientras corre la carga inicial),
+  // esa no alcanza: su consulta pudo salir antes de un cambio que tampoco llegó en vivo. Se marca otraVez y, al
+  // terminar, se corre una sola más (varias llamadas durante el vuelo se juntan en esa). Con la pantalla cerrada
+  // no se lee nada. Quien espera la promesa la ve resolverse con todo ya al día (repetición incluida).
+  // Si falla: con datos ya cargados queda lo último; si nunca cargó, se muestra el error con "Reintentar".
+  function refrescar() {
+    if (!abierta()) return Promise.resolve();
+    if (enVuelo) { otraVez = true; return enVuelo; }
+    const mia = sesion;
+    enVuelo = (async () => {
+      try {
+        do {
+          otraVez = false;
+          try { await cargar(mia); } catch (e) { if (mia === sesion && !cargado) estadoCarga = 'error'; }
+        } while (otraVez && mia === sesion && abierta());
+      } finally {
+        if (mia === sesion) { enVuelo = null; otraVez = false; if (abierta()) pintar(); }
+      }
+    })();
+    return enVuelo;
   }
   // Los eventos de Realtime llegan en ráfaga (anotarse toca asistencias; confirmar toca actividades): se agrupan.
   function programarRefresco() {
@@ -63,15 +88,18 @@
   function suscribir() {
     if (canal || !sb()) return;
     // topic único por suscripción: channel() reutiliza un canal con el mismo topic mientras el anterior se está yendo
-    canal = sb().channel('actividades-vivo-' + crypto.randomUUID())
+    const c = sb().channel('actividades-vivo-' + crypto.randomUUID())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'actividades' }, programarRefresco)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'asistencias' }, programarRefresco)
-      .subscribe();
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'asistencias' }, programarRefresco);
+    canal = c;
+    // al (re)conectar se pone al día: lo que cambió con el socket caído no llegó en vivo
+    c.subscribe((st) => { if (st === 'SUBSCRIBED' && canal === c) refrescar(); });
   }
   function desuscribir() {
     if (canal && sb()) sb().removeChannel(canal);
     cerrarChat();
     canal = null; cargado = false; actividades = []; asistencias = []; vista = { tipo: 'lista' };
+    sesion++; enVuelo = null; otraVez = false; estadoCarga = 'cargando';
     clearTimeout(tRefresco);
   }
 
@@ -80,7 +108,9 @@
     const r = raiz();
     if (!r) return;
     // el formulario no se repinta por eventos en vivo: se perdería lo que la persona está escribiendo
-    if (vista.tipo === 'form' && r.querySelector('form.form-act') && !vista.nuevoRender) return;
+    // (salvo que la actividad que se edita se haya cancelado: ahí se cambia por el aviso de que ya no se puede)
+    const editada = vista.tipo === 'form' && vista.id ? actividades.find((x) => x.id === vista.id) : null;
+    if (vista.tipo === 'form' && r.querySelector('form.form-act') && !vista.nuevoRender && !(editada && !L.editable(editada))) return;
     const lch = chatEl && chatEl.querySelector('.chat-lista');
     const antes = { scroll: lch ? lch.scrollTop : 0, foco: !!(chatEl && chatEl.contains(document.activeElement) && document.activeElement.tagName === 'TEXTAREA') };
     r.textContent = '';
@@ -148,6 +178,11 @@
         h('button', { type: 'button', id: 'btn-nueva-act', class: 'btn-primario btn-chico', on: { click: () => irA({ tipo: 'form', id: null }) } }, '+ Nueva')),
       h('div', { class: 'chips', role: 'group', 'aria-label': 'Filtrar por tipo' }, chip('todas', 'Todas'), L.TIPOS.map((t) => chip(t.id, t.emoji + ' ' + t.nombre))),
     ];
+    if (!cargado && estadoCarga === 'error') {
+      out.push(h('div', { class: 'vacio', role: 'alert' }, h('p', null, 'No pudimos cargar las actividades.'),
+        h('button', { type: 'button', id: 'act-reintentar', class: 'btn-sec btn-chico', on: { click: () => { estadoCarga = 'cargando'; pintar(); refrescar(); } } }, 'Reintentar')));
+      return out;
+    }
     if (!cargado) { out.push(h('p', { class: 'vacio' }, 'Cargando…')); return out; }
     if (!proximas.length) out.push(h('p', { class: 'vacio' }, filtro === 'todas' ? 'Todavía no hay actividades próximas. ¡Armá la primera!' : 'No hay actividades próximas de este tipo.'));
     else out.push(h('div', { class: 'lista-act' }, proximas.map(tarjeta)));
@@ -213,19 +248,30 @@
         anotadosLista(enTer));
     }
     out.push(chatDe(a, voy || voyTer));
-    if (a.creador === yo && !cancelada) {
+    if (a.creador === yo && L.editable(a)) {
       out.push(h('h2', { class: 'sub' }, 'Organizar'), h('div', { class: 'fila-botones' },
         h('button', { type: 'button', class: 'btn-sec', on: { click: () => irA({ tipo: 'form', id: a.id }) } }, 'Editar'),
         a.estado === 'abierta' && h('button', { type: 'button', id: 'btn-confirmar', class: 'btn-sec', on: { click: cambiarEstado('confirmada', 'Actividad confirmada') } }, 'Confirmar'),
         confirmando === 'cancelar'
           ? h('button', { type: 'button', id: 'btn-cancelar', class: 'btn-peligro', on: { click: cambiarEstado('cancelada', 'Actividad cancelada') } }, 'Tocá de nuevo para cancelar')
           : h('button', { type: 'button', id: 'btn-cancelar', class: 'btn-peligro', on: { click: () => { confirmando = 'cancelar'; pintar(); } } }, 'Cancelar actividad')));
+    } else if (L.reactivable(a, Date.now(), yo)) {
+      // vuelve a 'abierta' con los mismos anotados y el chat (la cancelación no borra nada); la base exige lo mismo
+      out.push(h('h2', { class: 'sub' }, 'Organizar'), h('div', { class: 'fila-botones' },
+        h('button', { type: 'button', id: 'btn-reactivar', class: 'btn-sec', on: { click: cambiarEstado('abierta', 'Actividad reactivada') } }, 'Reactivar')));
     }
     return out;
   }
 
+  const MSG_CANCELADA = 'Esta actividad está cancelada: no se puede editar mientras no se reactive.';
   function formulario(a) {
     const editando = !!a;
+    if (editando && !L.editable(a)) {
+      return h('div', { class: 'form-act paso' },
+        h('button', { type: 'button', class: 'btn-link', on: { click: () => irA({ tipo: 'detalle', id: a.id }) } }, '← Volver'),
+        h('h1', null, 'Editar actividad'),
+        h('p', { id: 'act-no-editable', class: 'ayuda', role: 'alert' }, MSG_CANCELADA));
+    }
     const v = a || { tipo: 'futbol', tiene_tercer: false };
     const campo = (id, etiqueta, ctrl) => h('div', { class: 'campo' }, h('label', { for: id }, etiqueta), ctrl);
     const selTipo = h('select', { id: 'f-tipo' }, L.TIPOS.map((t) => h('option', { value: t.id, selected: t.id === v.tipo }, t.emoji + ' ' + t.nombre)));
@@ -241,7 +287,15 @@
     const bloqueTer = h('div', { class: 'bloque-tercer' }, campo('f-ter-lugar', 'Lugar del tercer tiempo', inTerLugar), campo('f-ter-fecha', 'Cuándo es el tercer tiempo', inTerFecha));
     const bloqueOtro = campo('f-otro', 'Qué actividad es', inOtro);
     const err = h('p', { class: 'error', role: 'alert', hidden: true });
-    const sync = () => { bloqueOtro.hidden = selTipo.value !== 'otra'; bloqueTer.hidden = !chkTer.checked; };
+    // Apagar el tercer tiempo quita a sus anotados (lo hace la base): se avisa en la página cuántos antes de guardar.
+    let confirmado = false;
+    let guardando = false;
+    const avisoTxt = h('p', { id: 'aviso-tercer-txt' });
+    const aviso = h('div', { id: 'aviso-tercer', class: 'aviso-confirmar', role: 'alert', hidden: true }, avisoTxt,
+      h('div', { class: 'fila-botones' },
+        h('button', { type: 'button', id: 'btn-confirmar-tercer', class: 'btn-peligro', on: { click: () => { confirmado = true; guardar(); } } }, 'Sí, sacarlo y guardar'),
+        h('button', { type: 'button', id: 'btn-dejar-tercer', class: 'btn-sec', on: { click: () => { chkTer.checked = true; sync(); chkTer.focus(); } } }, 'No, dejar el tercer tiempo')));
+    const sync = () => { bloqueOtro.hidden = selTipo.value !== 'otra'; bloqueTer.hidden = !chkTer.checked; aviso.hidden = true; confirmado = false; };
     selTipo.addEventListener('change', sync); chkTer.addEventListener('change', sync);
     sync();
 
@@ -255,11 +309,13 @@
       campo('f-cupo', 'Cupo (opcional)', inCupo),
       campo('f-desc', 'Descripción (opcional)', inDesc),
       h('label', { class: 'check', for: 'f-tercer' }, chkTer, ' Hay tercer tiempo 🍻'),
-      bloqueTer, err,
+      bloqueTer, err, aviso,
       h('button', { type: 'submit', id: 'btn-guardar-act', class: 'btn-primario' }, editando ? 'Guardar cambios' : 'Crear actividad'));
 
-    form.addEventListener('submit', async (ev) => {
-      ev.preventDefault();
+    async function guardar() {
+      if (guardando) return;
+      const actual = editando ? actividades.find((x) => x.id === a.id) || a : null;
+      if (editando && !L.editable(actual)) { err.textContent = MSG_CANCELADA; err.hidden = false; aviso.hidden = true; return; }
       const tercer = chkTer.checked;
       const datos = {
         tipo: selTipo.value,
@@ -275,14 +331,30 @@
       };
       const msg = L.validar(datos);
       err.hidden = !msg; err.textContent = msg || '';
-      if (msg) return;
+      if (msg) { aviso.hidden = true; return; }
+      const quitan = editando ? L.anotadosQueSeQuitan(actual, datos, asistencias) : 0;
+      if (quitan && !confirmado) {
+        avisoTxt.textContent = 'Si sacás el tercer tiempo, se ' + (quitan === 1 ? 'va a quitar 1 anotado' : 'van a quitar ' + quitan + ' anotados') + ' al tercer tiempo. ¿Lo sacamos igual?';
+        aviso.hidden = false;
+        aviso.querySelector('#btn-confirmar-tercer').focus();
+        return;
+      }
+      aviso.hidden = true;
+      guardando = true;
       const q = editando ? sb().from('actividades').update(datos).eq('id', a.id).select().single() : sb().from('actividades').insert(datos).select().single();
-      const { data, error } = await q;
-      if (error) { err.textContent = 'No pudimos guardar la actividad. Revisá los datos y probá de nuevo.'; err.hidden = false; return; }
+      let res;
+      try { res = await q; } catch (e) { res = { data: null, error: e }; }
+      const { data, error } = res;
+      guardando = false; confirmado = false;
+      if (error) {
+        err.textContent = /cancelada/.test((error && error.message) || '') ? MSG_CANCELADA : 'No pudimos guardar la actividad. Revisá los datos y probá de nuevo.';
+        err.hidden = false; return;
+      }
       g.App.toast(editando ? 'Cambios guardados' : 'Actividad creada');
       await refrescar();
       irA({ tipo: 'detalle', id: data.id });
-    });
+    }
+    form.addEventListener('submit', (ev) => { ev.preventDefault(); guardar(); });
     return form;
   }
 

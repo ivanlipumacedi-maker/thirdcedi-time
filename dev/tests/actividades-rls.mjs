@@ -1,5 +1,6 @@
 // RLS y triggers de actividades/asistencias contra el proyecto real, con usuarios de prueba (zz-prueba-a/b/c@cedi.com.ar).
 // Las contraseñas se leen de .env (ZZ_PRUEBA_A_PASSWORD, _B_, _C_); se crean con dev/supabase/usuarios-prueba.sql.
+// Los pasos marcados "(10)" dependen de dev/supabase/10-actividades-ajustes.sql: fallan hasta que se aplique.
 // Uso: node dev/tests/actividades-rls.mjs
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
@@ -50,10 +51,10 @@ const A = await entrar('A');
 const B = await entrar('B');
 const C = await entrar('C');
 const creadas = [];
-async function nueva(cupo, tercer = true) {
+async function nueva(cupo, tercer = true, extra = {}) {
   const r = await A.api('POST', 'actividades', {
     tipo: 'padel', titulo: 'zz prueba rls', fecha: en(24), lugar: 'Club de prueba', cupo,
-    tiene_tercer: tercer, tercer_lugar: tercer ? 'Bar de prueba' : null, tercer_fecha: tercer ? en(26) : null,
+    tiene_tercer: tercer, tercer_lugar: tercer ? 'Bar de prueba' : null, tercer_fecha: tercer ? en(26) : null, ...extra,
   });
   assert.equal(r.status, 201, 'crear: ' + JSON.stringify(r.data));
   creadas.push(r.data[0].id);
@@ -67,6 +68,15 @@ try {
     assert.equal(act.creador, A.id);
     const r = await A.api('POST', 'actividades', { creador: B.id, tipo: 'asado', titulo: 'zz suplantado', fecha: en(5), lugar: 'x' });
     assert.ok(r.status >= 400, 'insertar con creador ajeno debe fallar: ' + r.status);
+  });
+
+  await paso('(10) sin grant de insert en creador/persona: mandarlos da permiso denegado, no solo la RLS', async () => {
+    const r = await A.api('POST', 'actividades', { creador: A.id, tipo: 'asado', titulo: 'zz con creador', fecha: en(5), lugar: 'x' });
+    assert.ok(r.status >= 400, 'insertó mandando creador: ' + r.status);
+    assert.match(JSON.stringify(r.data), /permission denied/i);
+    const s2 = await A.api('POST', 'asistencias', { actividad: act.id, persona: A.id, parte: 'tercer' });
+    assert.ok(s2.status >= 400, 'insertó mandando persona: ' + s2.status);
+    assert.match(JSON.stringify(s2.data), /permission denied/i);
   });
 
   await paso('B lee la actividad de A (miembros leen)', async () => {
@@ -146,7 +156,7 @@ try {
     assert.ok(r.status >= 400, 'se anotó a un tercer tiempo inexistente');
   });
 
-  await paso('anotarse a una actividad cancelada falla (ambas partes) y no se reabre', async () => {
+  await paso('anotarse a una actividad cancelada falla (ambas partes)', async () => {
     const a3 = await nueva(5);
     assert.equal((await A.api('PATCH', `actividades?id=eq.${a3.id}`, { estado: 'cancelada' })).status, 200);
     for (const parte of ['actividad', 'tercer']) {
@@ -154,8 +164,83 @@ try {
       assert.ok(r.status >= 400, 'B se anotó a cancelada (' + parte + ')');
       assert.match(JSON.stringify(r.data), /cancelada/i);
     }
-    const re = await A.api('PATCH', `actividades?id=eq.${a3.id}`, { estado: 'abierta' });
-    assert.ok(re.status >= 400, 'se reabrió una cancelada');
+  });
+
+  const tercerDe = async (id) => (await A.api('GET', `asistencias?actividad=eq.${id}&parte=eq.tercer`)).data.length;
+  const actDe = async (id) => (await A.api('GET', `asistencias?actividad=eq.${id}&parte=eq.actividad`)).data.length;
+  const sinTercer = { tiene_tercer: false, tercer_lugar: null, tercer_fecha: null };
+
+  await paso('(10) un no creador no puede apagar el tercer tiempo ni editar: los anotados quedan', async () => {
+    const a4 = await nueva(5);
+    assert.equal((await B.api('POST', 'asistencias', { actividad: a4.id, parte: 'tercer' })).status, 201);
+    assert.equal((await C.api('POST', 'asistencias', { actividad: a4.id, parte: 'tercer' })).status, 201);
+    const r = await B.api('PATCH', `actividades?id=eq.${a4.id}`, sinTercer);
+    assert.ok(r.status >= 400 || r.data.length === 0, 'B apagó el tercer tiempo de A');
+    const r2 = await C.api('PATCH', `actividades?id=eq.${a4.id}`, { lugar: 'otro', descripcion: 'hack' });
+    assert.ok(r2.status >= 400 || r2.data.length === 0, 'C editó la actividad de A');
+    const v = (await A.api('GET', `actividades?id=eq.${a4.id}`)).data[0];
+    assert.equal(v.tiene_tercer, true); assert.equal(v.lugar, 'Club de prueba');
+    assert.equal(await tercerDe(a4.id), 2);
+  });
+
+  await paso('(10) el creador apaga el tercer tiempo: se borran los anotados al tercero y quedan los de la actividad', async () => {
+    const a5 = await nueva(5);
+    assert.equal((await B.api('POST', 'asistencias', { actividad: a5.id, parte: 'tercer' })).status, 201);
+    assert.equal((await C.api('POST', 'asistencias', { actividad: a5.id, parte: 'tercer' })).status, 201);
+    assert.equal((await C.api('POST', 'asistencias', { actividad: a5.id, parte: 'actividad' })).status, 201);
+    const r = await A.api('PATCH', `actividades?id=eq.${a5.id}`, sinTercer);
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    assert.equal(await tercerDe(a5.id), 0, 'quedaron anotados huérfanos al tercer tiempo');
+    assert.equal(await actDe(a5.id), 1);
+    // y ya no se puede anotar al tercer tiempo
+    assert.ok((await B.api('POST', 'asistencias', { actividad: a5.id, parte: 'tercer' })).status >= 400);
+  });
+
+  await paso('(10) una cancelada no se edita: ni otro campo, ni confirmarla, ni reactivar cambiando algo más', async () => {
+    const a6 = await nueva(5);
+    assert.equal((await A.api('PATCH', `actividades?id=eq.${a6.id}`, { estado: 'cancelada' })).status, 200);
+    for (const cambio of [{ titulo: 'zz editada cancelada' }, sinTercer, { estado: 'confirmada' }, { estado: 'abierta', titulo: 'zz reactivada y editada' }]) {
+      const r = await A.api('PATCH', `actividades?id=eq.${a6.id}`, cambio);
+      assert.ok(r.status >= 400, 'aceptó ' + JSON.stringify(cambio) + ' en una cancelada');
+      assert.match(JSON.stringify(r.data), /cancelada/i);
+    }
+    const v = (await A.api('GET', `actividades?id=eq.${a6.id}`)).data[0];
+    assert.equal(v.estado, 'cancelada'); assert.equal(v.titulo, 'zz prueba rls'); assert.equal(v.tiene_tercer, true);
+  });
+
+  await paso('(10) reactivar: un no creador no puede; el creador sí, y vuelve con los mismos anotados', async () => {
+    const a7 = await nueva(5);
+    assert.equal((await B.api('POST', 'asistencias', { actividad: a7.id, parte: 'actividad' })).status, 201);
+    assert.equal((await C.api('POST', 'asistencias', { actividad: a7.id, parte: 'tercer' })).status, 201);
+    assert.equal((await A.api('PATCH', `actividades?id=eq.${a7.id}`, { estado: 'cancelada' })).status, 200);
+    assert.equal(await actDe(a7.id), 1, 'cancelar borró anotados'); assert.equal(await tercerDe(a7.id), 1, 'cancelar borró anotados');
+    const b = await B.api('PATCH', `actividades?id=eq.${a7.id}`, { estado: 'abierta' });
+    assert.ok(b.status >= 400 || b.data.length === 0, 'B reactivó la actividad de A');
+    assert.equal((await A.api('GET', `actividades?id=eq.${a7.id}`)).data[0].estado, 'cancelada');
+    const r = await A.api('PATCH', `actividades?id=eq.${a7.id}`, { estado: 'abierta' });
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    assert.equal(r.data[0].estado, 'abierta');
+    assert.equal(await actDe(a7.id), 1); assert.equal(await tercerDe(a7.id), 1);
+    // reactivada, se puede editar y anotarse de nuevo
+    assert.equal((await A.api('PATCH', `actividades?id=eq.${a7.id}`, { descripcion: 'reactivada' })).status, 200);
+    assert.equal((await C.api('POST', 'asistencias', { actividad: a7.id, parte: 'actividad' })).status, 201);
+  });
+
+  await paso('(10) reactivar no se puede si ya pasó (sin tercer tiempo, o con el tercer tiempo también pasado)', async () => {
+    const vieja = await nueva(null, false, { fecha: en(-48) });
+    const vieja2 = await nueva(null, true, { fecha: en(-50), tercer_fecha: en(-48) });
+    for (const x of [vieja, vieja2]) {
+      assert.equal((await A.api('PATCH', `actividades?id=eq.${x.id}`, { estado: 'cancelada' })).status, 200);
+      const r = await A.api('PATCH', `actividades?id=eq.${x.id}`, { estado: 'abierta' });
+      assert.ok(r.status >= 400, 'reactivó una que ya pasó');
+      assert.match(JSON.stringify(r.data), /ya pasó/i);
+    }
+  });
+
+  await paso('(10) reactivar sí se puede si la actividad pasó pero el tercer tiempo todavía no', async () => {
+    const x = await nueva(null, true, { fecha: en(-1), tercer_fecha: en(2) });
+    assert.equal((await A.api('PATCH', `actividades?id=eq.${x.id}`, { estado: 'cancelada' })).status, 200);
+    assert.equal((await A.api('PATCH', `actividades?id=eq.${x.id}`, { estado: 'abierta' })).status, 200);
   });
 
   await paso('restricciones de datos: otra sin detalle, tercer incompleto y tercer antes de la actividad', async () => {
@@ -170,6 +255,7 @@ try {
   });
 } finally {
   // Las RLS no permiten borrar actividades: las de la prueba quedan canceladas con el título "zz prueba rls"
+  // (las que ya estaban canceladas rechazan este PATCH: da igual, ya están como tienen que quedar)
   // (se pueden limpiar a mano con SQL: delete from public.actividades where titulo like 'zz %').
   for (const id of creadas) await A.api('PATCH', `actividades?id=eq.${id}`, { estado: 'cancelada' });
 }
