@@ -20,6 +20,9 @@
   let cuentasEl = null;           // sección de Cuentas claras de la actividad abierta (se conserva entre repintados)
   let cuentasAct = null;
   let cuentasApi = null;
+  let albumEl = null;             // álbum de la actividad abierta (se conserva entre repintados)
+  let albumAct = null;
+  let albumCerrar = null;
 
   const raiz = () => document.getElementById('pantalla-actividades');
   const sb = () => g.App.sb;
@@ -145,7 +148,22 @@
     if (cuentasApi) cuentasApi.cerrar();
     cuentasApi = null; cuentasEl = null; cuentasAct = null;
   }
-  function cerrarAnexos() { cerrarChat(); cerrarCuentas(); }
+  function cerrarAlbum() {
+    if (albumCerrar) albumCerrar();
+    albumCerrar = null; albumEl = null; albumAct = null;
+  }
+  function cerrarAnexos() { cerrarChat(); cerrarCuentas(); cerrarAlbum(); }
+  // Álbum de fotos: como el chat, solo para quien está anotado a alguna de las partes. Se abre una vez y se reusa.
+  function albumDe(a, anotado) {
+    if (!anotado || !g.Album) { cerrarAlbum(); return null; }
+    if (albumAct !== a.id) {
+      cerrarAlbum();
+      albumEl = h('section', { class: 'album', id: 'album-act' });
+      albumAct = a.id;
+      albumCerrar = g.Album.abrir(albumEl, a.id);
+    }
+    return albumEl;
+  }
   // Cuentas claras: se abre para cualquiera que mire el detalle. La sección se muestra si estás anotado o si figurás
   // en las cuentas (quien se bajó y debe plata la sigue viendo); si no, queda oculta. Se abre una vez y se reusa.
   function cuentasDe(a, enAct, enTer, anotado) {
@@ -273,6 +291,7 @@
         anotadosLista(enTer));
     }
     out.push(cuentasDe(a, enAct, enTer, voy || voyTer));
+    out.push(albumDe(a, voy || voyTer));
     out.push(chatDe(a, voy || voyTer));
     if (a.creador === yo && L.editable(a)) {
       out.push(h('h2', { class: 'sub' }, 'Organizar'), h('div', { class: 'fila-botones' },

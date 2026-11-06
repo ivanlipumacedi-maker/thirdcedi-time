@@ -380,10 +380,12 @@
 
     pintar();
     sincronizar();
+    abiertos.set(sala, enviarFoto); // para el "Mandar al chat" del álbum
 
     return function cerrar() {
       if (cerrado) return;
       cerrado = true;
+      if (abiertos.get(sala) === enviarFoto) abiertos.delete(sala);
       document.removeEventListener('visibilitychange', alVolver);
       g.removeEventListener('online', alVolver);
       if (canal) sb.removeChannel(canal);
@@ -393,5 +395,10 @@
     };
   }
 
-  g.Chat = { abrir };
+  // Chats abiertos ahora (sala → enviar una foto): el álbum manda fotos al chat de la actividad que está a la vista.
+  const abiertos = new Map();
+  const puedeEnviar = (sala) => abiertos.has(sala);
+  async function enviarFotoA(sala, file) { const f = abiertos.get(sala); if (!f) return false; await f(file); return true; }
+
+  g.Chat = { abrir, puedeEnviar, enviarFoto: enviarFotoA };
 })(window);
