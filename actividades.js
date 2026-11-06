@@ -1,7 +1,6 @@
 // Pantalla Actividades: lista con chips por tipo, detalle con "Voy" / "Voy al tercer tiempo", formulario y realtime.
 (function (g) {
   const L = g.ActividadesLogica;
-  const ZONA = 'America/Argentina/Buenos_Aires';
   let actividades = [];
   let asistencias = [];
   let perfiles = new Map();
@@ -39,7 +38,7 @@
   const tipoDe = (id) => L.TIPOS.find((t) => t.id === id) || L.TIPOS[5];
   function nombreTipo(a) { return a.tipo === 'otra' && a.tipo_otro ? a.tipo_otro : tipoDe(a.tipo).nombre; }
   function fmt(iso) {
-    return new Date(iso).toLocaleString('es-AR', { timeZone: ZONA, weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
+    return new Date(iso).toLocaleString('es-AR', { timeZone: L.ZONA, weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
   }
   const perfilDe = (id) => perfiles.get(id) || { id, nombre: 'Compañero', foto: null };
 
@@ -256,9 +255,13 @@
           ? h('button', { type: 'button', id: 'btn-cancelar', class: 'btn-peligro', on: { click: cambiarEstado('cancelada', 'Actividad cancelada') } }, 'Tocá de nuevo para cancelar')
           : h('button', { type: 'button', id: 'btn-cancelar', class: 'btn-peligro', on: { click: () => { confirmando = 'cancelar'; pintar(); } } }, 'Cancelar actividad')));
     } else if (L.reactivable(a, Date.now(), yo)) {
-      // vuelve a 'abierta' con los mismos anotados y el chat (la cancelación no borra nada); la base exige lo mismo
+      // vuelve a 'abierta' con los mismos anotados y el chat (la cancelación no borra nada); la base exige lo mismo.
+      // Si estaba confirmada, no vuelve confirmada: el toast lo recuerda.
       out.push(h('h2', { class: 'sub' }, 'Organizar'), h('div', { class: 'fila-botones' },
-        h('button', { type: 'button', id: 'btn-reactivar', class: 'btn-sec', on: { click: cambiarEstado('abierta', 'Actividad reactivada') } }, 'Reactivar')));
+        h('button', { type: 'button', id: 'btn-reactivar', class: 'btn-sec', on: { click: cambiarEstado('abierta', 'Actividad reactivada. Si ya está todo listo, confirmala de nuevo.') } }, 'Reactivar')));
+    } else if (cancelada && a.creador === yo) {
+      // cancelada y ya pasó la fecha de la actividad (aunque el tercer tiempo no): se le explica al creador
+      out.push(h('p', { id: 'act-no-reactivable', class: 'ayuda' }, 'Ya pasó: no se puede reactivar.'));
     }
     return out;
   }
@@ -291,10 +294,14 @@
     let confirmado = false;
     let guardando = false;
     const avisoTxt = h('p', { id: 'aviso-tercer-txt' });
-    const aviso = h('div', { id: 'aviso-tercer', class: 'aviso-confirmar', role: 'alert', hidden: true }, avisoTxt,
+    // Accesibilidad: al aparecer, el foco va a "No, dejar el tercer tiempo" (la opción que no borra nada: un Enter de
+    // más no quita a nadie) y ese botón tiene aria-describedby al texto, así que el lector lee el aviso junto con el
+    // foco. Por eso el aviso NO lleva role="alert": con los dos se anunciaría dos veces. Se elige mover el foco porque
+    // hace falta igual (el aviso aparece debajo del botón Guardar y quien usa teclado tiene que llegar a la decisión).
+    const aviso = h('div', { id: 'aviso-tercer', class: 'aviso-confirmar', hidden: true }, avisoTxt,
       h('div', { class: 'fila-botones' },
         h('button', { type: 'button', id: 'btn-confirmar-tercer', class: 'btn-peligro', on: { click: () => { confirmado = true; guardar(); } } }, 'Sí, sacarlo y guardar'),
-        h('button', { type: 'button', id: 'btn-dejar-tercer', class: 'btn-sec', on: { click: () => { chkTer.checked = true; sync(); chkTer.focus(); } } }, 'No, dejar el tercer tiempo')));
+        h('button', { type: 'button', id: 'btn-dejar-tercer', class: 'btn-sec', 'aria-describedby': 'aviso-tercer-txt', on: { click: () => { chkTer.checked = true; sync(); chkTer.focus(); } } }, 'No, dejar el tercer tiempo')));
     const sync = () => { bloqueOtro.hidden = selTipo.value !== 'otra'; bloqueTer.hidden = !chkTer.checked; aviso.hidden = true; confirmado = false; };
     selTipo.addEventListener('change', sync); chkTer.addEventListener('change', sync);
     sync();
@@ -336,7 +343,7 @@
       if (quitan && !confirmado) {
         avisoTxt.textContent = 'Si sacás el tercer tiempo, se ' + (quitan === 1 ? 'va a quitar 1 anotado' : 'van a quitar ' + quitan + ' anotados') + ' al tercer tiempo. ¿Lo sacamos igual?';
         aviso.hidden = false;
-        aviso.querySelector('#btn-confirmar-tercer').focus();
+        aviso.querySelector('#btn-dejar-tercer').focus();
         return;
       }
       aviso.hidden = true;

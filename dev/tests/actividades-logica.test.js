@@ -111,6 +111,14 @@ test('fechas: ida y vuelta con el offset de la fecha (horario de verano incluido
   assert.equal(A.desdeInputArg('2026-03-08T01:30', 'America/New_York'), '2026-03-08T06:30:00.000Z');
 });
 
+test('fechas: una hora que no existe (hueco del cambio de horario) se toma con el desfase de después del salto', () => {
+  // Nueva York, 8 de marzo de 2026: de 1:59:59 EST pasa a 3:00 EDT, así que 02:30 no existe.
+  // Se interpreta 02:30 con el desfase de verano (UTC-4): 06:30Z, que en la pared se lee 01:30 (EST).
+  // Argentina hoy no tiene horario de verano: esto solo importaría si volviera a tenerlo.
+  assert.equal(A.desdeInputArg('2026-03-08T02:30', 'America/New_York'), '2026-03-08T06:30:00.000Z');
+  assert.equal(A.aInputArg('2026-03-08T06:30:00.000Z', 'America/New_York'), '2026-03-08T01:30');
+});
+
 test('anotadosQueSeQuitan: cuántos del tercer tiempo se pierden al apagarlo', () => {
   const s = [
     { actividad: 'x', persona: 'p1', parte: 'actividad' },
@@ -133,7 +141,7 @@ test('editable: una actividad cancelada no se edita', () => {
   assert.equal(A.editable(null), false);
 });
 
-test('reactivable: solo el creador, solo cancelada y solo si sigue vigente (mismo criterio que esFutura)', () => {
+test('reactivable: solo el creador, solo cancelada y solo si todavía no pasó la fecha de la actividad', () => {
   const ahora = Date.parse('2026-12-10T23:00:00Z');
   const c = { creador: 'yo', estado: 'cancelada', fecha: '2026-12-11T22:00:00Z', tiene_tercer: false };
   assert.equal(A.reactivable(c, ahora, 'yo'), true);
@@ -141,7 +149,8 @@ test('reactivable: solo el creador, solo cancelada y solo si sigue vigente (mism
   assert.equal(A.reactivable({ ...c, estado: 'abierta' }, ahora, 'yo'), false);
   assert.equal(A.reactivable({ ...c, estado: 'confirmada' }, ahora, 'yo'), false);
   assert.equal(A.reactivable({ ...c, fecha: '2026-12-10T22:00:00Z' }, ahora, 'yo'), false, 'ya pasó');
-  // con tercer tiempo posterior, sigue vigente hasta que termina el tercer tiempo
-  assert.equal(A.reactivable({ ...c, fecha: '2026-12-10T22:00:00Z', tiene_tercer: true, tercer_fecha: '2026-12-11T01:00:00Z' }, ahora, 'yo'), true);
+  // cuenta la fecha de la actividad, no el tercer tiempo: si la actividad ya pasó, no se reactiva aunque el tercer tiempo no
+  assert.equal(A.reactivable({ ...c, fecha: '2026-12-10T22:00:00Z', tiene_tercer: true, tercer_fecha: '2026-12-11T01:00:00Z' }, ahora, 'yo'), false);
+  assert.equal(A.reactivable({ ...c, tiene_tercer: true, tercer_fecha: '2026-12-11T23:00:00Z' }, ahora, 'yo'), true);
   assert.equal(A.reactivable(null, ahora, 'yo'), false);
 });

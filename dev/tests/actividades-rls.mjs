@@ -237,10 +237,13 @@ try {
     }
   });
 
-  await paso('(10) reactivar sí se puede si la actividad pasó pero el tercer tiempo todavía no', async () => {
+  await paso('(10) reactivar NO se puede si la actividad pasó aunque el tercer tiempo todavía no (cuenta old.fecha)', async () => {
     const x = await nueva(null, true, { fecha: en(-1), tercer_fecha: en(2) });
     assert.equal((await A.api('PATCH', `actividades?id=eq.${x.id}`, { estado: 'cancelada' })).status, 200);
-    assert.equal((await A.api('PATCH', `actividades?id=eq.${x.id}`, { estado: 'abierta' })).status, 200);
+    const r = await A.api('PATCH', `actividades?id=eq.${x.id}`, { estado: 'abierta' });
+    assert.ok(r.status >= 400, 'reactivó una cuya actividad ya pasó (el tercer tiempo no cuenta)');
+    assert.match(JSON.stringify(r.data), /ya pasó/i);
+    assert.equal((await A.api('GET', `actividades?id=eq.${x.id}`)).data[0].estado, 'cancelada');
   });
 
   await paso('restricciones de datos: otra sin detalle, tercer incompleto y tercer antes de la actividad', async () => {

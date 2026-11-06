@@ -59,8 +59,9 @@
   // Una actividad cancelada queda congelada: no se edita ni se confirma (la base también lo bloquea). Solo se reactiva.
   function editable(a) { return !!a && a.estado !== 'cancelada'; }
   // Una cancelada se puede reactivar (vuelve a 'abierta', con los mismos anotados y el chat): solo quien la creó
-  // y solo si sigue vigente, con el mismo criterio que esFutura (vale el tercer tiempo si termina después).
-  function reactivable(a, ahora, yo) { return !!a && a.estado === 'cancelada' && !!yo && a.creador === yo && esFutura(a, ahora); }
+  // y solo si todavía no pasó la fecha de la actividad. A propósito NO usa esFutura: el tercer tiempo no cuenta
+  // (decisión de Ivan, "solo si todavía no pasó la fecha"). La base exige lo mismo: old.fecha > now() (10).
+  function reactivable(a, ahora, yo) { return !!a && a.estado === 'cancelada' && !!yo && a.creador === yo && ms(a.fecha) > ahora; }
 
   // Cuántas personas anotadas al tercer tiempo se quitan si la edición lo apaga (la base las borra con un trigger).
   function anotadosQueSeQuitan(antes, despues, asistencias) {
@@ -85,6 +86,9 @@
     const comoUTC = Date.UTC(p.year, p.month - 1, p.day, p.hour % 24, p.minute, p.second);
     return comoUTC - (Math.floor(instante / 1000) * 1000);
   }
+  // Hora de pared -> instante UTC. Una hora que no existe (cae en el hueco del salto de primavera) se interpreta
+  // con el desfase de después del salto: en Nueva York, 02:30 del 8/3/2026 da 06:30Z, que en la pared se lee 01:30.
+  // No se valida ni se avisa: Argentina hoy no tiene horario de verano. Una hora repetida (otoño) da la primera.
   function desdeInputArg(texto, zona = ZONA) {
     const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(String(texto || ''));
     if (!m) return null;

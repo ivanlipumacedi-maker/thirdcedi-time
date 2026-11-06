@@ -3,7 +3,8 @@
 // una cancelada no se edita y apagar el tercer tiempo quita a sus anotados.
 // Verifica: error de la primera carga con "Reintentar", resincronización al reconectar (SUBSCRIBED) con el patrón
 // otraVez (una sola repetición), aviso en la página al apagar el tercer tiempo, cancelada no editable (UI y base),
-// que un no-creador no ve "Organizar" y que con la pantalla cerrada no se lee nada.
+// que un no-creador no ve "Organizar", que reactivar depende de la fecha de la actividad (no del tercer tiempo) y
+// que con la pantalla cerrada no se lee nada.
 // Uso: servir la raíz con `npx --yes http-server -p 8080 -c-1` y correr `node dev/tools/prueba-actividades-mock.js`
 const assert = require('assert/strict');
 const puppeteer = require('puppeteer-core');
@@ -11,7 +12,7 @@ const URL_APP = process.env.URL_APP || 'http://127.0.0.1:8080';
 
 // ---------- "Servidor" en memoria ----------
 const UA = '11111111-1111-4111-8111-111111111111', UB = '22222222-2222-4222-8222-222222222222';
-const ACT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', ACT2 = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', ACT3 = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const ACT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', ACT2 = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', ACT3 = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', ACT4 = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 const ahora = Date.now();
 const iso = (ms) => new Date(ms).toISOString();
 const actividad = (id, titulo, extra) => ({ id, creador: UA, tipo: 'padel', tipo_otro: null, titulo, fecha: iso(ahora + 864e5), lugar: 'Club Norte', cupo: 8, descripcion: '', tiene_tercer: false, tercer_lugar: null, tercer_fecha: null, estado: 'abierta', creado: iso(ahora - 1e6), ...extra });
@@ -24,6 +25,8 @@ const db = {
     actividad(ACT, 'Pádel del jueves', { tiene_tercer: true, tercer_lugar: 'Parrilla', tercer_fecha: iso(ahora + 864e5 + 72e5) }),
     actividad(ACT2, 'Fútbol del viernes', { tipo: 'futbol', fecha: iso(ahora + 2 * 864e5) }),
     actividad(ACT3, 'Asado de anteayer', { tipo: 'asado', fecha: iso(ahora - 2 * 864e5), estado: 'cancelada' }),
+    // la actividad ya empezó pero el tercer tiempo todavía no: sigue en "próximas", pero no se puede reactivar
+    actividad(ACT4, 'Trekking de recién', { tipo: 'trekking', fecha: iso(ahora - 36e5), tiene_tercer: true, tercer_lugar: 'Bar', tercer_fecha: iso(ahora + 72e5), estado: 'cancelada' }),
   ],
   asistencias: [{ actividad: ACT, persona: UA, parte: 'actividad' }, { actividad: ACT, persona: UB, parte: 'tercer' }],
   mensajes: [],
@@ -50,13 +53,13 @@ function consulta(uid, s) {
   if (s.table === 'actividades' && s.action === 'select' && fallarActividades > 0) { fallarActividades--; return { error: { message: 'sin red' } }; }
   if (s.table === 'actividades' && s.action === 'update') {
     const filas = db.actividades.filter((f) => cumple(f, s.filtros) && f.creador === uid); // RLS: solo el creador
-    // trigger de la 10: una cancelada no se edita; solo se reactiva (solo estado -> 'abierta', creador, vigente)
-    const fin = (a) => Math.max(Date.parse(a.fecha), a.tiene_tercer && a.tercer_fecha ? Date.parse(a.tercer_fecha) : -Infinity);
+    // trigger de la 10: una cancelada no se edita; solo se reactiva (solo estado -> 'abierta', creador y
+    // old.fecha > now(): cuenta la fecha de la actividad, no el tercer tiempo)
     for (const f of filas) {
       if (f.estado !== 'cancelada') continue;
       const soloEstado = Object.keys(s.values).every((k) => k === 'estado' || s.values[k] === f[k]) && s.values.estado === 'abierta';
       if (!soloEstado) return P0001('La actividad está cancelada');
-      if (!(fin(f) > Date.now())) return P0001('La actividad ya pasó: no se puede reactivar');
+      if (!(Date.parse(f.fecha) > Date.now())) return P0001('La actividad ya pasó: no se puede reactivar');
     }
     const out = filas.map((f) => {
       const antes = { ...f };
@@ -194,7 +197,7 @@ const volver = (p) => p.evaluate(() => document.querySelector('#pantalla-activid
       fallarActividades = 0;
       await clic(pa, '#act-reintentar');
       await pa.waitForSelector('.tarjeta-act');
-      assert.equal(await cuantos(pa, '.tarjeta-act'), 3);
+      assert.equal(await cuantos(pa, '.tarjeta-act'), 4);
     });
 
     await paso('punto 2: al reconectar (SUBSCRIBED) se pone al día con lo que cambió con el socket caído', async () => {
@@ -243,6 +246,10 @@ const volver = (p) => p.evaluate(() => document.querySelector('#pantalla-activid
       await pa.waitForSelector('#aviso-tercer:not([hidden])');
       assert.match(await texto(pa, '#aviso-tercer-txt'), /se va a quitar 1 anotado al tercer tiempo/);
       assert.equal(n('A:actividades:update'), upd, 'no se guardó antes de confirmar');
+      // el foco va a la opción que no borra nada, y el aviso se anuncia una sola vez (por el foco, no con role=alert)
+      assert.equal(await pa.evaluate(() => document.activeElement && document.activeElement.id), 'btn-dejar-tercer');
+      assert.equal(await pa.$eval('#aviso-tercer', (e) => e.getAttribute('role')), null, 'role=alert además del foco: doble anuncio');
+      assert.equal(await pa.$eval('#btn-dejar-tercer', (e) => e.getAttribute('aria-describedby')), 'aviso-tercer-txt');
       await clic(pa, '#btn-dejar-tercer');
       assert.equal(await pa.$eval('#f-tercer', (e) => e.checked), true);
       assert.equal(await pa.$eval('#aviso-tercer', (e) => e.hidden), true);
@@ -292,6 +299,7 @@ const volver = (p) => p.evaluate(() => document.querySelector('#pantalla-activid
       assert.ok(antes >= 1);
       await clic(pa, '#btn-reactivar');
       await pa.waitForSelector('#btn-cancelar');
+      await esperar(pa, () => /Actividad reactivada\. Si ya está todo listo, confirmala de nuevo\./.test(document.getElementById('toast').textContent));
       assert.equal(db.actividades.find((x) => x.id === ACT).estado, 'abierta');
       assert.equal(db.asistencias.filter((x) => x.actividad === ACT).length, antes, 'la cancelación no borró anotados');
       assert.equal(await cuantos(pa, '#btn-reactivar'), 0);
@@ -300,12 +308,26 @@ const volver = (p) => p.evaluate(() => document.querySelector('#pantalla-activid
       assert.equal(await cuantos(pa, '#btn-voy'), 1);
     });
 
-    await paso('punto 5: una cancelada que ya pasó no muestra "Reactivar"', async () => {
+    await paso('punto 5: una cancelada que ya pasó no muestra "Reactivar" y al creador le dice por qué', async () => {
       await volver(pa);
       await abrirTarjeta(pa, 'Asado de anteayer');
       await esperar(pa, () => /Esta actividad fue cancelada/.test(document.getElementById('pantalla-actividades').textContent));
       assert.equal(await cuantos(pa, '#btn-reactivar'), 0);
       assert.doesNotMatch(await pantalla(pa), /Organizar/);
+      assert.equal(await texto(pa, '#act-no-reactivable'), 'Ya pasó: no se puede reactivar.');
+    });
+
+    await paso('punto 5: si la actividad ya pasó pero el tercer tiempo no, tampoco se reactiva (cuenta la fecha de la actividad)', async () => {
+      await volver(pa);
+      await abrirTarjeta(pa, 'Trekking de recién');
+      await esperar(pa, () => /Esta actividad fue cancelada/.test(document.getElementById('pantalla-actividades').textContent));
+      assert.equal(await cuantos(pa, '#btn-reactivar'), 0);
+      assert.equal(await texto(pa, '#act-no-reactivable'), 'Ya pasó: no se puede reactivar.');
+      // B (no creador) no ve la línea
+      await volver(pb);
+      await abrirTarjeta(pb, 'Trekking de recién');
+      await esperar(pb, () => /Esta actividad fue cancelada/.test(document.getElementById('pantalla-actividades').textContent));
+      assert.equal(await cuantos(pb, '#act-no-reactivable'), 0);
     });
 
     await paso('punto 5: si se cancela con el formulario abierto, el formulario pasa al aviso', async () => {
