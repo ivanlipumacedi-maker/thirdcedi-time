@@ -96,6 +96,8 @@ const texto = (p, sel) => p.$eval(sel, (e) => e.textContent);
     });
     assert.ok(/ZZ Prueba B/.test(anotadosA[1]), 'A debe ver a B en el tercer tiempo: ' + JSON.stringify(anotadosA));
     assert.ok(!/ZZ Prueba B/.test(anotadosA[0]), 'B no debe estar en la actividad: ' + JSON.stringify(anotadosA));
+    // A no está anotado a nada (no hay chat): el lugar del chat no queda como el texto "null"
+    assert.doesNotMatch(await texto(A, '#pantalla-actividades'), /null|undefined/, 'el detalle de A muestra "null"');
     await A.screenshot({ path: path.join(shots, 'actividades-anotados-a-claro.png') });
     await B.screenshot({ path: path.join(shots, 'actividades-detalle-b-claro.png') });
 

@@ -266,6 +266,8 @@ const volver = (p) => p.evaluate(() => document.querySelector('#pantalla-activid
       assert.equal(db.asistencias.filter((x) => x.actividad === ACT && x.parte === 'tercer').length, 0);
       assert.equal(await cuantos(pa, '#btn-voy-tercer'), 0);
       await esperar(pb, () => !document.getElementById('btn-voy-tercer') && !document.getElementById('chat-act'));
+      // B ya no está anotado a nada: no hay chat, y el lugar del chat no queda como el texto "null"
+      assert.doesNotMatch(await pantalla(pb), /null|undefined/, 'el detalle muestra "null"');
     });
 
     await paso('punto 4: una edición que no apaga el tercer tiempo no muestra el aviso', async () => {
@@ -292,6 +294,7 @@ const volver = (p) => p.evaluate(() => document.querySelector('#pantalla-activid
       await esperar(pb, () => /Esta actividad fue cancelada/.test(document.getElementById('pantalla-actividades').textContent));
       assert.equal(await cuantos(pb, '#btn-reactivar'), 0);
       assert.doesNotMatch(await pantalla(pb), /Organizar/);
+      assert.doesNotMatch(await pantalla(pb), /null|undefined/, 'la cancelada muestra "null"');
     });
 
     await paso('punto 5: el creador reactiva la cancelada vigente y vuelve con los mismos anotados y el chat', async () => {
@@ -314,7 +317,7 @@ const volver = (p) => p.evaluate(() => document.querySelector('#pantalla-activid
       await esperar(pa, () => /Esta actividad fue cancelada/.test(document.getElementById('pantalla-actividades').textContent));
       assert.equal(await cuantos(pa, '#btn-reactivar'), 0);
       assert.doesNotMatch(await pantalla(pa), /Organizar/);
-      assert.equal(await texto(pa, '#act-no-reactivable'), 'Ya pasó: no se puede reactivar.');
+      assert.equal(await texto(pa, '#act-no-reactivable'), 'La actividad ya empezó: no se puede reactivar.');
     });
 
     await paso('punto 5: si la actividad ya pasó pero el tercer tiempo no, tampoco se reactiva (cuenta la fecha de la actividad)', async () => {
@@ -322,7 +325,7 @@ const volver = (p) => p.evaluate(() => document.querySelector('#pantalla-activid
       await abrirTarjeta(pa, 'Trekking de recién');
       await esperar(pa, () => /Esta actividad fue cancelada/.test(document.getElementById('pantalla-actividades').textContent));
       assert.equal(await cuantos(pa, '#btn-reactivar'), 0);
-      assert.equal(await texto(pa, '#act-no-reactivable'), 'Ya pasó: no se puede reactivar.');
+      assert.equal(await texto(pa, '#act-no-reactivable'), 'La actividad ya empezó: no se puede reactivar.');
       // B (no creador) no ve la línea
       await volver(pb);
       await abrirTarjeta(pb, 'Trekking de recién');

@@ -24,10 +24,10 @@ revoke insert (persona) on public.asistencias from authenticated;
 --
 -- ¡OJO! COMPARACIÓN DE FILA ENTERA: "(to_jsonb(new) - 'estado') = (to_jsonb(old) - 'estado')" compara TODAS las
 -- columnas menos estado. Si se agrega a public.actividades una columna que se actualiza sola (p. ej. un
--- "actualizado" con default now() que pisa un trigger), o un trigger BEFORE UPDATE que corra antes que este (los
--- BEFORE corren por orden alfabético de nombre) y cambie NEW, hay que restar esa columna en los dos lados de la
--- comparación (- 'estado' - 'actualizado'). Si no, NEW siempre difiere de OLD y la reactivación se rompe: da
--- "La actividad está cancelada" aunque solo se cambie el estado.
+-- "actualizado" que un trigger BEFORE UPDATE pone en now(): un default no corre en UPDATE), o un trigger BEFORE
+-- UPDATE que corra antes que este (los BEFORE corren por orden alfabético de nombre) y cambie NEW, hay que
+-- restar esa columna en los dos lados de la comparación (- 'estado' - 'actualizado'). Si no, NEW siempre difiere
+-- de OLD y la reactivación se rompe: da "La actividad está cancelada" aunque solo se cambie el estado.
 --
 -- ¡OJO! TAMBIÉN CONGELA A service_role / postgres: el trigger no mira el rol (auth.uid() es null fuera de la API,
 -- así que tampoco pueden reactivar). Es a propósito: una cancelada queda igual para todos. Para corregir datos de

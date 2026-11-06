@@ -31,9 +31,12 @@
       else if (k in el && k !== 'list') el[k] = v;
       else el.setAttribute(k, v === true ? '' : v);
     });
-    hijos.flat().forEach((c) => { if (c != null && c !== false) el.append(c); });
+    el.append(...nodos(hijos));
     return el;
   }
+  // Lo que se puede agregar al DOM: sin null, undefined, false ni '' (un "cond && h(...)" o un "cancelada ? null : ..."
+  // no tienen que terminar como el texto "null"). Aplana listas anidadas.
+  const nodos = (xs) => xs.flat(Infinity).filter((c) => c != null && c !== false && c !== '');
 
   const tipoDe = (id) => L.TIPOS.find((t) => t.id === id) || L.TIPOS[5];
   function nombreTipo(a) { return a.tipo === 'otra' && a.tipo_otro ? a.tipo_otro : tipoDe(a.tipo).nombre; }
@@ -117,7 +120,7 @@
     if (vista.tipo === 'detalle') {
       const a = actividades.find((x) => x.id === vista.id);
       if (a) {
-        r.append(...detalle(a));
+        r.append(...nodos(detalle(a)));
         // el chat sigue vivo entre repintados: se recupera dónde estaba el scroll y el foco del teclado
         const nl = chatEl && chatEl.querySelector('.chat-lista');
         if (nl && chatEl.isConnected) { nl.scrollTop = antes.scroll; if (antes.foco) chatEl.querySelector('textarea').focus({ preventScroll: true }); }
@@ -127,7 +130,7 @@
     }
     cerrarChat();
     if (vista.tipo === 'form') { vista.nuevoRender = false; r.append(formulario(vista.id ? actividades.find((x) => x.id === vista.id) : null)); return; }
-    r.append(...lista());
+    r.append(...nodos(lista()));
   }
   function cerrarChat() {
     if (chatCerrar) chatCerrar();
@@ -261,7 +264,7 @@
         h('button', { type: 'button', id: 'btn-reactivar', class: 'btn-sec', on: { click: cambiarEstado('abierta', 'Actividad reactivada. Si ya está todo listo, confirmala de nuevo.') } }, 'Reactivar')));
     } else if (cancelada && a.creador === yo) {
       // cancelada y ya pasó la fecha de la actividad (aunque el tercer tiempo no): se le explica al creador
-      out.push(h('p', { id: 'act-no-reactivable', class: 'ayuda' }, 'Ya pasó: no se puede reactivar.'));
+      out.push(h('p', { id: 'act-no-reactivable', class: 'ayuda' }, 'La actividad ya empezó: no se puede reactivar.'));
     }
     return out;
   }
