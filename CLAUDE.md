@@ -11,6 +11,10 @@ PWA en JavaScript vainilla (sin framework ni bundler) para que los compañeros d
 - Este proyecto Supabase está en una cuenta nueva de Ivan (no la de ivan.lipuma.cedi), proyecto `thirdcedi-time`. Ref: `qvezbnkrfqewanlcejha`. No tocar `planificacion-semanal` (`jidldvdfhkkxinnrubuz`) ni los de "El sur".
 - Las claves de Resend, la VAPID privada y el secreto de cron los carga Ivan a mano (Dashboard / Vault).
 
+## Supabase: servidor MCP y SQL destructivo (obligatorio)
+- Para este proyecto usar SIEMPRE el servidor MCP `supabase-thirdcedi` (scope local, project_ref `qvezbnkrfqewanlcejha`), no el conector `claude.ai Supabase`.
+- Ese servidor corre `execute_sql` y `apply_migration` sin pedir confirmación. Por eso: antes de cualquier SQL que borre o pise datos de usuarios reales (DELETE, UPDATE, TRUNCATE, DROP, migraciones que recreen tablas con datos, etc.), mostrarle la sentencia a Ivan y esperar su OK, aunque la herramienta no lo pida. Vale también para subagentes. Las filas de prueba (`zz-prueba-*`, actividades `zz ...`) no cuentan como datos reales.
+
 ## Supabase (datos públicos)
 - URL: `https://qvezbnkrfqewanlcejha.supabase.co`
 - Clave publicable (pública por diseño, va en `app.js`): `sb_publishable_nHg5W-1bGZwudTST-ejzeA_w_gUNYXQ`
