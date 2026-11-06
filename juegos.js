@@ -228,8 +228,9 @@
         yo: yoId,
         perfil: perfilDe,
         desfase: () => desfase,
-        responder: (ronda, opcion) => sb().rpc('responder', { p: p.id, p_ronda: ronda, p_opcion: opcion }),
-        avanzar: (ronda, fase) => sb().rpc('avanzar_partida', { p: p.id, p_ronda: ronda, p_fase: fase }),
+        // rpc() devuelve un thenable sin .catch: se pasa a Promise
+        responder: (ronda, opcion) => Promise.resolve(sb().rpc('responder', { p: p.id, p_ronda: ronda, p_opcion: opcion })),
+        avanzar: (ronda, fase) => Promise.resolve(sb().rpc('avanzar_partida', { p: p.id, p_ronda: ronda, p_fase: fase })),
         volver: () => irA({ tipo: 'lista' }),
       });
     }

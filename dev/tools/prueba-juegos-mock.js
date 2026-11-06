@@ -208,7 +208,8 @@ const STUB = `
   window.supabase = { createClient() {
     return {
       from: Builder,
-      rpc(fn, args) { return window.__rpc(fn, JSON.stringify(args || {})).then((r) => { const x = JSON.parse(r); return { data: x.data === undefined ? null : x.data, error: x.error || null }; }); },
+      // como supabase-js: rpc() devuelve un thenable (PostgrestBuilder) sin .catch ni .finally
+      rpc(fn, args) { const pr = window.__rpc(fn, JSON.stringify(args || {})).then((r) => { const x = JSON.parse(r); return { data: x.data === undefined ? null : x.data, error: x.error || null }; }); return { then: (a, b) => pr.then(a, b) }; },
       channel(topic) {
         const c = { topic, cbs: [], on(_t, f, fn) { c.cbs.push({ tabla: f.table, evento: f.event, filtro: f.filter, fn }); return c; }, subscribe(cb) { c.estado = cb; canales.add(c); todos.push(c); if (cb) setTimeout(() => cb('SUBSCRIBED'), 0); return c; } };
         return c;
