@@ -7,7 +7,8 @@
 (function (g) {
   const L = g.ImpostorLogica;
   const DURACION = { palabra: L.PALABRA_MS, pistas: L.PISTAS_MS, votacion: L.VOTACION_MS };
-  const SIGUE = { palabra: 'Pasar a las pistas', pistas: 'Pasar a la votación', votacion: 'Cerrar la votación' };
+  // La votación no la cierra nadie a mano (ni el creador): se cierra con el último voto o cuando vence el tiempo.
+  const SIGUE = { palabra: 'Pasar a las pistas', pistas: 'Pasar a la votación' };
 
   function h(tag, props, ...hijos) {
     const el = document.createElement(tag);
@@ -120,7 +121,7 @@
           palabra != null ? palabra : (intentosPalabra > 5 ? 'No pudimos traerla' : 'Cargando…')));
     }
     function botonAvanzar() {
-      return esCreador() && soyActivo()
+      return esCreador() && soyActivo() && SIGUE[estado().fase]
         ? h('button', { type: 'button', id: 'btn-imp-avanzar', class: 'btn-sec btn-ancho', disabled: avanzando, on: { click: avanzarYa } }, SIGUE[estado().fase])
         : null;
     }

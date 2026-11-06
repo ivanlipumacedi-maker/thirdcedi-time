@@ -141,7 +141,9 @@ function rpc(uid, fn, a) {
       return { data: p.estado_juego };
     }
     const vencido = Date.now() >= e.limite_ms;
-    if (p.creador !== uid && !vencido && !(e.fase === 'votacion' && votaronActivos(p.id) >= activos(p.id).length)) return err('Todavía no: falta que se termine el tiempo o que avance quien armó la partida');
+    // como la 16: la votación no la cierra ni el creador antes de tiempo, salvo que hayan votado todos
+    if (e.fase === 'votacion') { if (!vencido && votaronActivos(p.id) < activos(p.id).length) return err('Todavía no: falta que voten todos o que se termine el tiempo'); }
+    else if (p.creador !== uid && !vencido) return err('Todavía no: falta que se termine el tiempo o que avance quien armó la partida');
     if (SIGUIENTE[e.fase]) fase(p, SIGUIENTE[e.fase]); else if (e.fase === 'votacion') terminar(p, 'votacion');
     return { data: p.estado_juego };
   }
@@ -358,6 +360,7 @@ async function capturas(p, nombre) {
         assert.ok(!ids.includes(r.uid), LETRA[r.uid] + ' se puede votar a sí mismo');
       }
       assert.match(await texto(pb, '#impostor-estado'), /0 de 3 ya votaron/);
+      for (const r of TODAS) assert.equal(await cuantos(r.page, '#btn-imp-avanzar'), 0, LETRA[r.uid] + ' ve un botón para cerrar la votación');
       await capturas(pb, 'votacion');
     });
 
@@ -373,6 +376,7 @@ async function capturas(p, nombre) {
       await dormir(200);
       assert.equal(n('B:rpc:votar'), antes);
       await esperar(pa, () => /1 de 3 ya votaron/.test(document.getElementById('impostor-estado').textContent));
+      assert.equal(await cuantos(pa, '#btn-imp-avanzar'), 0, 'el creador ve un botón para cerrar la votación');
       TODAS.forEach(sinFiltrar);
     });
 

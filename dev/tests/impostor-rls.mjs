@@ -161,6 +161,13 @@ try {
     assert.equal(e.fase, 'votacion'); assert.equal(e.limite_ms - e.inicio_ms, I.VOTACION_MS);
   });
 
+  await paso('el creador no cierra la votación sin votos (ni antes de tiempo): se rechaza y sigue abierta', async () => {
+    rechazo(await A.rpc('avanzar_partida', { p: par, p_ronda: 1, p_fase: 'votacion' }), /Todavía no/);
+    const p = await partida(A, par);
+    assert.equal(p.estado, 'jugando'); assert.equal(p.estado_juego.fase, 'votacion');
+    assert.deepEqual(p.estado_juego.votaron, []);
+  });
+
   const votos = new Map();
   await paso('no se vota a uno mismo, ni a alguien de afuera, ni dos veces, ni otra ronda', async () => {
     rechazo(await B.rpc('votar', { p: par, p_ronda: 1, p_persona: B.id }), /No te podés votar/);
@@ -182,6 +189,9 @@ try {
     assert.deepEqual(e.votaron, [B.id]);
     assert.ok(!('votos' in e) && !('conteo' in e) && !('impostor' in e));
     rechazo(await B.rpc('avanzar_partida', { p: par, p_ronda: 1, p_fase: 'votacion' }), /Todavía no/);
+    // con 1 voto de 3 tampoco la cierra el creador
+    rechazo(await A.rpc('avanzar_partida', { p: par, p_ronda: 1, p_fase: 'votacion' }), /Todavía no/);
+    assert.equal((await partida(A, par)).estado_juego.fase, 'votacion');
   });
 
   await paso('con el último voto se revela sola, con el resultado de ImpostorLogica.resultado', async () => {
