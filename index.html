@@ -12,6 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="ThirdCEDI">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
@@ -36,6 +37,40 @@
   <button id="btn-tema" class="btn-icono" type="button" aria-label="Cambiar entre tema claro y oscuro"><span id="ico-tema" aria-hidden="true">☾</span></button>
 </header>
 
+<section id="acceso" class="acceso" hidden>
+  <div class="acceso-caja">
+    <form id="paso-mail" class="paso" novalidate>
+      <h1>Entrá a ThirdCEDI Time</h1>
+      <p class="ayuda">Usá tu mail del Grupo CEDI y te mandamos un código de 6 dígitos.</p>
+      <label for="in-mail">Tu mail</label>
+      <input id="in-mail" type="email" inputmode="email" autocomplete="email" autocapitalize="none" spellcheck="false" placeholder="nombre@cedi.com.ar" required>
+      <p class="error" id="err-mail" role="alert" hidden></p>
+      <button class="btn-primario" id="btn-mail" type="submit">Enviarme el código</button>
+    </form>
+    <form id="paso-codigo" class="paso" novalidate hidden>
+      <h1>Revisá tu mail</h1>
+      <p class="ayuda">Te mandamos un código de 6 dígitos a <strong id="txt-mail"></strong>. Si no lo ves, mirá en correo no deseado.</p>
+      <label for="in-codigo">Código</label>
+      <input id="in-codigo" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]*" placeholder="000000" required>
+      <p class="error" id="err-codigo" role="alert" hidden></p>
+      <button class="btn-primario" id="btn-codigo" type="submit">Entrar</button>
+      <div class="fila-links">
+        <button class="btn-link" id="btn-reenviar" type="button">Reenviar código</button>
+        <button class="btn-link" id="btn-cambiar-mail" type="button">Cambiar de mail</button>
+      </div>
+    </form>
+    <form id="paso-alta" class="paso" novalidate hidden>
+      <h1>Contanos quién sos</h1>
+      <p class="ayuda">Tus compañeros te van a ver con este nombre y esta foto.</p>
+      <div class="foto-editor" id="alta-foto"></div>
+      <label for="in-nombre">Tu nombre</label>
+      <input id="in-nombre" type="text" autocomplete="name" maxlength="60" placeholder="Nombre y apellido" required>
+      <p class="error" id="err-alta" role="alert" hidden></p>
+      <button class="btn-primario" id="btn-alta" type="submit">Empezar</button>
+    </form>
+  </div>
+</section>
+
 <main id="pantallas">
   <section class="pantalla" id="pantalla-actividades" data-ruta="actividades" hidden>
     <h1>Actividades</h1>
@@ -47,7 +82,7 @@
   </section>
   <section class="pantalla" id="pantalla-perfil" data-ruta="perfil" hidden>
     <h1>Perfil</h1>
-    <p class="vacio">Acá vas a ver y editar tus datos.</p>
+    <div id="perfil-contenido"></div>
   </section>
 </main>
 
@@ -60,6 +95,9 @@
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="vendor/supabase.js"></script>
+<script src="dominios.js"></script>
+<script src="perfiles.js"></script>
 <script src="app.js"></script>
+<script src="login.js"></script>
 </body>
 </html>

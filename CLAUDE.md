@@ -10,3 +10,9 @@ PWA en JavaScript vainilla (sin framework ni bundler) para que los compañeros d
 - Si hace falta un secreto que no está disponible, frenar y pedírmelo para que lo cargue yo a mano. Nunca pedir que lo pegue en el chat.
 - Este proyecto Supabase está en una cuenta nueva de Ivan (no la de ivan.lipuma.cedi), proyecto `thirdcedi-time`. Ref: `qvezbnkrfqewanlcejha`. No tocar `planificacion-semanal` (`jidldvdfhkkxinnrubuz`) ni los de "El sur".
 - Las claves de Resend, la VAPID privada y el secreto de cron los carga Ivan a mano (Dashboard / Vault).
+
+## Supabase (datos públicos)
+- URL: `https://qvezbnkrfqewanlcejha.supabase.co`
+- Clave publicable (pública por diseño, va en `app.js`): `sb_publishable_nHg5W-1bGZwudTST-ejzeA_w_gUNYXQ`
+- Migraciones SQL en `dev/supabase/` (01 perfiles, 02 hook de dominio, 03 avatares, 04 endurecer). Ya aplicadas en el proyecto.
+- Tests: `node --test "dev/tests/*.test.js"` (unitarios) y `node dev/tests/auth-rls.mjs` (contra el proyecto real).
