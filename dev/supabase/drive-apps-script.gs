@@ -30,7 +30,20 @@ function subcarpeta(nombre, id) {
   }
   var raiz = carpetaRaiz();
   var it = raiz.getFoldersByName(nombre);
-  return it.hasNext() ? it.next() : raiz.createFolder(nombre);
+  var c = it.hasNext() ? it.next() : raiz.createFolder(nombre);
+  compartir(c);
+  return c;
+}
+
+// Decisión de Ivan (2026-11-06): cada subcarpeta de actividad se comparte como "cualquier persona con el link puede
+// ver", porque los compañeros entran con cuentas de Microsoft y no tienen Google. La raíz NO se comparte: el link
+// abre solo la carpeta de esa actividad. Si el dominio de Google no permite compartir así, la foto igual se copia.
+function compartir(carpeta) {
+  try {
+    if (carpeta.getSharingAccess() !== DriveApp.Access.ANYONE_WITH_LINK) {
+      carpeta.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    }
+  } catch (e) { /* política del dominio: se sigue sin compartir */ }
 }
 
 function doPost(e) {
