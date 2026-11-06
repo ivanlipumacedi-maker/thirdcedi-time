@@ -3,3 +3,4 @@ node_modules/
 dev/shots/
 .superpowers/
 .claude/
+dev/supabase/trivia-preguntas-datos.sql

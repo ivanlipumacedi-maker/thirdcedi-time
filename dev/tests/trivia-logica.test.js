@@ -76,6 +76,16 @@ test('restante: cuenta regresiva con el desfase del reloj del servidor, nunca ne
   assert.equal(T.restante(20000, 30000, 0), 0);
 });
 
+test('preguntas-sql: una fila por pregunta, comillas escapadas y huella estable', () => {
+  const G = require('../tools/preguntas-sql.js');
+  const s = G.sql([{ id: 'x-001', cat: 'general', dif: 1, p: "¿Qué es 'esto'?", ops: ["l'a", 'b', 'c', 'd'], ok: 2 }]);
+  assert.match(s, /\('x-001', 'general', 1, '¿Qué es ''esto''\?', array\['l''a', 'b', 'c', 'd'\], 2\)/);
+  assert.match(s, /on conflict \(id\) do update/);
+  const todo = G.sql(Preguntas);
+  assert.equal((todo.match(/^ {2}\('/gm) || []).length, Preguntas.length);
+  assert.equal(G.huella(Preguntas), G.huella(Preguntas.slice().reverse()));
+});
+
 test('constantes del juego', () => {
   assert.equal(T.PREGUNTAS_POR_PARTIDA, 10);
   assert.equal(T.PREGUNTA_MS, 15000);
