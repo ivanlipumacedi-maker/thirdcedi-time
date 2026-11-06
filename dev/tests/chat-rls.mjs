@@ -149,24 +149,36 @@ try {
     assert.equal(otro.data.editado, true);
   });
 
-  await paso('paginación: más de una página, con la consulta del cliente (cursor (creado, id) y .or(filtroAntes)), sin faltantes ni repetidos', async () => {
+  await paso('paginación: tres páginas o más, con la consulta del cliente (cursor (creado, id) y .or(filtroAntes)), sin faltantes ni repetidos', async () => {
     const TAM = L.TAM_PAGINA;
-    // de a uno (creado distinto) y un lote en un solo insert: el lote comparte creado (now() de la transacción),
-    // así se prueba también el desempate por id justo en el corte de página
-    for (let i = 0; i < 12; i++) {
+    const LOTE = TAM + 5;
+    // lo que ya hay en la sala por los pasos anteriores (no se asume el número exacto)
+    const previos = await A.api('GET', `mensajes?select=id&sala=eq.${salaQ}`);
+    assert.equal(previos.status, 200, JSON.stringify(previos.data));
+    const antes = previos.data.length;
+    // sueltos (de a uno, creado distinto) hasta pasar 2 * TAM con el lote; el total no puede ser múltiplo de TAM,
+    // así la última página viene con algo pero incompleta
+    let sueltos = Math.max(12, 2 * TAM + 1 - antes - LOTE);
+    if ((antes + sueltos + LOTE) % TAM === 0) sueltos++;
+    const total = antes + sueltos + LOTE;
+    for (let i = 0; i < sueltos; i++) {
       const x = await A.api('POST', 'mensajes', txt(sala, 'pág ' + i));
       assert.equal(x.status, 201, JSON.stringify(x.data));
       mios.A.push(x.data[0].id);
     }
-    const lote = await A.api('POST', 'mensajes', Array.from({ length: TAM + 5 }, (_, i) => txt(sala, 'lote ' + i)));
+    // el lote va último y en un solo insert: comparte creado (now() de la transacción) y ocupa toda la primera página,
+    // así el corte entre la primera y la segunda cae en un empate y se prueba el desempate por id
+    const lote = await A.api('POST', 'mensajes', Array.from({ length: LOTE }, (_, i) => txt(sala, 'lote ' + i)));
     assert.equal(lote.status, 201, JSON.stringify(lote.data));
     lote.data.forEach((m) => mios.A.push(m.id));
+    assert.equal(lote.data.length, LOTE);
     assert.equal(new Set(lote.data.map((m) => m.creado)).size, 1, 'el lote debería compartir creado');
 
     // lo que hay en la sala, completo y en el orden del cliente
     const todo = await A.api('GET', `mensajes?select=${CAMPOS}&sala=eq.${salaQ}&order=creado.asc,id.asc`);
     assert.equal(todo.status, 200, JSON.stringify(todo.data));
-    assert.ok(todo.data.length > 2 * TAM - 10, 'tiene que haber más de una página: ' + todo.data.length);
+    assert.equal(todo.data.length, total, `la sala tendría que tener ${antes} previos + ${sueltos} sueltos + ${LOTE} del lote`);
+    assert.ok(total > 2 * TAM, 'tiene que haber al menos tres páginas: ' + total);
     const esperado = [...todo.data].sort(L.comparar).map((m) => m.id);
     assert.deepEqual(todo.data.map((m) => m.id), esperado, 'el orden de Postgres (creado, id) coincide con L.comparar');
 
@@ -175,6 +187,7 @@ try {
     let r = await pagina('');
     assert.equal(r.status, 200, JSON.stringify(r.data));
     assert.equal(r.data.length, TAM);
+    assert.ok(r.data.every((m) => m.creado === lote.data[0].creado), 'la primera página tendría que ser toda del lote (corte en un empate)');
     let lista = L.fusionarLote([], r.data);
     let vistos = r.data.length, paginas = 1;
     while (r.data.length >= TAM) {
@@ -189,7 +202,10 @@ try {
       lista = L.fusionarLote(lista, r.data);
       assert.ok(paginas < 20, 'demasiadas páginas');
     }
-    assert.ok(paginas >= 2, 'tendría que haber pedido al menos una página anterior');
+    assert.ok(paginas >= 3, 'tendría que haber pedido al menos dos páginas anteriores: ' + paginas);
+    assert.equal(paginas, Math.ceil(total / TAM), 'cantidad de páginas');
+    assert.ok(r.data.length > 0 && r.data.length < TAM, 'la última página tendría que venir incompleta: ' + r.data.length);
+    assert.equal(r.data.length, total % TAM, 'largo de la última página');
     assert.equal(vistos, esperado.length, 'cantidad traída por páginas');
     assert.deepEqual(lista.map((m) => m.id), esperado, 'faltan o sobran mensajes');
   });

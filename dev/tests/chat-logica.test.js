@@ -169,8 +169,11 @@ test('09: el recorte de editar_mensaje (regex de Postgres) saca lo mismo que tri
   const fs = require('node:fs');
   const path = require('node:path');
   const sql = fs.readFileSync(path.join(__dirname, '..', 'supabase', '09-chat-ajustes.sql'), 'utf8');
-  const m = /blancos constant text := E'(\[[^']+\])';/.exec(sql);
+  // la clase está una sola vez, dentro de recortar_como_trim
+  assert.equal((sql.match(/\\\\u0009/g) || []).length, 1, 'la clase de blancos tiene que estar en un solo lugar');
+  const m = /select E'(\[[^']+\])'::text as blancos/.exec(sql);
   assert.ok(m, 'no encontré la clase "blancos" en la 09');
+  assert.match(sql, /select regexp_replace\(t, '\^' \|\| c\.blancos \|\| '\+\|' \|\| c\.blancos \|\| '\+\$', '', 'g'\)/, 'recortar_como_trim recorta al principio y al final');
   // en E'' la barra va doblada: el motor de regex recibe \uXXXX, que JS entiende igual
   const clase = m[1].replace(/\\\\/g, '\\');
   assert.match(clase, /^\[(\\u[0-9a-f]{4}(-\\u[0-9a-f]{4})?)+\]$/, 'la clase tiene que ser solo escapes \\uXXXX');
@@ -182,5 +185,15 @@ test('09: el recorte de editar_mensaje (regex de Postgres) saca lo mismo que tri
   }
   assert.equal(' \n\t\u00a0hola\u3000\r\n'.replace(recorte, ''), 'hola');
   assert.equal(' \n\t '.replace(recorte, ''), '');
-  assert.match(sql, /if regexp_replace\(r\.texto, recorte, '', 'g'\) is not distinct from t then/, 'la comparación de "no cambió" también recorta');
+  assert.match(sql, /t text := public\.recortar_como_trim\(p_texto\);/, 'editar_mensaje recorta con recortar_como_trim');
+  assert.match(sql, /if public\.recortar_como_trim\(r\.texto\) is not distinct from t then/, 'la comparación de "no cambió" también recorta');
+  // el check: la misma condición de la 08 cambiando solo btrim por recortar_como_trim
+  const sql08 = fs.readFileSync(path.join(__dirname, '..', 'supabase', '08-chat.sql'), 'utf8');
+  const viejo = /constraint mensajes_texto_valido check (\(.*\)),\r?\n/.exec(sql08);
+  assert.ok(viejo, 'no encontré mensajes_texto_valido en la 08');
+  assert.match(viejo[1], /btrim\(texto\)/);
+  const nuevo = /drop constraint mensajes_texto_valido,\s*add constraint mensajes_texto_valido check (\(.*\));/.exec(sql);
+  assert.ok(nuevo, 'no encontré el alter de mensajes_texto_valido en la 09');
+  assert.equal(nuevo[1], viejo[1].replace('btrim(texto)', 'public.recortar_como_trim(texto)'));
+  assert.doesNotMatch(sql.replace(/^\s*--.*$/gm, ''), /btrim/, 'la 09 no usa btrim');
 });

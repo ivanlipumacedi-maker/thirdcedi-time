@@ -158,6 +158,7 @@
     // su consulta pudo salir antes de que se commiteara un mensaje que tampoco llegó en vivo. Se marca otraVez y,
     // al terminar, se corre una sola más (varias llamadas durante el vuelo se juntan en esa).
     function sincronizar() {
+      if (cerrado) return Promise.resolve(); // chat cerrado: no se lee ni se pinta nada
       if (enVuelo) { otraVez = true; return enVuelo; }
       otraVez = false;
       llegados = new Set(); pendientes = new Map();
