@@ -248,6 +248,31 @@ try {
     assert.equal(await partida(inocentes[1], x.id), null);
     assert.equal((await inocentes[1].api('GET', `mensajes?sala=eq.par:${x.id}&select=id`)).data.length, 0);
   });
+  await paso('ítem 3: los votos a un inocente que se va se descartan; los votos al impostor que se va quedan', async () => {
+    let x = await armar();
+    assert.equal((await A.rpc('avanzar_partida', { p: x.id, p_ronda: 1, p_fase: 'palabra' })).status, 200);
+    assert.equal((await A.rpc('avanzar_partida', { p: x.id, p_ronda: 1, p_fase: 'pistas' })).status, 200);
+    let inocentes = TODOS.filter((u) => u !== x.imp);
+    // el impostor y un inocente votan al otro inocente, que se va: esos votos ya no cuentan
+    assert.equal((await x.imp.rpc('votar', { p: x.id, p_ronda: 1, p_persona: inocentes[1].id })).status, 204);
+    assert.equal((await inocentes[0].rpc('votar', { p: x.id, p_ronda: 1, p_persona: inocentes[1].id })).status, 204);
+    assert.equal((await inocentes[1].rpc('salir_partida', { p: x.id })).status, 204);
+    let e = (await partida(x.imp, x.id)).estado_juego;
+    assert.equal(e.motivo, 'quedan_dos');
+    assert.deepEqual(e.votos, {}, 'quedaron votos a quien se fue: ' + JSON.stringify(e.votos));
+    assert.ok(!(inocentes[1].id in e.conteo));
+    // si el que se va es el impostor, gana el grupo y su voto recibido se sigue viendo en el final
+    x = await armar();
+    assert.equal((await A.rpc('avanzar_partida', { p: x.id, p_ronda: 1, p_fase: 'palabra' })).status, 200);
+    assert.equal((await A.rpc('avanzar_partida', { p: x.id, p_ronda: 1, p_fase: 'pistas' })).status, 200);
+    inocentes = TODOS.filter((u) => u !== x.imp);
+    assert.equal((await inocentes[0].rpc('votar', { p: x.id, p_ronda: 1, p_persona: x.imp.id })).status, 204);
+    assert.equal((await x.imp.rpc('salir_partida', { p: x.id })).status, 204);
+    e = (await partida(inocentes[0], x.id)).estado_juego;
+    assert.equal(e.motivo, 'se_fue_impostor');
+    assert.equal(e.conteo[x.imp.id], 1);
+    rechazo(await B.rpc('impostor_descartar_votos_a', { p_partida: x.id, p_persona: B.id }));
+  });
 } finally {
   for (const u of TODOS) {
     const mias = await u.api('GET', `jugadores?persona=eq.${u.id}&se_fue=eq.false&select=partida`);

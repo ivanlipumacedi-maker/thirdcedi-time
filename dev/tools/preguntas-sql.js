@@ -3,7 +3,7 @@
 // respuesta correcta, así no viaja al teléfono antes de revelarla.
 // Uso: node dev/tools/preguntas-sql.js  → escribe dev/supabase/trivia-preguntas-datos.sql (en .gitignore).
 // Después se pega en el SQL Editor del proyecto thirdcedi-time. Es idempotente: agrega, actualiza y saca las
-// preguntas que ya no están en el archivo (no son datos de usuarios: es el banco).
+// preguntas que ya no están en el archivo (no son datos de usuarios: es el banco), salvo las de una partida en juego.
 const fs = require('fs');
 const path = require('path');
 
@@ -17,7 +17,9 @@ function sql(preguntas) {
     'insert into public.trivia_preguntas (id, cat, dif, p, ops, ok) values',
     filas.join(',\n'),
     'on conflict (id) do update set cat = excluded.cat, dif = excluded.dif, p = excluded.p, ops = excluded.ops, ok = excluded.ok;',
-    'delete from public.trivia_preguntas where id not in (' + preguntas.map((q) => lit(q.id)).join(', ') + ');',
+    // las de una partida en juego se dejan (se borrarían a la mitad); salen en la próxima carga
+    'delete from public.trivia_preguntas where id not in (' + preguntas.map((q) => lit(q.id)).join(', ') + ')'
+      + " and id not in (select unnest(s.preguntas) from public.trivia_secretos s join public.partidas x on x.id = s.partida where x.estado = 'jugando');",
     'commit;',
     '',
   ].join('\n');

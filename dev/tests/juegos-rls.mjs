@@ -45,7 +45,26 @@ async function entrar(l) {
   const api = (metodo, ruta, cuerpo) => fetch(`${BASE}/rest/v1/${ruta}`, { method: metodo, headers: h, body: cuerpo ? JSON.stringify(cuerpo) : undefined })
     .then(async (x) => ({ status: x.status, data: await x.json().catch(() => null) }));
   const rpc = (fn, args) => api('POST', 'rpc/' + fn, args || {});
-  return { id: j.user.id, api, rpc };
+  return { id: j.user.id, api, rpc, token: j.access_token };
+}
+// Escucha el canal privado 'juegos-lista' por el websocket de Realtime (protocolo Phoenix, sin supabase-js) y junta
+// los broadcasts que llegan. Devuelve { recibidos, cerrar }.
+async function escucharLista(u) {
+  const ws = new WebSocket(`${BASE.replace('https', 'wss')}/realtime/v1/websocket?apikey=${KEY}&vsn=1.0.0`);
+  const recibidos = [];
+  let unido;
+  const listo = new Promise((res, rej) => { unido = { res, rej }; setTimeout(() => rej(new Error('no se unió al canal')), 10000); });
+  ws.onmessage = (m) => {
+    const x = JSON.parse(m.data);
+    if (x.event === 'phx_reply' && x.ref === '1') { if (x.payload.status === 'ok') unido.res(); else unido.rej(new Error(JSON.stringify(x.payload))); }
+    if (x.event === 'broadcast') recibidos.push(x.payload);
+  };
+  await new Promise((res) => { ws.onopen = res; });
+  ws.send(JSON.stringify({ topic: 'realtime:juegos-lista', event: 'phx_join', ref: '1', join_ref: '1',
+    payload: { config: { broadcast: { self: false }, presence: { key: '' }, postgres_changes: [], private: true }, access_token: u.token } }));
+  await listo;
+  const latido = setInterval(() => ws.send(JSON.stringify({ topic: 'phoenix', event: 'heartbeat', payload: {}, ref: 'h' })), 20000);
+  return { recibidos, cerrar: () => { clearInterval(latido); ws.close(); } };
 }
 const anon = (fn, args) => fetch(`${BASE}/rest/v1/rpc/${fn}`, { method: 'POST', headers: { apikey: KEY, 'Content-Type': 'application/json' }, body: JSON.stringify(args || {}) }).then((x) => x.status);
 
@@ -120,11 +139,13 @@ try {
   });
 
   await paso('la respuesta correcta no se puede leer: banco, preguntas elegidas e internas cerradas', async () => {
-    for (const t of ['trivia_preguntas', 'trivia_secretos']) {
+    for (const t of ['trivia_preguntas', 'trivia_secretos', 'trivia_vistas']) {
       const x = await B.api('GET', `${t}?select=*&limit=1`);
       assert.ok(x.status >= 400 || (Array.isArray(x.data) && x.data.length === 0), t + ' se pudo leer: ' + x.status);
     }
-    for (const [fn, args] of [['trivia_revelar', { p: par }], ['trivia_siguiente', { p: par }], ['trivia_estado_pregunta', { p: par, ronda: 1, total: 10 }]]) {
+    for (const [fn, args] of [['trivia_revelar', { p: par }], ['trivia_siguiente', { p: par }], ['trivia_estado_pregunta', { p: par, ronda: 1, total: 10 }],
+      ['trivia_elegir', { p_partida: par }], ['trivia_marcar_vista', { p_partida: par, p_ronda: 1 }], ['trivia_arrancar', { p: par }],
+      ['trivia_avanzar', { p: par, p_uid: B.id }], ['juegos_avisar_lista', { p: par }]]) {
       rechazo(await B.rpc(fn, args));
     }
   });
@@ -211,6 +232,65 @@ try {
   await paso('si se va el último jugador, la partida termina', async () => {
     assert.equal((await A.rpc('salir_partida', { p: par })).status, 204);
     assert.equal(await partida(A), null);
+  });
+
+  await paso('no se pueden tener más de 3 partidas abiertas a la vez', async () => {
+    const ids = [];
+    try {
+      for (let i = 0; i < 3; i++) { const r = await A.rpc('crear_partida', { p_juego: 'trivia' }); assert.equal(r.status, 200, JSON.stringify(r.data)); ids.push(r.data); }
+      rechazo(await A.rpc('crear_partida', { p_juego: 'impostor' }), /Ya tenés 3 partidas abiertas/);
+      assert.equal((await A.rpc('salir_partida', { p: ids.pop() })).status, 204);
+      const r = await A.rpc('crear_partida', { p_juego: 'trivia' });
+      assert.equal(r.status, 200, 'cancelando una se puede armar otra: ' + JSON.stringify(r.data));
+      ids.push(r.data);
+    } finally { for (const id of ids) await A.rpc('salir_partida', { p: id }); }
+  });
+
+  await paso('la lista se entera por broadcast (solo el id) cuando una partida arranca o se cancela', async () => {
+    const oido = await escucharLista(C);
+    try {
+      const uno = (await A.rpc('crear_partida', { p_juego: 'trivia' })).data;
+      assert.equal((await A.rpc('avanzar_partida', { p: uno, p_ronda: 0, p_fase: 'espera' })).status, 200);
+      const dos = (await A.rpc('crear_partida', { p_juego: 'trivia' })).data;
+      assert.equal((await A.rpc('salir_partida', { p: dos })).status, 204);
+      for (let i = 0; i < 40 && oido.recibidos.length < 2; i++) await dormir(250);
+      assert.equal((await A.rpc('salir_partida', { p: uno })).status, 204);
+      const ids = oido.recibidos.filter((x) => x.event === 'cambio').map((x) => x.payload.id);
+      assert.ok(ids.includes(uno), 'no llegó el aviso del arranque: ' + JSON.stringify(oido.recibidos));
+      assert.ok(ids.includes(dos), 'no llegó el aviso de la cancelación: ' + JSON.stringify(oido.recibidos));
+      oido.recibidos.forEach((x) => assert.deepEqual(Object.keys(x.payload), ['id'], 'el aviso trae algo más que el id'));
+    } finally { oido.cerrar(); }
+  });
+
+  await paso('dos partidas seguidas con los mismos jugadores no comparten ninguna pregunta (y respetan 4/4/2)', async () => {
+    // A arma, B se une, y A (el creador) revela y avanza a mano las 10 preguntas
+    async function jugar() {
+      const id = (await A.rpc('crear_partida', { p_juego: 'trivia' })).data;
+      assert.equal((await B.rpc('unirse_partida', { p: id })).status, 204);
+      assert.equal((await A.rpc('avanzar_partida', { p: id, p_ronda: 0, p_fase: 'espera' })).status, 200);
+      const vistas = [];
+      for (let i = 0; i < 25; i++) {
+        const p = (await A.api('GET', `partidas?id=eq.${id}&select=estado,estado_juego`)).data[0];
+        const e = p.estado_juego;
+        if (p.estado === 'terminada') break;
+        if (e.fase === 'pregunta') {
+          vistas.push({ clave: e.pregunta.p + '|' + e.pregunta.ops.join('|'), dif: e.pregunta.dif });
+          assert.equal((await A.rpc('avanzar_partida', { p: id, p_ronda: e.ronda, p_fase: 'pregunta' })).status, 200);
+        } else {
+          assert.equal((await A.rpc('avanzar_partida', { p: id, p_ronda: e.ronda, p_fase: 'revelada' })).status, 200);
+        }
+      }
+      for (const u of [A, B]) await u.rpc('salir_partida', { p: id });
+      assert.equal(vistas.length, 10);
+      const cuenta = (d) => vistas.filter((v) => v.dif === d).length;
+      assert.deepEqual([cuenta(1), cuenta(2), cuenta(3)], [T.cuotas(10)[1], T.cuotas(10)[2], T.cuotas(10)[3]]);
+      return vistas.map((v) => v.clave);
+    }
+    const uno = await jugar();
+    const dos = await jugar();
+    assert.equal(new Set(uno).size, 10);
+    const repetidas = dos.filter((x) => uno.includes(x));
+    assert.deepEqual(repetidas, [], 'se repitieron preguntas');
   });
 
   await paso('el creador que se va de una partida en espera la cancela', async () => {
