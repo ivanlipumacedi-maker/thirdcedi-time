@@ -8,6 +8,10 @@
 // recibió: lecturas, RPC y Realtime), avance solo de la palabra a las pistas, pistas en el chat, votación sin
 // votarse a uno mismo ni dos veces, revelación al votar todos con el resultado de ImpostorLogica.resultado, y
 // Review Focus 5: si se va el impostor gana el grupo; si se va un inocente y quedan 2, gana el impostor.
+// Cierre (Task 10): el foco sigue en su botón de voto tras un repintado (1); al vencer el tiempo los botones se
+// apagan sin esperar otro cambio (2); si se va alguien votado, sus votantes vuelven a votar (3, con un cuarto
+// jugador "D" sin ventana); "Ya votaste" desde otra pestaña no muestra un voto falso (4); el resultado se pinta
+// desde quien mira: el impostor que gana lo ve en verde (6).
 // Saca capturas (claro y oscuro, 390x844) en dev/shots/impostor-*.png.
 // Uso: servir la raíz con `npx --yes http-server -p 8080 -c-1` y correr `node dev/tools/prueba-impostor-mock.js`
 // (URL_APP=http://127.0.0.1:8083 si se sirve en otro puerto).
@@ -23,14 +27,16 @@ fs.mkdirSync(shots, { recursive: true });
 
 // ---------- "Servidor" en memoria ----------
 const UA = '11111111-1111-4111-8111-111111111111', UB = '22222222-2222-4222-8222-222222222222', UC = '33333333-3333-4333-8333-333333333333';
-const LETRA = { [UA]: 'A', [UB]: 'B', [UC]: 'C' };
-const DUR = { palabra: 1500, pistas: 3000, votacion: 4000 };
+const UD = '44444444-4444-4444-8444-444444444444'; // cuarto jugador sin ventana (juega por rpc desde acá)
+const LETRA = { [UA]: 'A', [UB]: 'B', [UC]: 'C', [UD]: 'D' };
+const DUR = { palabra: 1500, pistas: 3000, votacion: 4000 }; // la prueba de cierre estira la votación
 const SIGUIENTE = { palabra: 'pistas', pistas: 'votacion' };
 const db = {
   perfiles: [
     { id: UA, nombre: 'Ana Pérez', foto: null, empresa: 'CEDI' },
     { id: UB, nombre: 'Beto Gómez', foto: null, empresa: 'Wemox' },
     { id: UC, nombre: 'Caro Díaz', foto: null, empresa: 'Korex' },
+    { id: UD, nombre: 'Dani Ruiz', foto: null, empresa: 'CEDI' },
   ],
   partidas: [], jugadores: [], mensajes: [],
 };
@@ -113,6 +119,15 @@ function rpc(uid, fn, a) {
     }
     j.se_fue = true; emitir('jugadores', 'UPDATE', j);
     if (p.estado !== 'jugando') return { data: null };
+    // como la 18: si se va un inocente, los votos que tenía se descartan y sus votantes pueden votar de nuevo
+    if (secretos.get(p.id).impostor !== uid) {
+      const v = votos.get(p.id);
+      const suyos = [...v].filter(([, a]) => a === uid).map(([k]) => k);
+      if (suyos.length) {
+        suyos.forEach((k) => v.delete(k));
+        cambiar(p, { estado_juego: { ...p.estado_juego, votaron: (p.estado_juego.votaron || []).filter((k) => !suyos.includes(k)) } });
+      }
+    }
     const s = I.sigue(activos(p.id), secretos.get(p.id).impostor);
     if (s === 'gana_grupo') terminar(p, 'se_fue_impostor');
     else if (s === 'gana_impostor') terminar(p, 'quedan_dos');
@@ -272,7 +287,7 @@ async function capturas(p, nombre) {
     await Promise.all(TODAS.map((r) => esperar(r.page, () => /Abiertas para unirse/.test(document.getElementById('pantalla-juegos').textContent))));
 
     // Arma una partida de Impostor: A la crea, B y C se unen. Devuelve el id.
-    async function armar(conPasos) {
+    async function armar(conPasos, conD) {
       await clic(pa, '#btn-nueva-partida');
       await pa.waitForSelector('#nueva-impostor');
       if (conPasos) {
@@ -294,6 +309,7 @@ async function capturas(p, nombre) {
           assert.match(await texto(pa, '#faltan-jugadores'), /Falta 1 jugador/);
         }
       }
+      if (conD) rpc(UD, 'unirse_partida', { p: id });
       await esperar(pa, () => !document.getElementById('btn-arrancar').disabled);
       return id;
     }
@@ -367,6 +383,7 @@ async function capturas(p, nombre) {
     await paso('B vota: se marca su voto, no puede votar dos veces y A no ve a quién votó', async () => {
       const s = secretos.get(par);
       const aQuien = s.impostor === UB ? UA : s.impostor;
+      const enfocado = await pc.$eval('.voto-imp', (b) => { b.focus(); return b.dataset.persona; });
       await clic(pb, '.voto-imp[data-persona="' + aQuien + '"]');
       await esperar(pb, () => /Votaste a/.test(document.getElementById('impostor-estado').textContent));
       assert.equal(await cuantos(pb, '.voto-imp.elegida'), 1);
@@ -377,6 +394,8 @@ async function capturas(p, nombre) {
       assert.equal(n('B:rpc:votar'), antes);
       await esperar(pa, () => /1 de 3 ya votaron/.test(document.getElementById('impostor-estado').textContent));
       assert.equal(await cuantos(pa, '#btn-imp-avanzar'), 0, 'el creador ve un botón para cerrar la votación');
+      await esperar(pc, () => /1 de 3 ya votaron/.test(document.getElementById('impostor-estado').textContent));
+      assert.equal(await pc.evaluate(() => document.activeElement && document.activeElement.dataset.persona), enfocado, '1: el repintado le sacó el foco al botón de voto');
       TODAS.forEach(sinFiltrar);
     });
 
@@ -395,6 +414,10 @@ async function capturas(p, nombre) {
         assert.match(await texto(r.page, '#impostor-palabras'), new RegExp(s.palabra + '.*' + s.palabra_impostor));
       }
       assert.match(await texto(de(s.impostor).page, '#impostor-era'), /Eras vos/);
+      for (const r of TODAS) {
+        const clase = await r.page.$eval('#impostor-resultado', (x) => x.className);
+        assert.match(clase, I.gane(e.gano, s.impostor, r.uid) ? /\bbien\b/ : /\bmal\b/, '6: ' + LETRA[r.uid] + ' ve el resultado con el color de otro');
+      }
       assert.match(await texto(pa, '#impostor-votos'), /2 votos/);
       assert.equal(await cuantos(pa, '.salir-partida'), 0, 'terminada: ya no hay "Salir"');
       await capturas(pb, 'revelacion');
@@ -440,6 +463,51 @@ async function capturas(p, nombre) {
         await r.page.waitForSelector('#impostor-resultado');
         assert.match(await texto(r.page, '#impostor-resultado'), /Ganó el impostor.*dos jugadores/s);
       }
+    });
+
+    await paso('cierre 4, 3 y 2: "Ya votaste" de otra pestaña, votos a quien se fue y botones apagados al vencer', async () => {
+      for (const r of TODAS) if (await cuantos(r.page, '#btn-volver-juegos')) await clic(r.page, '#btn-volver-juegos');
+      for (const r of TODAS) await esperar(r.page, () => /Abiertas para unirse/.test(document.getElementById('pantalla-juegos').textContent));
+      DUR.votacion = 20000;
+      par = await armar(false, true);
+      await clic(pa, '#btn-arrancar');
+      await esperar(pa, () => !!document.getElementById('btn-imp-avanzar'));
+      await clic(pa, '#btn-imp-avanzar');
+      await esperar(pa, () => /Pistas/.test((document.getElementById('impostor-fase') || {}).textContent || '') && !document.getElementById('btn-imp-avanzar').disabled);
+      await clic(pa, '#btn-imp-avanzar');
+      for (const r of TODAS) await esperar(r.page, () => document.querySelectorAll('.voto-imp').length === 3);
+      const s = secretos.get(par);
+      const L = s.impostor !== UD ? UD : UC; // el que se va: un inocente
+      // 4: C votó a A desde "otra pestaña" (esta no se enteró) y acá toca a B → "Ya votaste", sin mostrar "Votaste a Beto"
+      C.desconectada = true;
+      assert.equal(rpc(UC, 'votar', { p: par, p_ronda: 1, p_persona: UA }).error, undefined);
+      await clic(pc, '.voto-imp[data-persona="' + UB + '"]');
+      await esperar(pc, () => /Ya votaste/.test(document.getElementById('impostor-estado').textContent));
+      assert.doesNotMatch(await texto(pc, '#impostor-estado'), /Votaste a/, '4: muestra un voto que no es el suyo');
+      C.desconectada = false;
+      await pc.evaluate(() => window.__estadoCanales('SUBSCRIBED'));
+      // 3: B vota al que después se va; sus botones vuelven y puede votar a otro
+      await clic(pb, '.voto-imp[data-persona="' + L + '"]');
+      await esperar(pb, () => /Votaste a/.test(document.getElementById('impostor-estado').textContent));
+      rpc(L, 'salir_partida', { p: par });
+      await esperar(pb, (x) => document.querySelectorAll('.voto-imp').length === 2 && !document.querySelector('.voto-imp[data-persona="' + x + '"]')
+        && [...document.querySelectorAll('.voto-imp')].every((b) => !b.disabled), L);
+      assert.doesNotMatch(await texto(pb, '#impostor-estado'), /Votaste a|Ya votaste/);
+      assert.equal(db.partidas.find((p) => p.id === par).estado, 'jugando');
+      await clic(pb, '.voto-imp[data-persona="' + UA + '"]');
+      await esperar(pb, () => /Votaste a Ana/.test(document.getElementById('impostor-estado').textContent));
+      // 2: falta A; se acorta el tiempo y A deja de recibir cambios: igual sus botones se apagan al vencer
+      const p = db.partidas.find((x) => x.id === par);
+      cambiar(p, { estado_juego: { ...p.estado_juego, limite_ms: Date.now() + 1200 } });
+      await esperar(pa, () => [...document.querySelectorAll('.voto-imp')].some((b) => !b.disabled));
+      A.desconectada = true;
+      await dormir(1800);
+      assert.equal(await pa.$$eval('.voto-imp', (xs) => xs.every((b) => b.disabled)), true, '2: vencido el tiempo los botones siguen prendidos');
+      A.desconectada = false;
+      await pa.evaluate(() => window.__estadoCanales('SUBSCRIBED'));
+      assert.equal(rpc(UA, 'avanzar_partida', { p: par, p_ronda: 1, p_fase: 'votacion' }).error, undefined); // vencido: cierra
+      for (const r of TODAS.filter((x) => x.uid !== L)) await r.page.waitForSelector('#impostor-resultado');
+      DUR.votacion = 4000;
     });
 
     for (const r of paginas) if (r.page.errores.length) { fallas++; console.log('FALLA errores de página:', r.page.errores); }

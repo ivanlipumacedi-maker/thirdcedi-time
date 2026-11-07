@@ -73,3 +73,10 @@ test('restante: nunca negativo y con el desfase del servidor', () => {
   assert.equal(I.restante(10000, 4000, 1000), 5000);
   assert.equal(I.restante(10000, 12000, 0), 0);
 });
+
+test('gane: el resultado se pinta desde quien mira (ítem 6)', () => {
+  assert.equal(I.gane('impostor', 'x', 'x'), true, 'el impostor que ganó lo ve en verde');
+  assert.equal(I.gane('impostor', 'x', 'y'), false);
+  assert.equal(I.gane('grupo', 'x', 'y'), true);
+  assert.equal(I.gane('grupo', 'x', 'x'), false, 'al impostor descubierto le toca perder');
+});

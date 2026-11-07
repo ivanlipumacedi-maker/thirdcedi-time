@@ -52,12 +52,17 @@
     return 'sigue';
   }
 
+  // ¿Ganó quien mira? gano: 'grupo' | 'impostor' (del estado final). El impostor gana cuando gana el impostor.
+  function gane(gano, impostor, yo) {
+    return (gano === 'impostor') === (yo === impostor);
+  }
+
   // Milisegundos que faltan para `limiteMs` (hora del servidor); el servidor va `desfase` ms adelante. Nunca negativo.
   function restante(limiteMs, ahoraCliente, desfase) {
     return Math.max(0, limiteMs - (ahoraCliente + desfase));
   }
 
-  const ImpostorLogica = { PALABRA_MS, PISTAS_MS, VOTACION_MS, repartir, conteo, resultado, sigue, restante };
+  const ImpostorLogica = { PALABRA_MS, PISTAS_MS, VOTACION_MS, repartir, conteo, resultado, sigue, restante, gane };
   if (typeof module !== 'undefined' && module.exports) module.exports = ImpostorLogica;
   else g.ImpostorLogica = ImpostorLogica;
 })(typeof window !== 'undefined' ? window : globalThis);

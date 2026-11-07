@@ -27,10 +27,12 @@
     let datos = null;
     let cerrado = false;
     let tic = null, tAvance = null, claveAvance = null, intentos = 0;
+    let pendiente = false;          // pedido automático programado o en vuelo (si se agotó, el resync lo rearma)
     let avanzando = false;
     let palabra = null;             // la mía (solo la mía)
     let pidiendo = false, tPalabra = null, intentosPalabra = 0;
     let miVoto = null;              // a quién voté desde acá
+    let votoAjeno = false;          // "Ya votaste": voté desde otra pestaña y este estado todavía no lo muestra
     let votando = false;
     let elReloj = null, elBarra = null;
 
@@ -42,7 +44,7 @@
     const enJuego = () => datos && datos.partida.estado === 'jugando' && DURACION[estado().fase] != null;
     const restante = () => L.restante(Number(estado().limite_ms) || 0, Date.now(), api.desfase());
     const nombre = (id) => api.perfil(id).nombre + (id === yo() ? ' (vos)' : '');
-    const yaVote = () => miVoto != null || (estado().votaron || []).includes(yo());
+    const yaVote = () => miVoto != null || votoAjeno || (estado().votaron || []).includes(yo());
 
     // ---------- Mi palabra ----------
     function pedirPalabra() {
@@ -65,20 +67,27 @@
       const s = Math.ceil(ms / 1000);
       elReloj.textContent = ms > 0 ? (s >= 60 ? Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') : s + ' s') : 'Pasando…';
       if (elBarra) elBarra.style.width = Math.max(0, Math.min(100, (ms / total) * 100)) + '%';
+      // vencida la votación no se puede votar más, aunque no haya llegado otro cambio que repinte
+      if (estado().fase === 'votacion' && ms <= 0) cont.querySelectorAll('.voto-imp').forEach((b) => { b.disabled = true; });
+    }
+    function reintentar(clave, fase, ms) {
+      if (intentos++ < 6) tAvance = setTimeout(() => pedirAvance(clave, fase), ms);
+      else pendiente = false;
     }
     function pedirAvance(clave, fase) {
       if (cerrado || claveAvance !== clave) return;
       api.avanzar(1, fase).then((r) => {
         if (cerrado || claveAvance !== clave) return;
-        if (r && r.error && intentos++ < 6) tAvance = setTimeout(() => pedirAvance(clave, fase), 1000);
-      }, () => { if (!cerrado && claveAvance === clave && intentos++ < 6) tAvance = setTimeout(() => pedirAvance(clave, fase), 1500); });
+        if (r && r.error) reintentar(clave, fase, 1000); else pendiente = false;
+      }, () => { if (!cerrado && claveAvance === clave) reintentar(clave, fase, 1500); });
     }
     function programar() {
       const e = estado();
       const clave = enJuego() && soyActivo() ? (e.ronda || 1) + ':' + e.fase : null;
-      if (clave === claveAvance) return;
-      clearTimeout(tAvance); claveAvance = clave; intentos = 0;
+      if (clave === claveAvance && (pendiente || !clave)) return;
+      clearTimeout(tAvance); claveAvance = clave; intentos = 0; pendiente = false;
       if (!clave) return;
+      pendiente = true;
       tAvance = setTimeout(() => pedirAvance(clave, e.fase), restante() + 250 + Math.floor(Math.random() * 500));
     }
 
@@ -98,7 +107,10 @@
       const { error } = await api.votar(1, persona).catch((x) => ({ error: x }));
       votando = false;
       if (cerrado) return;
-      if (error && !/Ya votaste/.test(error.message || '')) {
+      if (error && /Ya votaste/.test(error.message || '')) {
+        // votó desde otra pestaña: no se sabe a quién, así que no se muestra "Votaste a …"
+        miVoto = null; votoAjeno = true;
+      } else if (error) {
         miVoto = null;
         g.App.toast(/Se terminó el tiempo/.test(error.message || '') ? 'Se terminó el tiempo para votar.' : 'No pudimos mandar tu voto. Probá de nuevo.');
       }
@@ -188,7 +200,8 @@
       const votos = e.votos || {};
       const filas = datos.jugadores.slice().sort((a, b) => (conteo[b.persona] || 0) - (conteo[a.persona] || 0));
       return [
-        h('div', { class: 'trivia-resultado resultado-impostor ' + (grupo ? 'bien' : 'mal'), id: 'impostor-resultado', role: 'status' },
+        // el color, desde quien mira: al impostor que ganó le toca verde
+        h('div', { class: 'trivia-resultado resultado-impostor ' + (L.gane(e.gano, imp, yo()) ? 'bien' : 'mal'), id: 'impostor-resultado', role: 'status' },
           h('strong', null, grupo ? '¡Ganó el grupo!' : '¡Ganó el impostor!'), h('br'), motivo),
         imp ? h('div', { class: 'carta-trivia carta-impostor', id: 'impostor-era' },
           h('div', { class: 'carta-meta' }, h('span', null, 'El impostor era')),
@@ -212,7 +225,8 @@
     function pintar() {
       if (cerrado || !datos) return;
       const e = estado();
-      const foco = document.activeElement && cont.contains(document.activeElement) ? document.activeElement.id || null : null;
+      const act = document.activeElement && cont.contains(document.activeElement) ? document.activeElement : null;
+      const foco = act ? (act.id ? '#' + act.id : (act.dataset.persona ? '[data-persona="' + act.dataset.persona + '"]' : null)) : null;
       elReloj = null; elBarra = null;
       let hijos;
       if (e.fase === 'final' || datos.partida.estado === 'terminada') hijos = vistaFinal();
@@ -222,16 +236,24 @@
       else hijos = [h('p', { class: 'vacio' }, 'Arrancando…')];
       cont.replaceChildren(...hijos.filter(Boolean));
       actualizarReloj();
-      if (foco) { const el = document.getElementById(foco); if (el && !el.disabled) el.focus({ preventScroll: true }); }
+      if (foco) { const el = cont.querySelector(foco); if (el && !el.disabled) el.focus({ preventScroll: true }); }
     }
 
     function actualizar(d) {
       if (cerrado) return;
       datos = d;
+      const e = estado();
+      if (votoAjeno && (e.votaron || []).includes(yo())) votoAjeno = false; // ya lo muestra el estado
+      // mi voto era para alguien que se fue: la base lo descartó (18) y puedo votar a otro
+      if (miVoto && !votando && e.fase === 'votacion' && datos.jugadores.some((j) => j.persona === miVoto && j.se_fue)) {
+        miVoto = null;
+        g.App.toast('Tu voto era para alguien que se fue: votá de nuevo.');
+      }
       pedirPalabra();
       pintar();
       programar();
-      if (!tic) tic = setInterval(actualizarReloj, 250);
+      const fin = e.fase === 'final' || datos.partida.estado === 'terminada';
+      if (fin) { clearInterval(tic); tic = null; } else if (!tic) tic = setInterval(actualizarReloj, 250);
     }
     function cerrar() {
       cerrado = true;
