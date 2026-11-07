@@ -1,12 +1,12 @@
 // Genera el sprite de íconos de la app y lo escribe dentro de index.html, entre <!-- iconos:inicio --> e <!-- iconos:fin -->.
 // Los íconos son de Phosphor Icons (https://phosphoricons.com), licencia MIT, Copyright (c) 2023 Phosphor Icons.
-// Se usa un solo peso para toda la app: regular. La app no carga nada de node_modules ni de un CDN: el sprite queda
+// Se usa un solo peso para toda la app: fill (relleno; antes regular). La app no carga nada de node_modules ni de un CDN: el sprite queda
 // versionado en index.html y se usa con <svg class="ico"><use href="#i-<nombre>"></use></svg> (App.icono en app.js).
 // Uso: `npm ci` en dev/tools y después `node dev/tools/iconos-sprite.js`. Para sumar un ícono, agregalo a ICONOS.
 const fs = require('fs');
 const path = require('path');
 
-const PESO = 'regular';
+const PESO = 'fill';
 // nombre en la app -> nombre en Phosphor
 const ICONOS = {
   // tipos de actividad
@@ -26,7 +26,8 @@ const ICONOS = {
 const raiz = path.join(__dirname, '..', '..');
 const dir = path.join(__dirname, 'node_modules', '@phosphor-icons', 'core', 'assets', PESO);
 const simbolos = Object.entries(ICONOS).map(([id, ph]) => {
-  const svg = fs.readFileSync(path.join(dir, ph + '.svg'), 'utf8');
+  // los archivos de los pesos que no son regular llevan el sufijo: assets/fill/<nombre>-fill.svg
+  const svg = fs.readFileSync(path.join(dir, ph + (PESO === 'regular' ? '' : '-' + PESO) + '.svg'), 'utf8');
   const vb = /viewBox="([^"]+)"/.exec(svg)[1];
   const cuerpo = svg.replace(/^[\s\S]*?<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '').trim();
   return `<symbol id="i-${id}" viewBox="${vb}">${cuerpo}</symbol>`;
