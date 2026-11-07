@@ -140,7 +140,19 @@ input:focus-visible, button:focus-visible, .btn-sec:focus-within { outline: 2px 
 .fila-titulo { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
 .fila-titulo h1 { margin: 0; }
 .btn-chico { margin-top: 0; padding: .55rem .9rem; white-space: nowrap; }
-.chips { display: flex; flex-wrap: wrap; gap: .4rem; padding: .75rem 0; }
+.chips {
+  /* teléfono: una sola fila que se desliza con el dedo; el borde derecho se desvanece para que se note que hay más */
+  display: flex; gap: .4rem; padding: .75rem 1.25rem .75rem 0; margin-right: -1rem;
+  overflow-x: auto; scrollbar-width: none; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent);
+          mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent);
+}
+.chips::-webkit-scrollbar { display: none; }
+.chips .chip { scroll-snap-align: start; }
+/* con mouse no hay deslizamiento cómodo: los chips bajan de línea (así se ven After office y Otra) */
+@media (hover: hover) and (pointer: fine) {
+  .chips { flex-wrap: wrap; overflow: visible; padding-right: 0; margin-right: 0; -webkit-mask-image: none; mask-image: none; }
+}
 .chip {
   flex: none; padding: .4rem .8rem; font: inherit; font-size: .85rem; font-weight: 600; cursor: pointer;
   background: var(--bg-alt); color: var(--text); border: 1px solid var(--border); border-radius: 999px;
