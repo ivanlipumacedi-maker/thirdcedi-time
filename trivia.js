@@ -29,6 +29,7 @@
     let tAvance = null;             // pedido automático de avanzar al vencer el tiempo
     let claveAvance = null;         // 'ronda:fase' para la que está programado
     let intentos = 0;
+    let pendiente = false;          // hay un pedido automático programado o en vuelo (si se agotó, el resync lo rearma)
     let avanzando = false;          // pedido manual del creador en vuelo
     const elegidas = new Map();     // ronda -> opción tocada acá (antes de que llegue la confirmación)
     let elReloj = null, elBarra = null;
@@ -53,23 +54,30 @@
       if (elBarra) elBarra.style.width = Math.max(0, Math.min(100, (ms / total) * 100)) + '%';
       if (e.fase === 'pregunta' && ms <= 0) cont.querySelectorAll('.op-trivia').forEach((b) => { b.disabled = true; });
     }
+    function reintentar(clave, ronda, fase, ms) {
+      if (intentos++ < 6) tAvance = setTimeout(() => pedirAvance(clave, ronda, fase), ms);
+      else pendiente = false; // agotado: el próximo actualizar (resync, otro cambio) lo vuelve a programar
+    }
     function pedirAvance(clave, ronda, fase) {
       if (cerrado || claveAvance !== clave) return;
       api.avanzar(ronda, fase).then((r) => {
         if (cerrado || claveAvance !== clave) return;
         // "Todavía no": este reloj iba adelantado o no llegó el último cambio. Se reintenta un par de veces.
-        if (r && r.error && intentos++ < 6) tAvance = setTimeout(() => pedirAvance(clave, ronda, fase), 1000);
-      }, () => { if (!cerrado && claveAvance === clave && intentos++ < 6) tAvance = setTimeout(() => pedirAvance(clave, ronda, fase), 1500); });
+        if (r && r.error) reintentar(clave, ronda, fase, 1000); else pendiente = false;
+      }, () => { if (!cerrado && claveAvance === clave) reintentar(clave, ronda, fase, 1500); });
     }
     function programar() {
       const e = estado();
       const vivo = datos.partida.estado === 'jugando' && (e.fase === 'pregunta' || e.fase === 'revelada') && soyActivo();
       const clave = vivo ? e.ronda + ':' + e.fase : null;
-      if (clave === claveAvance) return;
-      clearTimeout(tAvance); claveAvance = clave; intentos = 0;
+      if (clave === claveAvance && (pendiente || !clave)) return;
+      clearTimeout(tAvance); claveAvance = clave; intentos = 0; pendiente = false;
       if (!clave) return;
-      // un poco después del límite y no todos a la vez (la base se queda con el primero; el resto no hace nada)
-      tAvance = setTimeout(() => pedirAvance(clave, e.ronda, e.fase), restante() + 250 + Math.floor(Math.random() * 500));
+      pendiente = true;
+      // un poco después del límite (en 'pregunta', también después de la gracia de 1 s en la que la base todavía
+      // acepta respuestas que vienen en camino) y no todos a la vez (la base se queda con el primero)
+      const espera = restante() + (e.fase === 'pregunta' ? T.GRACIA_MS : 0) + 250 + Math.floor(Math.random() * 500);
+      tAvance = setTimeout(() => pedirAvance(clave, e.ronda, e.fase), espera);
     }
 
     // ---------- Acciones ----------
@@ -79,9 +87,10 @@
       pintar();
       const { error } = await api.responder(ronda, op).catch((e) => ({ error: e }));
       if (cerrado) return;
-      if (error && !/Ya respondiste/.test(error.message || '')) {
+      const aviso = error ? T.textoErrorRespuesta(error.message) : null;
+      if (aviso) {
         elegidas.delete(ronda);
-        g.App.toast(/Se terminó el tiempo/.test(error.message || '') ? 'Se terminó el tiempo: esta no suma.' : 'No pudimos mandar tu respuesta. Probá de nuevo.');
+        g.App.toast(aviso);
         pintar();
       }
     }
@@ -159,11 +168,10 @@
 
     function vistaFinal() {
       const filas = T.ranking(datos.jugadores.map((j) => ({ persona: j.persona, puntos: j.puntos })));
-      const mio = filas.find((f) => f.persona === yo());
+      const puesto = T.textoPuesto(filas, yo());
       return [
         h('h2', { class: 'sub titulo-final' }, '🏆 Ranking final'),
-        mio && filas.length > 1 ? h('p', { class: 'ayuda', id: 'mi-puesto' }, mio.puesto === 1 ? '¡Ganaste!' : 'Terminaste ' + mio.puesto + '°.') : null,
-        mio && filas.length === 1 ? h('p', { class: 'ayuda', id: 'mi-puesto' }, 'Hiciste ' + mio.puntos.toLocaleString('es-AR') + ' puntos.') : null,
+        puesto ? h('p', { class: 'ayuda', id: 'mi-puesto' }, puesto) : null,
         rankingLista(true),
         h('button', { type: 'button', id: 'btn-volver-juegos', class: 'btn-primario btn-ancho', on: { click: api.volver } }, 'Volver a Juegos'),
       ];
@@ -191,7 +199,9 @@
       datos = d;
       pintar();
       programar();
-      if (!tic) tic = setInterval(actualizarReloj, 250);
+      // en el ranking final no hay reloj que mover
+      const fin = estado().fase === 'final' || datos.partida.estado === 'terminada';
+      if (fin) { clearInterval(tic); tic = null; } else if (!tic) tic = setInterval(actualizarReloj, 250);
     }
     function cerrar() {
       cerrado = true;

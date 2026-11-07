@@ -90,3 +90,58 @@ test('constantes del juego', () => {
   assert.equal(T.PREGUNTAS_POR_PARTIDA, 10);
   assert.equal(T.PREGUNTA_MS, 15000);
 });
+
+test('preguntas-sql: al sacar preguntas del banco no borra las de una partida en juego (M5)', () => {
+  const G = require('../tools/preguntas-sql.js');
+  const s = G.sql([{ id: 'x-001', cat: 'general', dif: 1, p: 'x', ops: ['a', 'b', 'c', 'd'], ok: 0 }]);
+  const borrar = s.split('\n').find((l) => /^delete from public\.trivia_preguntas/.test(l));
+  assert.ok(borrar, 'falta el delete');
+  assert.match(borrar, /trivia_secretos/);
+  assert.match(borrar, /estado = 'jugando'/);
+});
+
+test('elegirSinRepetir: primero las que nadie vio, después las vistas hace más tiempo, con las cuotas 4/4/2', () => {
+  const banco = [];
+  for (const [d, n] of [[1, 6], [2, 6], [3, 3]]) for (let i = 0; i < n; i++) banco.push({ id: d + '-' + i, dif: d });
+  // vistas: todas las de dificultad 1 menos dos; de la 3, todas (la 3-2 es la más vieja)
+  const vistas = { '1-0': 50, '1-1': 10, '1-2': 40, '1-3': 30, '3-0': 90, '3-1': 80, '3-2': 5 };
+  for (const s of [1, 2, 3, 99]) {
+    const r = T.elegirSinRepetir(banco, 10, vistas, s);
+    const ids = r.map((q) => q.id);
+    assert.equal(r.length, 10);
+    assert.equal(new Set(ids).size, 10);
+    const de = (d) => ids.filter((x) => x.startsWith(d + '-'));
+    assert.equal(de(1).length, 4); assert.equal(de(2).length, 4); assert.equal(de(3).length, 2);
+    // dificultad 1: las dos sin ver (1-4, 1-5) y las dos vistas hace más tiempo (1-1 a los 10, 1-3 a los 30)
+    assert.deepEqual(de(1).sort(), ['1-1', '1-3', '1-4', '1-5']);
+    // dificultad 3: todas vistas → las dos más viejas (3-2 y 3-1)
+    assert.deepEqual(de(3).sort(), ['3-1', '3-2']);
+  }
+});
+
+test('elegirSinRepetir: sin historial es como elegir (sin repetir y con cuotas); no modifica el banco', () => {
+  const antes = Preguntas.map((q) => q.id).join();
+  const r = T.elegirSinRepetir(Preguntas, 10, {}, 7);
+  assert.equal(new Set(r.map((q) => q.id)).size, 10);
+  assert.equal(Preguntas.map((q) => q.id).join(), antes);
+});
+
+test('textoErrorRespuesta: fuera de tiempo o ya revelada → "esta no suma"; "Ya respondiste" no avisa nada (M3)', () => {
+  assert.equal(T.GRACIA_MS, 1000);
+  assert.equal(T.textoErrorRespuesta('Se terminó el tiempo'), 'Se terminó el tiempo: esta no suma.');
+  assert.equal(T.textoErrorRespuesta('No hay una pregunta abierta'), 'Se terminó el tiempo: esta no suma.');
+  assert.equal(T.textoErrorRespuesta('Ya respondiste'), null);
+  assert.equal(T.textoErrorRespuesta('Failed to fetch'), 'No pudimos mandar tu respuesta. Probá de nuevo.');
+  assert.equal(T.textoErrorRespuesta(''), 'No pudimos mandar tu respuesta. Probá de nuevo.');
+});
+
+test('textoPuesto: "¡Ganaste!" solo si ganaste solo; empatado en el primero lo dice (M9)', () => {
+  const r = T.ranking([{ persona: 'a', puntos: 900 }, { persona: 'b', puntos: 900 }, { persona: 'c', puntos: 100 }]);
+  assert.equal(T.textoPuesto(r, 'a'), '¡Empataste el primer puesto!');
+  assert.equal(T.textoPuesto(r, 'c'), 'Terminaste 3°.');
+  const r2 = T.ranking([{ persona: 'a', puntos: 900 }, { persona: 'b', puntos: 800 }]);
+  assert.equal(T.textoPuesto(r2, 'a'), '¡Ganaste!');
+  assert.equal(T.textoPuesto(r2, 'b'), 'Terminaste 2°.');
+  assert.equal(T.textoPuesto([{ persona: 'a', puntos: 1234, puesto: 1 }], 'a'), 'Hiciste 1.234 puntos.');
+  assert.equal(T.textoPuesto(r2, 'z'), null);
+});

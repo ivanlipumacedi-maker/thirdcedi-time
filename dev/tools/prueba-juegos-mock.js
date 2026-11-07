@@ -7,6 +7,10 @@
 // espera en vivo, chat de la partida, arrancar, responder, revelación automática al responder todos, avance solo
 // al vencer el tiempo (sin el creador), que a la ventana no le llega "ok" antes de revelar, ranking final,
 // cancelar en la página (sin confirm()), resync al reconectar y que con la pantalla cerrada no se lee nada.
+// Cierre (Task 10): la lista de quien no juega se entera por broadcast ('juegos-lista') cuando una partida arranca o
+// se cancela (M1); el avance automático agotado se rearma en el resync (M2); no se avanza antes de la gracia de 1 s
+// (M3); el foco de teclado sigue en su botón tras un repintado (M4); "en curso" vence (M6) y la lista lee solo los
+// jugadores de las partidas que muestra (M7).
 // Saca capturas (claro y oscuro, 390x844) en dev/shots/juegos-*.png.
 // Uso: servir la raíz con `npx --yes http-server -p 8080 -c-1` y correr `node dev/tools/prueba-juegos-mock.js`
 // (URL_APP=http://127.0.0.1:8081 si se sirve en otro puerto).
@@ -37,6 +41,9 @@ const cuenta = {};
 const contar = (uid, k) => { const c = { [UA]: 'A', [UB]: 'B', [UC]: 'C' }[uid] + ':' + k; cuenta[c] = (cuenta[c] || 0) + 1; };
 const n = (k) => cuenta[k] || 0;
 let fallarPartidas = 0;
+let fallarAvanzar = 0;        // cuántos avanzar_partida fallan, de cualquiera (M2)
+let jugadoresSinFiltro = 0;   // lecturas de jugadores sin filtrar por partida (M7)
+const momentos = [];          // { clave: 'ronda:fase', t, limiteAntes } de cada transición (M3)
 let uuidN = 0;
 const nuevoId = () => 'dddddddd-dddd-4ddd-8ddd-' + String(++uuidN).padStart(12, '0');
 const activo = (uid, pid) => db.jugadores.some((j) => j.partida === pid && j.persona === uid && !j.se_fue);
@@ -69,7 +76,16 @@ function estadoPregunta(pid, ronda) {
   const t = Date.now();
   return { fase: 'pregunta', ronda, total: qs.length, pregunta: { cat: q.cat, dif: q.dif, p: q.p, ops: q.ops.slice() }, inicio_ms: t, limite_ms: t + PREG_MS, ahora_ms: t, respondieron: [] };
 }
-function actualizarPartida(p, cambios) { Object.assign(p, cambios); transiciones.push(p.estado_juego.ronda + ':' + p.estado_juego.fase); emitir('partidas', 'UPDATE', p); }
+function actualizarPartida(p, cambios) {
+  const limiteAntes = p.estado_juego && p.estado_juego.limite_ms;
+  Object.assign(p, cambios); transiciones.push(p.estado_juego.ronda + ':' + p.estado_juego.fase);
+  momentos.push({ clave: p.estado_juego.ronda + ':' + p.estado_juego.fase, t: Date.now(), limiteAntes });
+  emitir('partidas', 'UPDATE', p);
+}
+// como juegos_avisar_lista (18): broadcast privado con solo el id, a todos los miembros
+function avisarLista(id) {
+  for (const p of paginas) if (!p.desconectada) p.page.evaluate((x) => window.__broadcast('juegos-lista', 'cambio', { id: x }), id).catch(() => {});
+}
 function revelar(p) {
   const e = p.estado_juego;
   const ok = secretos.get(p.id)[e.ronda - 1].ok;
@@ -113,7 +129,7 @@ function rpc(uid, fn, a) {
   if (!activo(uid, p.id)) return err('No estás en esta partida', '42501');
   if (fn === 'salir_partida') {
     if (p.estado === 'espera') {
-      if (p.creador === uid) actualizarPartida(p, { estado: 'terminada', estado_juego: { fase: 'cancelada', ahora_ms: Date.now() } });
+      if (p.creador === uid) { actualizarPartida(p, { estado: 'terminada', estado_juego: { fase: 'cancelada', ahora_ms: Date.now() } }); avisarLista(p.id); }
       const j = db.jugadores.find((x) => x.partida === p.id && x.persona === uid);
       db.jugadores = db.jugadores.filter((x) => x !== j); emitir('jugadores', 'DELETE', j);
       return { data: null };
@@ -125,6 +141,7 @@ function rpc(uid, fn, a) {
   }
   const e = p.estado_juego;
   if (fn === 'avanzar_partida') {
+    if (fallarAvanzar > 0) { fallarAvanzar--; return err('sin red', 'XX000'); }
     if (a.p_ronda != null && (e.ronda || 0) !== a.p_ronda) return { data: e };
     if (a.p_fase != null && (e.fase || p.estado) !== a.p_fase) return { data: e };
     if (p.estado === 'terminada') return { data: e };
@@ -132,6 +149,7 @@ function rpc(uid, fn, a) {
       if (p.creador !== uid) return err('Solo quien armó la partida la puede arrancar');
       secretos.set(p.id, T.elegir(Preguntas, T.PREGUNTAS_POR_PARTIDA, Date.now() % 100000));
       actualizarPartida(p, { estado: 'jugando', estado_juego: estadoPregunta(p.id, 1) });
+      avisarLista(p.id);
       return { data: p.estado_juego };
     }
     const vencido = Date.now() >= e.limite_ms;
@@ -169,6 +187,7 @@ function consulta(uid, s) {
     return { data: s.single ? f : [f] };
   }
   if (s.action !== 'select') return err('solo por RPC', '42501'); // como la base: nada se escribe directo
+  if (s.table === 'jugadores' && !s.filtros.some((x) => x[1] === 'partida')) jugadoresSinFiltro++;
   let r = (db[s.table] || []).filter((f) => visible[s.table](uid, f) && cumple(f, s.filtros));
   if (s.ordenes.length) r = [...r].sort((a, b) => { for (const o of s.ordenes) { if (a[o.col] !== b[o.col]) return (a[o.col] < b[o.col] ? -1 : 1) * (o.asc ? 1 : -1); } return 0; });
   if (s.limite) r = r.slice(0, s.limite);
@@ -202,6 +221,7 @@ const STUB = `
   const todos = [];
   const pasa = (filtro, fila) => { if (!filtro) return true; const m = /^(\\w+)=eq\\.(.+)$/.exec(filtro); return !!m && String(fila[m[1]]) === m[2]; };
   window.__emitir = (tabla, evento, fila) => canales.forEach((c) => c.cbs.filter((x) => x.tabla === tabla && (x.evento === '*' || x.evento === evento) && (evento === 'DELETE' ? !x.filtro : pasa(x.filtro, fila))).forEach((x) => x.fn({ eventType: evento, new: evento === 'DELETE' ? {} : fila, old: evento === 'DELETE' ? fila : {} })));
+  window.__broadcast = (topic, evento, payload) => canales.forEach((c) => c.topic === topic && c.cbs.filter((x) => x.broadcast === evento).forEach((x) => x.fn({ event: evento, payload })));
   window.__estadoCanales = (st) => canales.forEach((c) => c.estado && c.estado(st));
   window.__estadoTodos = (st) => todos.forEach((c) => c.estado && c.estado(st));
   window.__canales = () => [...canales].map((c) => c.topic);
@@ -211,7 +231,7 @@ const STUB = `
       // como supabase-js: rpc() devuelve un thenable (PostgrestBuilder) sin .catch ni .finally
       rpc(fn, args) { const pr = window.__rpc(fn, JSON.stringify(args || {})).then((r) => { const x = JSON.parse(r); return { data: x.data === undefined ? null : x.data, error: x.error || null }; }); return { then: (a, b) => pr.then(a, b) }; },
       channel(topic) {
-        const c = { topic, cbs: [], on(_t, f, fn) { c.cbs.push({ tabla: f.table, evento: f.event, filtro: f.filter, fn }); return c; }, subscribe(cb) { c.estado = cb; canales.add(c); todos.push(c); if (cb) setTimeout(() => cb('SUBSCRIBED'), 0); return c; } };
+        const c = { topic, cbs: [], on(t, f, fn) { c.cbs.push(t === 'broadcast' ? { broadcast: f.event, fn } : { tabla: f.table, evento: f.event, filtro: f.filter, fn }); return c; }, subscribe(cb) { c.estado = cb; canales.add(c); todos.push(c); if (cb) setTimeout(() => cb('SUBSCRIBED'), 0); return c; } };
         return c;
       },
       removeChannel(c) { canales.delete(c); },
@@ -305,11 +325,13 @@ async function capturas(p, nombre) {
       await pb.waitForSelector('#btn-unirme');
       assert.equal(await cuantos(pb, '#chat-par'), 0, 'el chat es solo para jugadores');
       assert.match(await texto(pb, '#sala-jugadores'), /Ana Pérez/);
+      await pa.focus('#btn-arrancar');
       await clic(pb, '#btn-unirme');
       await pb.waitForSelector('#esperando-creador');
       assert.equal(await cuantos(pb, '#chat-par'), 1);
       await esperar(pa, () => /Beto Gómez/.test(document.getElementById('sala-jugadores').textContent));
       assert.equal(await texto(pa, '#btn-arrancar'), 'Arrancar');
+      assert.equal(await pa.evaluate(() => document.activeElement && document.activeElement.id), 'btn-arrancar', 'M4: el repintado le sacó el foco a "Arrancar"');
     });
 
     await paso('el chat de la partida llega en vivo a la otra ventana', async () => {
@@ -336,10 +358,12 @@ async function capturas(p, nombre) {
     });
 
     await paso('B responde: se marca su opción y espera a A; al responder A se revela sola en las dos', async () => {
+      await pa.focus('.op-trivia[data-op="3"]');
       await clic(pb, '.op-trivia[data-op="1"]');
       await esperar(pb, () => /Respondiste/.test(document.getElementById('trivia-estado').textContent));
       assert.equal(await cuantos(pb, '.op-trivia.elegida'), 1);
       await esperar(pa, () => /1 de 2 ya respondieron/.test(document.getElementById('trivia-estado').textContent));
+      assert.equal(await pa.evaluate(() => document.activeElement && document.activeElement.dataset.op), '3', 'M4: el repintado le sacó el foco a la opción');
       const ok = secretos.get(par)[0].ok;
       await clic(pa, '.op-trivia[data-op="' + ok + '"]');
       for (const p of [pa, pb]) await p.waitForSelector('.op-trivia.correcta');
@@ -359,6 +383,8 @@ async function capturas(p, nombre) {
       await pb.waitForFunction(() => /Pregunta 3 de 10/.test((document.getElementById('trivia-ronda') || {}).textContent || ''), { timeout: PREG_MS + REV_MS + 6000 });
       const hechas = transiciones.slice(desde);
       assert.deepEqual(hechas.slice(0, 2), ['2:revelada', '3:pregunta'], 'una sola transición por fase: ' + hechas.join(', '));
+      const rev = momentos.find((m) => m.clave === '2:revelada');
+      assert.ok(rev.t >= rev.limiteAntes + GRACIA_MS, 'M3: se reveló ' + (rev.t - rev.limiteAntes) + ' ms después del límite, antes de la gracia');
       A.desconectada = false;
       await pa.evaluate(() => window.__estadoCanales('SUBSCRIBED')); // A reconecta y se pone al día
       await esperar(pa, () => /Pregunta 3 de 10/.test(document.getElementById('trivia-ronda').textContent));
@@ -374,6 +400,22 @@ async function capturas(p, nombre) {
       assert.equal(n('B:rpc:responder'), antes);
       await clic(pa, '#btn-revelar');
       await pb.waitForSelector('.op-trivia.correcta');
+    });
+
+    await paso('M2: si el avance automático se agota (6 reintentos), el resync lo vuelve a pedir', async () => {
+      A.desconectada = true;
+      fallarAvanzar = 100;
+      const antes = n('B:rpc:avanzar_partida');
+      for (let i = 0; i < 80 && n('B:rpc:avanzar_partida') - antes < 7; i++) await dormir(200);
+      assert.equal(n('B:rpc:avanzar_partida') - antes, 7, 'esperaba 1 pedido + 6 reintentos');
+      await dormir(1600);
+      assert.equal(n('B:rpc:avanzar_partida') - antes, 7, 'siguió pidiendo después de agotarse');
+      fallarAvanzar = 0;
+      await pb.evaluate(() => window.__estadoCanales('SUBSCRIBED'));
+      await esperar(pb, () => /Pregunta 4 de 10/.test((document.getElementById('trivia-ronda') || {}).textContent || ''));
+      A.desconectada = false;
+      await pa.evaluate(() => window.__estadoCanales('SUBSCRIBED'));
+      await esperar(pa, () => /Pregunta 4 de 10/.test(document.getElementById('trivia-ronda').textContent));
     });
 
     await paso('el creador avanza hasta el final y los dos ven el ranking final', async () => {
@@ -400,6 +442,20 @@ async function capturas(p, nombre) {
       await esperar(pb, () => /Terminadas/.test(document.getElementById('pantalla-juegos').textContent));
       await clic(pa, '#btn-volver-juegos');
       await esperar(pa, () => /Abiertas para unirse/.test(document.getElementById('pantalla-juegos').textContent));
+    });
+
+    await paso('M6: "Tus partidas en curso" no muestra una partida trabada de hace horas', async () => {
+      const t = Date.now();
+      const vieja = { id: nuevoId(), juego: 'trivia', creador: UB, estado: 'jugando', creado: new Date(t - 5 * 3600e3).toISOString(),
+        estado_juego: { fase: 'pregunta', ronda: 1, total: 10, pregunta: { cat: 'general', dif: 1, p: 'zz', ops: ['a', 'b', 'c', 'd'] }, inicio_ms: t - 3 * 3600e3, limite_ms: t - 3 * 3600e3 + 3000, ahora_ms: t - 3 * 3600e3, respondieron: [] } };
+      const nueva = { ...vieja, id: nuevoId(), creado: iso(), estado_juego: { ...vieja.estado_juego, inicio_ms: t, limite_ms: t + 600000, ahora_ms: t } };
+      for (const p of [vieja, nueva]) { db.partidas.push(p); db.jugadores.push({ partida: p.id, persona: UB, puntos: 0, se_fue: false }); }
+      emitir('partidas', 'INSERT', nueva);
+      await esperar(pb, (id) => !!document.querySelector('#lista-en-curso .tarjeta-partida[data-id="' + id + '"]'), nueva.id);
+      assert.equal(await cuantos(pb, '.tarjeta-partida[data-id="' + vieja.id + '"]'), 0, 'se ve la partida trabada');
+      for (const p of [vieja, nueva]) { p.estado = 'terminada'; p.estado_juego = { fase: 'cancelada', ahora_ms: t }; }
+      emitir('partidas', 'UPDATE', nueva);
+      await esperar(pb, (id) => !document.querySelector('.tarjeta-partida[data-id="' + id + '"]'), nueva.id);
     });
 
     await paso('cancelar se confirma en la página: "No" no hace nada y "Sí" la cancela para todos', async () => {
@@ -449,6 +505,22 @@ async function capturas(p, nombre) {
       await clic(pb, '#btn-salir-si');
       await esperar(pb, () => /Abiertas para unirse/.test(document.getElementById('pantalla-juegos').textContent));
       assert.equal(db.jugadores.some((j) => j.partida === id3 && j.persona === UB), false);
+    });
+
+    await paso('M1: quien no juega ve salir de "Abiertas" la partida que arrancó o se canceló (broadcast)', async () => {
+      await esperar(pb, () => /Abiertas para unirse/.test(document.getElementById('pantalla-juegos').textContent));
+      for (const accion of ['arrancar', 'cancelar']) {
+        const id = rpc(UC, 'crear_partida', { p_juego: 'trivia' }).data;
+        await esperar(pb, (x) => !!document.querySelector('#lista-abiertas .tarjeta-partida[data-id="' + x + '"]'), id);
+        if (accion === 'arrancar') rpc(UC, 'avanzar_partida', { p: id, p_ronda: 0, p_fase: 'espera' });
+        else rpc(UC, 'salir_partida', { p: id });
+        await esperar(pb, (x) => !document.querySelector('.tarjeta-partida[data-id="' + x + '"]'), id);
+        if (accion === 'arrancar') rpc(UC, 'salir_partida', { p: id });
+      }
+    });
+
+    await paso('M7: la lista lee solo los jugadores de las partidas que muestra', async () => {
+      assert.equal(jugadoresSinFiltro, 0, jugadoresSinFiltro + ' lecturas de jugadores sin filtrar por partida');
     });
 
     await paso('con la pantalla cerrada (sin sesión) ni un SUBSCRIBED tardío lee partidas', async () => {

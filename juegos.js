@@ -1,6 +1,8 @@
 // Pantalla Juegos: lista de partidas (en curso, abiertas, terminadas), "Nueva partida", sala de espera con los
 // jugadores en vivo, chat de la partida ('par:<uuid>') y el juego (Trivia en trivia.js; El Impostor en impostor.js).
 // Todo se escribe por RPC (dev/supabase/12-juegos.sql); lo que se ve llega por Realtime con resync en SUBSCRIBED.
+// La lista además escucha el canal privado 'juegos-lista' (18): la base avisa con el id cuando una partida arranca o
+// se cancela, porque a quien no juega la RLS ya no le manda ese cambio por postgres_changes.
 (function (g) {
   const JUEGOS = {
     trivia: { emoji: '🧠', nombre: 'Trivia', desc: '10 preguntas, 15 segundos cada una. Se puede jugar solo.', minimo: 1 },
@@ -8,6 +10,7 @@
   };
   const VIGENCIA_ESPERA = 12 * 3600e3;   // una partida abierta más vieja que esto ya no se ofrece para unirse
   const VIGENCIA_TERMINADA = 24 * 3600e3;
+  const VIGENCIA_EN_CURSO = 2 * 3600e3;   // una partida "en curso" sin movimiento hace más que esto quedó trabada
 
   let vista = { tipo: 'lista' };  // { tipo:'lista' } | { tipo:'nueva' } | { tipo:'partida', id }
   let partidas = [];              // lista
@@ -18,6 +21,7 @@
   let desfase = 0;                // ms que el servidor va adelante de este reloj
   let canal = null;
   let canalVista = null;          // a qué vista pertenece el canal
+  let canalLista = null;          // broadcast 'juegos-lista' (uno por sesión: el topic tiene que ser exacto)
   let tRefresco = null;
   let cargado = false;
   let estadoCarga = 'cargando';
@@ -70,11 +74,13 @@
     await g.Perfiles.prepararAvatares(data, sb()).catch(() => {});
   }
   async function cargarLista(mia) {
-    const [p, j] = await Promise.all([
-      sb().from('partidas').select('id, juego, creador, estado, estado_juego, creado').order('creado', { ascending: false }).limit(60),
-      sb().from('jugadores').select('partida, persona, puntos, se_fue'),
-    ]);
-    if (p.error || j.error) throw (p.error || j.error);
+    const p = await sb().from('partidas').select('id, juego, creador, estado, estado_juego, creado').order('creado', { ascending: false }).limit(60);
+    if (p.error) throw p.error;
+    if (mia !== sesion) return;
+    // solo los jugadores de las partidas que se muestran (no los de todas)
+    const ids = p.data.map((x) => x.id);
+    const j = ids.length ? await sb().from('jugadores').select('partida, persona, puntos, se_fue').in('partida', ids) : { data: [], error: null };
+    if (j.error) throw j.error;
     if (mia !== sesion) return;
     await asegurarPerfiles(p.data.map((x) => x.creador).concat(j.data.map((x) => x.persona)), mia);
     if (mia !== sesion) return;
@@ -146,9 +152,17 @@
     }
     canal = c; canalVista = clave;
     c.subscribe((st) => { if (st === 'SUBSCRIBED' && canal === c) refrescar(); });
+    if (!canalLista) {
+      const l = sb().channel('juegos-lista', { config: { private: true } })
+        .on('broadcast', { event: 'cambio' }, () => { if (canalLista === l && vista.tipo !== 'partida') programarRefresco(); });
+      canalLista = l;
+      l.subscribe((st) => { if (st === 'SUBSCRIBED' && canalLista === l && vista.tipo !== 'partida' && abierta()) programarRefresco(); });
+    }
   }
   function desuscribir() {
     if (canal && sb()) sb().removeChannel(canal);
+    if (canalLista && sb()) sb().removeChannel(canalLista);
+    canalLista = null;
     cerrarChat(); cerrarJuego();
     canal = null; canalVista = null; cargado = false; partidas = []; jugadores = []; actual = null; mias = [];
     vista = { tipo: 'lista' };
@@ -170,7 +184,7 @@
   }
 
   // ---------- Acciones ----------
-  const MSG = /^(La partida|Solo quien|El Impostor|Todavía no|No estás|No hay preguntas)/;
+  const MSG = /^(La partida|Solo quien|El Impostor|Todavía no|No estás|No hay preguntas|Ya tenés)/;
   async function rpc(fn, args) {
     let res;
     try { res = await sb().rpc(fn, args); } catch (e) { res = { data: null, error: e }; }
@@ -240,9 +254,26 @@
     return juegoEl;
   }
 
+  // Foco de teclado a través de un repintado: el mismo elemento si sigue (chat, juego) o el rehecho con el mismo
+  // id o data-op / data-persona / data-id.
+  function selectorFoco(el) {
+    if (el.id) return '#' + el.id;
+    const d = el.dataset || {};
+    for (const k of ['op', 'persona', 'id']) if (d[k] != null) return '[data-' + k + '="' + d[k] + '"]';
+    return null;
+  }
+  function restaurarFoco(r, foco) {
+    if (!foco || r.contains(document.activeElement)) return;
+    let el = foco.el.isConnected && r.contains(foco.el) ? foco.el : null;
+    if (!el && foco.sel) { try { el = r.querySelector(foco.sel); } catch (e) { el = null; } }
+    if (el && !el.disabled) el.focus({ preventScroll: true });
+  }
+
   function pintar() {
     const r = raiz();
     if (!r) return;
+    const act = document.activeElement;
+    const foco = act && act !== document.body && r.contains(act) ? { el: act, sel: selectorFoco(act) } : null;
     const lch = chatEl && chatEl.querySelector('.chat-lista');
     const antes = { scroll: lch ? lch.scrollTop : 0, foco: !!(chatEl && chatEl.contains(document.activeElement) && document.activeElement.tagName === 'TEXTAREA'), scrollPant: r.parentElement ? r.parentElement.scrollTop : 0 };
     r.textContent = '';
@@ -256,10 +287,12 @@
       const momento = actual ? actual.id + ':' + actual.estado + ':' + (e.ronda || 0) + ':' + (e.fase || '') : '';
       if (r.parentElement) r.parentElement.scrollTop = momento === ultimoMomento ? antes.scrollPant : 0;
       ultimoMomento = momento;
+      restaurarFoco(r, foco);
       return;
     }
     cerrarChat(); cerrarJuego();
     r.append(...nodos(vista.tipo === 'nueva' ? vistaNueva() : vistaLista()));
+    restaurarFoco(r, foco);
   }
 
   function tarjeta(p) {
@@ -288,7 +321,8 @@
       return out;
     }
     if (!cargado) { out.push(h('p', { class: 'vacio' }, 'Cargando…')); return out; }
-    const enCurso = partidas.filter((p) => p.estado === 'jugando' && soyActivo(p.id, jugadores));
+    const movida = (p) => Number(p.estado_juego && p.estado_juego.ahora_ms) || Date.parse(p.creado);
+    const enCurso = partidas.filter((p) => p.estado === 'jugando' && soyActivo(p.id, jugadores) && ahora - movida(p) < VIGENCIA_EN_CURSO);
     const abiertas = partidas.filter((p) => p.estado === 'espera' && ahora - Date.parse(p.creado) < VIGENCIA_ESPERA);
     const terminadas = partidas.filter((p) => p.estado === 'terminada' && p.estado_juego && p.estado_juego.fase === 'final'
       && soyActivo(p.id, jugadores) && ahora - Date.parse(p.creado) < VIGENCIA_TERMINADA).slice(0, 5);

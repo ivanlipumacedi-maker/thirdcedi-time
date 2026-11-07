@@ -6,6 +6,7 @@
   const PREGUNTAS_POR_PARTIDA = 10;
   const PREGUNTA_MS = 15000;   // tiempo para responder
   const REVELADA_MS = 8000;    // cuánto queda la respuesta correcta a la vista antes de pasar sola a la siguiente
+  const GRACIA_MS = 1000;      // el servidor acepta respuestas hasta 1 s después del límite (por la red)
 
   // PRNG chico y determinístico (mulberry32): misma semilla, misma secuencia.
   function azar(semilla) {
@@ -50,6 +51,45 @@
     return mezclar(elegidas, r);
   }
 
+  // Como trivia_elegir de la base (dev/supabase/18-juegos-cierre.sql): por dificultad (cuotas), primero las que no
+  // vio ningún jugador, al azar, y si no alcanzan, las vistas hace más tiempo. vistas: { id: cuándo la vio alguno
+  // de los jugadores por última vez (ms) }. Si una dificultad no alcanza se completa con las otras, como elegir().
+  function elegirSinRepetir(banco, n, vistas, semilla) {
+    const r = azar(semilla);
+    const q = cuotas(n);
+    const v = vistas || {};
+    const cuando = (p) => (Object.prototype.hasOwnProperty.call(v, p.id) ? v[p.id] : -Infinity);
+    const ordenar = (xs) => mezclar(xs, r).sort((a, b) => cuando(a) - cuando(b)); // sort es estable: el azar desempata
+    const elegidas = [];
+    const sobrantes = [];
+    [1, 2, 3].forEach((d) => {
+      const de = ordenar(banco.filter((p) => p.dif === d));
+      elegidas.push(...de.slice(0, q[d]));
+      sobrantes.push(...de.slice(q[d]));
+    });
+    const resto = ordenar(sobrantes.concat(banco.filter((p) => [1, 2, 3].indexOf(p.dif) < 0)));
+    while (elegidas.length < n && resto.length) elegidas.push(resto.shift());
+    return mezclar(elegidas, r);
+  }
+
+  // Qué avisar cuando la base rechaza una respuesta: fuera de tiempo (o ya revelada por otro dentro de la gracia)
+  // no suma; "Ya respondiste" (otra pestaña) no se avisa: devuelve null.
+  function textoErrorRespuesta(mensaje) {
+    const m = mensaje || '';
+    if (/Ya respondiste/.test(m)) return null;
+    if (/Se terminó el tiempo|No hay una pregunta abierta/.test(m)) return 'Se terminó el tiempo: esta no suma.';
+    return 'No pudimos mandar tu respuesta. Probá de nuevo.';
+  }
+
+  // La línea de arriba del ranking final para `yo` (filas de ranking()). null si no jugué.
+  function textoPuesto(filas, yo) {
+    const mio = filas.find((f) => f.persona === yo);
+    if (!mio) return null;
+    if (filas.length === 1) return 'Hiciste ' + mio.puntos.toLocaleString('es-AR') + ' puntos.';
+    if (mio.puesto === 1) return filas.filter((f) => f.puesto === 1).length > 1 ? '¡Empataste el primer puesto!' : '¡Ganaste!';
+    return 'Terminaste ' + mio.puesto + '°.';
+  }
+
   // 0 si es incorrecta; si es correcta, de 1000 (al instante) a 500 (al límite), lineal y redondeado.
   // El servidor usa: round(1000 - 500 * least(greatest(ms, 0), limite) / limite).
   function puntos(correcta, ms, limiteMs) {
@@ -70,7 +110,7 @@
     return Math.max(0, limiteMs - (ahoraCliente + desfase));
   }
 
-  const TriviaLogica = { PREGUNTAS_POR_PARTIDA, PREGUNTA_MS, REVELADA_MS, elegir, puntos, ranking, restante, cuotas };
+  const TriviaLogica = { PREGUNTAS_POR_PARTIDA, PREGUNTA_MS, REVELADA_MS, GRACIA_MS, elegir, elegirSinRepetir, puntos, ranking, restante, cuotas, textoErrorRespuesta, textoPuesto };
   if (typeof module !== 'undefined' && module.exports) module.exports = TriviaLogica;
   else g.TriviaLogica = TriviaLogica;
 })(typeof window !== 'undefined' ? window : globalThis);
