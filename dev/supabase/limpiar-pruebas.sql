@@ -16,6 +16,11 @@ with zz as (
   where e.actividad in (select zz.id from zz) or e.sala in (select 'act:' || zz.id::text from zz)
      or e.autor in (select u.id from auth.users u where u.email like 'zz-prueba-%@cedi.com.ar')
 ), subs as (
-  delete from public.push_subs s where s.endpoint like 'https://zz-prueba.invalid/%'
+  -- suscripciones de prueba: las viejas de zz-prueba.invalid y las de los usuarios zz (endpoints con zz-prueba, 19)
+  delete from public.push_subs s
+  where s.endpoint like 'https://zz-prueba.invalid/%'
+     or s.persona in (select u.id from auth.users u where u.email like 'zz-prueba-%@cedi.com.ar')
+), pruebas as (
+  delete from public.avisos_pruebas p where p.persona in (select u.id from auth.users u where u.email like 'zz-prueba-%@cedi.com.ar')
 )
 select count(*) as actividades_borradas from act;

@@ -243,7 +243,10 @@
     // antes de salir, este teléfono deja de recibir los avisos de esta cuenta (con sesión, que las RLS lo piden)
     salir.addEventListener('click', async () => {
       salir.disabled = true;
-      if (g.Avisos && g.Avisos.alSalir) await g.Avisos.alSalir().catch(() => {});
+      // como mucho 3 s: sin conexión (o con el service worker trabado) igual se sale
+      if (g.Avisos && g.Avisos.alSalir) {
+        await Promise.race([g.Avisos.alSalir().catch(() => {}), new Promise((r) => setTimeout(r, 3000))]);
+      }
       sb().auth.signOut();
     });
   }

@@ -45,7 +45,8 @@ export async function mandarPush(sub, payload, { publica, privada, contacto, ttl
   const headers = { TTL: String(ttl), Urgency: urgencia, Authorization: await vapid(sub.endpoint, publica, privada, contacto) };
   let body = null;
   if (payload != null) { body = await cifrar(sub.p256dh, sub.auth, payload); headers['Content-Encoding'] = 'aes128gcm'; headers['Content-Type'] = 'application/octet-stream'; }
-  const r = await fetch(sub.endpoint, { method: 'POST', headers, body });
+  // sin respuesta en 10 s se corta: un servicio colgado no frena el resto de los avisos
+  const r = await fetch(sub.endpoint, { method: 'POST', headers, body, signal: AbortSignal.timeout(10000) });
   const texto = r.ok ? '' : (await r.text()).slice(0, 200);
   return { status: r.status, texto };
 }

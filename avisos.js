@@ -84,11 +84,13 @@
     await s.unsubscribe().catch(() => {});
   }
 
-  function boton(id, texto, clase, fn) {
+  const ERROR_CAMBIAR = 'No pudimos cambiar los avisos. Revisá la conexión y probá de nuevo.';
+  const ERROR_PRUEBA = 'No pudimos mandarte la prueba. Revisá la conexión y probá de nuevo en un rato.';
+  function boton(id, texto, clase, fn, errorTexto) {
     return h('button', { type: 'button', id, class: clase, disabled: ocupado, on: { click: async () => {
       if (ocupado) return;
       ocupado = true; aviso = ''; pintar();
-      try { await fn(); } catch (e) { console.error(e); aviso = 'No pudimos cambiar los avisos. Revisá la conexión y probá de nuevo.'; }
+      try { await fn(); } catch (e) { console.error(e); aviso = errorTexto || ERROR_CAMBIAR; }
       ocupado = false; pintar();
     } } }, texto);
   }
@@ -128,7 +130,7 @@
     } else if (e === 'activos') {
       out.push(h('p', { class: 'ayuda', id: 'avisos-activos' }, '🔔 Avisos activados en este teléfono.'),
         h('div', { class: 'fila-links' },
-          boton('btn-avisos-probar', 'Mandarme una prueba', 'btn-sec btn-chico', probar),
+          boton('btn-avisos-probar', 'Mandarme una prueba', 'btn-sec btn-chico', probar, ERROR_PRUEBA),
           boton('btn-avisos-off', 'Desactivar', 'btn-link', desactivar)));
     } else {
       out.push(boton('btn-avisos-on', '🔔 Activar avisos', 'btn-primario', activar),
@@ -150,10 +152,11 @@
   }
 
   // ---------- Links de los avisos ----------
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   function abrirDestino() {
     if (!g.App.yo()) return; // sin sesión queda el hash: al entrar se abre
     const [ruta, id] = (location.hash || '').replace(/^#\/?/, '').split('/');
-    if (!id) return;
+    if (!id || !UUID.test(id)) return; // solo ids de verdad: un link armado a mano no llega a las consultas
     if (ruta === 'actividad' && g.Actividades && g.Actividades.abrir) {
       history.replaceState(null, '', '#/actividades');
       g.Actividades.abrir(id);

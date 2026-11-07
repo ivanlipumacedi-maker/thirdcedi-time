@@ -50,11 +50,34 @@ test('evento en unos días: recibe cada día hasta el día del evento inclusive'
   assert.equal(L.recordatoriosDiarios([a], asis, Date.parse('2026-11-11T15:00:00Z')).length, 0, 'al día siguiente ya no');
 });
 
-test('evento de hoy que ya terminó antes de las 12 (sin tercer tiempo): nada; con tercer tiempo más tarde: recibe', () => {
-  const asis = [{ actividad: 'a1', persona: 'p1', parte: 'actividad' }];
+test('evento de hoy que ya pasó antes de las 12: sin tercer tiempo, nada; con tercer tiempo más tarde, solo los del tercer tiempo', () => {
+  const asis = [
+    { actividad: 'a1', persona: 'p1', parte: 'actividad' },
+    { actividad: 'a1', persona: 'p2', parte: 'tercer' },
+    { actividad: 'a1', persona: 'p3', parte: 'actividad' },
+    { actividad: 'a1', persona: 'p3', parte: 'tercer' },
+  ];
   assert.deepEqual(L.recordatoriosDiarios([act('a1', '2026-11-06T12:00:00Z')], asis, HOY_12), []); // 09:00 ART
   const conTercer = act('a1', '2026-11-06T12:00:00Z', { tiene_tercer: true, tercer_fecha: '2026-11-06T16:00:00Z' });
-  assert.equal(L.recordatoriosDiarios([conTercer], asis, HOY_12).length, 1);
+  const r = L.recordatoriosDiarios([conTercer], asis, HOY_12);
+  assert.deepEqual(r.map((x) => x.persona).sort(), ['p2', 'p3'], 'quien está solo a la actividad ya no recibe');
+});
+
+test('anotado solo a la actividad: recibe mientras la actividad no pasó, aunque quede el tercer tiempo', () => {
+  const asis = [{ actividad: 'a1', persona: 'p1', parte: 'actividad' }];
+  const a = act('a1', '2026-11-06T22:00:00Z', { tiene_tercer: true, tercer_fecha: '2026-11-07T01:00:00Z' }); // 19 y 22 ART
+  assert.equal(L.recordatoriosDiarios([a], asis, HOY_12).length, 1);
+  assert.equal(L.recordatoriosDiarios([a], asis, Date.parse('2026-11-06T23:00:00Z')).length, 0, 'ya empezó');
+});
+
+test('textoDiario: si la actividad ya pasó y queda el tercer tiempo, el aviso es del tercer tiempo', () => {
+  const a = act('a1', '2026-11-06T12:00:00Z', { titulo: 'Pádel', tiene_tercer: true, tercer_fecha: '2026-11-06T23:30:00Z', tercer_lugar: 'Bar Roma' });
+  const t = L.textoDiario(a, HOY_12);
+  assert.equal(t.title, 'Hoy: 🍻 Tercer tiempo de Pádel a las 20:30');
+  assert.match(t.body, /Bar Roma/);
+  assert.equal(t.url, '#/actividad/a1');
+  // si la actividad todavía no pasó, el título es de la actividad
+  assert.match(L.textoDiario(act('a1', '2026-11-06T22:00:00Z', { titulo: 'Pádel' }), HOY_12).title, /^Hoy: 🎾 Pádel a las 19:00$/);
 });
 
 test('evento mañana a las 00:30 ART (03:30Z): recibe hoy y dice "Mañana"', () => {
@@ -91,7 +114,8 @@ test('textoActividad para nueva, confirmada, cambio y cancelada', () => {
   assert.equal(L.textoActividad('cambio', a, 'Ana').title, 'Cambió Asado');
   assert.match(L.textoActividad('cambio', a, 'Ana').body, /Quincho/);
   assert.equal(L.textoActividad('cancelada', a, 'Ana').title, 'Se canceló Asado');
-  assert.match(L.textoActividad('reabierta', a, 'Ana').body, /reactivó/);
+  assert.equal(L.textoActividad('reabierta', a, 'Ana').title, 'Asado volvió a estar abierta');
+  assert.match(L.textoActividad('reabierta', a, 'Ana').body, /Quincho/);
   assert.equal(L.textoActividad('confirmada', a, 'Ana').url, '#/actividad/a1');
 });
 

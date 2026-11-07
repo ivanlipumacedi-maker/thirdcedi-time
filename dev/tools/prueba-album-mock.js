@@ -329,7 +329,7 @@ const celdas = (p) => cuantos(p, '#album-act .album-cel');
       await pb.evaluate(() => [...document.querySelectorAll('#pantalla-actividades .btn-link')].find((b) => /Volver/.test(b.textContent)).click());
       await pb.waitForSelector('.tarjeta-act');
       const antes = lecturas[UB];
-      assert.equal(await pb.evaluate(() => window.__canales()), 2, 'quedan solo los canales de actividades y de la lista de juegos (los dos viven toda la sesión)');
+      assert.equal(await pb.evaluate(() => window.__canales()), 3, 'quedan solo los canales de sesión: actividades, lista de juegos y broadcast juegos-lista');
       const id = 'bbbbbbbb-0000-4000-8000-000000000002';
       const fila = { id, actividad: ACT, autor: UA, ruta: `${ACT}/${id}.jpg`, mini: `${ACT}/${id}.t.webp`, media: null, ancho: 10, alto: 10, bytes: 1, tomada: new Date().toISOString() };
       db.fotos.push(fila); emitir('fotos', 'INSERT', fila);
