@@ -5,11 +5,11 @@
 // bloqueado explica cómo habilitarlo (Android y iPhone); en iPhone sin instalar explica cómo agregarla a inicio; al
 // entrar con avisos ya activos re-registra el teléfono; al cerrar sesión borra la suscripción; los links
 // #/actividad/<id> y #/juegos/<id> abren el detalle y la partida (al cargar y con el mensaje del service worker).
-// Uso: servir la raíz con `npx --yes http-server -p 8084 -c-1` y correr `node dev/tools/prueba-avisos-mock.js`
-// (URL_APP=http://127.0.0.1:8084 por defecto).
+// Uso: servir la raíz con `npx --yes http-server -p 8080 -c-1` y correr `node dev/tools/prueba-avisos-mock.js`
+// (URL_APP=http://127.0.0.1:8080 por defecto).
 const assert = require('assert/strict');
 const puppeteer = require('puppeteer-core');
-const URL_APP = process.env.URL_APP || 'http://127.0.0.1:8084';
+const URL_APP = process.env.URL_APP || 'http://127.0.0.1:8080';
 const VAPID_PUBLICA = 'BPJl0VBLTFJaw7kbYXsCc2SV4Ljx_9SUQnasklcWQCbAgbvChhtUqxMiDxfEJcRCNPLiMtKWUrHP9TBahw61sW8';
 
 const UA = '11111111-1111-4111-8111-111111111111', UB = '22222222-2222-4222-8222-222222222222';
@@ -25,7 +25,7 @@ const db = {
   push_subs: [],
 };
 const llamadas = [];
-let ultimaPrueba = 0;
+let ultimaPrueba = 0, fallarPrueba = false;
 const cumple = (fila, filtros) => filtros.every(([op, col, v]) => (op === 'eq' ? fila[col] === v : op === 'in' ? v.includes(fila[col]) : true));
 
 function consulta(uid, s) {
@@ -39,6 +39,7 @@ function consulta(uid, s) {
       return { data: null };
     }
     if (s.table === 'avisos_probar') {
+      if (fallarPrueba) return { error: { message: 'Failed to fetch' } };
       if (Date.now() - ultimaPrueba < 30000) return { data: false };
       ultimaPrueba = Date.now();
       return { data: true };
@@ -175,6 +176,10 @@ const cerrar = async () => { while (navegadores.length) await navegadores.pop().
       await p.click('#btn-avisos-probar');
       await esperar(p, () => /Esperá unos segundos/.test(document.getElementById('perfil-avisos').textContent));
       assert.equal(llamadas.filter((l) => l.t === 'avisos_probar').length, 2);
+      fallarPrueba = true;
+      await p.click('#btn-avisos-probar');
+      await esperar(p, () => /No pudimos mandarte la prueba/.test(document.getElementById('perfil-avisos').textContent));
+      fallarPrueba = false;
     });
     await paso('Desactivar: borra la fila y desuscribe', async () => {
       await p.click('#btn-avisos-off');
@@ -272,6 +277,16 @@ const cerrar = async () => { while (navegadores.length) await navegadores.pop().
     await paso('link a una actividad que ya no existe: queda la lista', async () => {
       p = await abrir(UA, {}, '#/actividad/dddddddd-dddd-4ddd-8ddd-dddddddddddd');
       await p.waitForSelector('#pantalla-actividades .tarjeta-act', { timeout: 8000 });
+      await cerrar();
+    });
+
+    await paso('link con un id que no es uuid: no consulta nada y queda la lista', async () => {
+      const antes = llamadas.length;
+      p = await abrir(UA, {}, '#/actividad/no-es-un-uuid');
+      await p.waitForSelector('#pantalla-actividades .tarjeta-act', { timeout: 8000 });
+      const usan = llamadas.slice(antes).filter((l) => JSON.stringify(l.f || []).includes('no-es-un-uuid'));
+      assert.deepEqual(usan, [], 'no llega a las consultas');
+      assert.deepEqual(p.errores, [], 'errores de página: ' + p.errores.join(' | '));
       await cerrar();
     });
   } catch (e) {

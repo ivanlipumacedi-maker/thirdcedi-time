@@ -26,15 +26,21 @@
     return f;
   }
 
-  // Review Focus 4. Una confirmada que todavía no terminó: a cada anotado (cualquier parte, sin repetir) un aviso por
-  // día hasta el día del evento inclusive. Abierta, cancelada o ya pasada: nada.
+  const actividadPendiente = (a, ahora) => ms(a.fecha) > ahora;
+  const tercerPendiente = (a, ahora) => !!(a.tiene_tercer && a.tercer_fecha != null && ms(a.tercer_fecha) > ahora);
+
+  // Review Focus 4. Una confirmada que todavía no terminó: un aviso por día (hasta el día del evento inclusive) a cada
+  // anotado, sin repetir. Quien está anotado solo a la actividad lo recibe mientras la actividad no empezó; quien está
+  // en el tercer tiempo, mientras quede algo por delante. Abierta, cancelada o ya pasada: nada.
   function recordatoriosDiarios(actividades, asistencias, ahora) {
     const out = [];
     const vistos = new Set();
     (actividades || []).forEach((a) => {
       if (!a || a.estado !== 'confirmada' || !(fin(a) > ahora)) return;
+      const act = actividadPendiente(a, ahora), ter = act || tercerPendiente(a, ahora);
       (asistencias || []).forEach((s) => {
         if (s.actividad !== a.id) return;
+        if (!(s.parte === 'tercer' ? ter : act)) return;
         const k = a.id + '|' + s.persona;
         if (vistos.has(k)) return;
         vistos.add(k);
@@ -62,15 +68,23 @@
   const cuando = (a, ahora) => etiquetaDia(ms(a.fecha), ahora) + ' a las ' + horaART(a.fecha);
 
   function textoDiario(a, ahora) {
+    const base = { tag: 'diario-' + a.id, url: urlActividad(a.id) };
+    // la actividad ya pasó y queda el tercer tiempo: el aviso es del tercer tiempo
+    if (!actividadPendiente(a, ahora) && tercerPendiente(a, ahora)) {
+      return {
+        title: etiquetaDia(ms(a.tercer_fecha), ahora) + ': ' + EMOJI.after + ' Tercer tiempo de ' + titulo(a) + ' a las ' + horaART(a.tercer_fecha),
+        body: '📍 ' + (a.tercer_lugar || a.lugar || ''),
+        ...base,
+      };
+    }
     return {
       title: etiquetaDia(ms(a.fecha), ahora) + ': ' + (EMOJI[a.tipo] || EMOJI.otra) + ' ' + titulo(a) + ' a las ' + horaART(a.fecha),
       body: '📍 ' + (a.lugar || '') + (a.tiene_tercer && a.tercer_lugar ? '\nTercer tiempo: ' + a.tercer_lugar + ' a las ' + horaART(a.tercer_fecha) : ''),
-      tag: 'diario-' + a.id,
-      url: urlActividad(a.id),
+      ...base,
     };
   }
 
-  // tipo: 'nueva' | 'confirmada' | 'cambio' | 'cancelada' | 'reabierta' (una cancelada que vuelve a abierta). nombre: quien hizo el cambio.
+  // tipo: 'nueva' | 'confirmada' | 'cambio' | 'cancelada' | 'reabierta' (vuelve a abierta, desde confirmada o cancelada). nombre: quien hizo el cambio.
   function textoActividad(tipo, a, nombre, ahora) {
     const t = ahora == null ? Date.now() : ahora;
     const datos = cuando(a, t) + ' · ' + (a.lugar || '');
@@ -78,7 +92,7 @@
     if (tipo === 'nueva') { title = 'Nueva actividad: ' + (EMOJI[a.tipo] || EMOJI.otra) + ' ' + titulo(a); body = datos + '\nLa armó ' + (nombre || 'un compañero') + '.'; }
     else if (tipo === 'confirmada') { title = 'Se confirmó ' + titulo(a); body = datos; }
     else if (tipo === 'cancelada') { title = 'Se canceló ' + titulo(a); body = (nombre || 'Quien la armó') + ' la canceló.'; }
-    else if (tipo === 'reabierta') { title = 'Cambió ' + titulo(a); body = 'Se reactivó: ' + datos; }
+    else if (tipo === 'reabierta') { title = titulo(a) + ' volvió a estar abierta'; body = datos; }
     else { title = 'Cambió ' + titulo(a); body = 'Ahora: ' + datos; }
     return { title, body, tag: 'act-' + a.id, url: urlActividad(a.id) };
   }

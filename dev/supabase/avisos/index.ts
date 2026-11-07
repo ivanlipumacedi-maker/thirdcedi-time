@@ -43,12 +43,17 @@ async function iguales(a: string, b: string) {
   for (let i = 0; i < u.length; i++) d |= u[i] ^ v[i];
   return d === 0;
 }
-// Si no coincide, se relee la config una vez (Ivan pudo haber rotado el secreto) antes de decir que no.
+// Si no coincide, se relee la config (Ivan pudo haber rotado el secreto) antes de decir que no, pero como mucho una
+// vez cada 30 s: un header falso repetido no golpea Vault en cada pedido.
+const RELEER_MS = 30_000;
+let ultimaRelectura = 0;
 async function autorizado(req: Request) {
   const dado = req.headers.get('x-cron-secret') || '';
   if (!dado) return false;
   let c = await config();
   if (c.avisos_cron_secret && await iguales(dado, c.avisos_cron_secret)) return true;
+  if (cfg && Date.now() - ultimaRelectura < RELEER_MS) return false;
+  ultimaRelectura = Date.now();
   c = await config(true);
   return !!c.avisos_cron_secret && await iguales(dado, c.avisos_cron_secret);
 }
@@ -122,14 +127,14 @@ async function avisoActividad(evs: Ev[], ahora: number) {
   if (!a) return 0;
   if (tipo === 'nueva' && a.estado === 'cancelada') return 0; // la crearon y la cancelaron antes del aviso
   const autor = tomados[tomados.length - 1].autor;
-  let personas: string[];
+  let subs: Sub[];
   if (tipo === 'nueva') {
-    const { data: ps, error: e2 } = await sb.from('perfiles').select('id');
+    // a todos: se traen todas las suscripciones (sin un .in con cada perfil) y se saca al autor acá
+    const { data: ss, error: e2 } = await sb.from('push_subs').select('endpoint,persona,p256dh,auth');
     if (e2) throw e2;
-    personas = (ps || []).map((p: { id: string }) => p.id);
-  } else personas = await anotados(a.id);
-  personas = personas.filter((p) => p !== autor);
-  return enviar(await subsDe(personas), L.textoActividad(tipo, a, await nombreDe(autor), ahora));
+    subs = ((ss || []) as Sub[]).filter((s) => s.persona !== autor);
+  } else subs = await subsDe((await anotados(a.id)).filter((p) => p !== autor));
+  return enviar(subs, L.textoActividad(tipo, a, await nombreDe(autor), ahora));
 }
 
 async function avisoMensajes(g: { sala: string; autor: string; ids: number[] }) {
@@ -160,15 +165,16 @@ async function avisoMensajes(g: { sala: string; autor: string; ids: number[] }) 
 const PRUEBA: Payload = { title: 'ThirdCEDI Time 🔔', body: 'Prueba: los avisos andan en este teléfono.', tag: 'prueba', url: '#/perfil' };
 
 async function cambios() {
+  const ahora = Date.now();
+  // lo de hace más de una hora se descarta de una, todo junto
+  const { data: viejos, error: e0 } = await sb.from('eventos_aviso').delete().lt('creado', new Date(ahora - VIEJO_MS).toISOString()).select('id');
+  if (e0) throw e0;
+  const descartados = (viejos || []).length;
   const { data, error } = await sb.from('eventos_aviso').select('*').order('id').limit(1000);
   if (error) throw error;
-  const ahora = Date.now();
-  const evs = (data || []) as Ev[];
-  const viejos = evs.filter((e) => ahora - Date.parse(e.creado) > VIEJO_MS);
-  if (viejos.length) await tomar(viejos.map((e) => e.id));
-  const vivos = evs.filter((e) => ahora - Date.parse(e.creado) <= VIEJO_MS);
+  const vivos = ((data || []) as Ev[]).filter((e) => ahora - Date.parse(e.creado) <= VIEJO_MS);
   // sin claves VAPID no se toca la cola (salvo lo viejo): cuando Ivan las cargue, sale lo de la última hora
-  if (!claves()) return { enviados: 0, descartados: viejos.length, pendientes: vivos.length, motivo: 'faltan claves VAPID' };
+  if (!claves()) return { enviados: 0, descartados, pendientes: vivos.length, motivo: 'faltan claves VAPID' };
   let enviados = 0;
   const errores: string[] = [];
   const intento = async (fn: () => Promise<number>) => {
@@ -185,7 +191,7 @@ async function cambios() {
     await intento(async () => ((await tomar([e.id])).length ? enviar(await subsDe([e.autor]), PRUEBA) : 0));
   }
   for (const g of L.mensajesListos(vivos, ahora, { silencio: SILENCIO_MS, maxEspera: MAX_ESPERA_MS })) await intento(() => avisoMensajes(g));
-  return { enviados, descartados: viejos.length, errores };
+  return { enviados, descartados, errores };
 }
 
 async function diario() {
@@ -304,8 +310,10 @@ async function liberar(alto = 0.7, bajo = 0.6, maximo = 500) {
 }
 
 Deno.serve(async (req) => {
+  let ok = false;
   try {
     if (!(await autorizado(req))) return new Response('no', { status: 401 });
+    ok = true;
     const body = await req.json().catch(() => ({}));
     const tipo = String(body.tipo || '');
     let trabajo: (() => Promise<unknown>) | null = null;
@@ -321,6 +329,8 @@ Deno.serve(async (req) => {
     return Response.json({ aceptado: tipo }, { status: 202 });
   } catch (e) {
     console.error(e);
+    // a quien no pasó el secreto no se le cuenta qué falló
+    if (!ok) return new Response('error', { status: 500 });
     return new Response(JSON.stringify({ error: String((e as Error)?.message || e).slice(0, 300) }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
 });
