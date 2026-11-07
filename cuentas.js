@@ -346,13 +346,20 @@
           const n = cuantos.get(x.id) || 0;
           const quien = x.pagador === yo() ? 'Pagaste vos' : 'Pagó ' + nombre(x.pagador);
           let accion = null;
-          if (x.cargado_por === yo()) {
+          // lo borra quien lo cargó, y también quien pagó o está en el reparto (20): "No lo reconozco"
+          const mio = x.cargado_por === yo();
+          const meToca = mio || x.pagador === yo() || d.partes.some((p) => p.gasto === x.id && p.persona === yo());
+          if (meToca) {
+            const ajeno = mio ? '' : ' Lo cargó ' + nombre(x.cargado_por) + '.';
             if (confirmando && confirmando.clave === clave) accion = botonConfirmar(confirmando);
-            else accion = h('button', { type: 'button', class: 'btn-link cu-borrar', 'data-clave': clave, 'aria-label': 'Borrar el gasto ' + x.concepto, disabled: ocupado,
+            else accion = h('button', { type: 'button', class: 'btn-link cu-borrar' + (mio ? '' : ' cu-objetar'), 'data-clave': clave,
+              'aria-label': (mio ? 'Borrar el gasto ' : 'No reconozco el gasto ') + x.concepto, disabled: ocupado,
               on: { click: () => pedirConfirmacion({ clave, volver: '[data-clave="' + clave + '"]', volverOk: '#cu-resumen', peligro: true,
-                texto: '¿Borramos el gasto "' + x.concepto + '" de ' + L.pesos(x.monto) + '? Las cuentas se recalculan.'
+                texto: (mio ? '¿Borramos el gasto "' + x.concepto + '" de ' + L.pesos(x.monto) + '?'
+                  : '¿Borrar el gasto "' + x.concepto + '" de ' + L.pesos(x.monto) + '?' + ajeno) + ' Las cuentas se recalculan.'
                   + (d.pagos.length ? ' Ya hay pagos registrados: revisalos después.' : ''), si: 'Sí, borrarlo',
-                accion: () => escribir(() => sb.from('gastos').delete().eq('id', x.id), 'Gasto borrado', 'No pudimos borrar el gasto. Probá de nuevo en un momento.') }) } }, 'Borrar');
+                accion: () => escribir(() => sb.from('gastos').delete().eq('id', x.id), 'Gasto borrado', 'No pudimos borrar el gasto. Probá de nuevo en un momento.') }) } },
+              mio ? 'Borrar' : 'No lo reconozco');
           }
           return h('li', { class: 'cu-gasto', 'data-id': x.id },
             h('span', { class: 'cu-txt' }, h('span', { class: 'cu-gasto-cab' }, h('strong', null, x.concepto), h('span', { class: 'cu-monto-txt' }, L.pesos(x.monto))),
@@ -369,12 +376,17 @@
             : p.a === yo() ? nombre(p.de) + ' te pagó ' + L.pesos(p.monto)
               : nombre(p.de) + ' le pagó ' + L.pesos(p.monto) + ' a ' + nombre(p.a);
           let accion = null;
-          if (p.cargado_por === yo()) {
+          // lo borra quien lo registró y también la otra parte (20)
+          const mio = p.cargado_por === yo();
+          if (mio || p.de === yo() || p.a === yo()) {
             if (confirmando && confirmando.clave === clave) accion = botonConfirmar(confirmando);
-            else accion = h('button', { type: 'button', class: 'btn-link cu-borrar-pago', 'data-clave': clave, 'aria-label': 'Borrar el pago: ' + txt, disabled: ocupado,
+            else accion = h('button', { type: 'button', class: 'btn-link cu-borrar-pago' + (mio ? '' : ' cu-objetar'), 'data-clave': clave,
+              'aria-label': (mio ? 'Borrar el pago: ' : 'No reconozco el pago: ') + txt, disabled: ocupado,
               on: { click: () => pedirConfirmacion({ clave, volver: '[data-clave="' + clave + '"]', volverOk: '#cu-resumen', peligro: true,
-                texto: '¿Borramos este pago? La deuda vuelve a aparecer.', si: 'Sí, borrarlo',
-                accion: () => escribir(() => sb.from('pagos').delete().eq('id', p.id), 'Pago borrado', 'No pudimos borrar el pago. Probá de nuevo en un momento.') }) } }, 'Borrar');
+                texto: mio ? '¿Borramos este pago? La deuda vuelve a aparecer.'
+                  : '¿Borrar este pago? Lo registró ' + nombre(p.cargado_por) + '. La deuda vuelve a aparecer.', si: 'Sí, borrarlo',
+                accion: () => escribir(() => sb.from('pagos').delete().eq('id', p.id), 'Pago borrado', 'No pudimos borrar el pago. Probá de nuevo en un momento.') }) } },
+              mio ? 'Borrar' : 'No lo reconozco');
           }
           return h('li', { class: 'cu-pago', 'data-id': p.id }, h('span', { class: 'cu-txt' }, txt), accion);
         })));

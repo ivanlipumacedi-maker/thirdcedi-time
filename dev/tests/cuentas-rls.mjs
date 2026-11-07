@@ -1,4 +1,4 @@
-// RLS, función cargar_gasto y triggers de Cuentas claras (11-cuentas.sql) contra el proyecto real, con los usuarios
+// RLS, función cargar_gasto y triggers de Cuentas claras (11-cuentas.sql, 17 y 20: objetar) contra el proyecto real, con los usuarios
 // de prueba zz-prueba-a/b/c@cedi.com.ar. Las contraseñas se leen de .env (ZZ_PRUEBA_A_PASSWORD, _B_, _C_).
 // Las actividades de la prueba quedan canceladas con título "zz prueba cuentas"; los gastos y pagos se borran al final.
 // Uso: node dev/tests/cuentas-rls.mjs
@@ -136,7 +136,7 @@ try {
   const act2 = await nueva(true);
   await anotar(A, act2.id, 'actividad');
   await anotar(B, act2.id, 'actividad');
-  await cargar(A, 'A', act2.id, 'actividad', A.id, 1000, 'Cancha', [A.id, B.id]);
+  const cancha = await cargar(A, 'A', act2.id, 'actividad', A.id, 1000, 'Cancha', [A.id, B.id]);
 
   await paso('17: quien no está en las cuentas recibe "No tenés permiso" (el trigger no dice quién figura)', async () => {
     // B no figura en "solo"; C no figura en act2. Antes el trigger contestaba "Esa persona no figura..."
@@ -182,9 +182,31 @@ try {
     }
   });
 
-  await paso('borrar un gasto: solo quien lo cargó (B no puede borrar el de A)', async () => {
-    vacio(await B.api('DELETE', `gastos?id=eq.${g1.id}`));
-    assert.equal((await A.api('GET', `gastos?id=eq.${g1.id}`)).data.length, 1);
+  await paso('20: C, que no tiene nada que ver con el gasto (anotado, pero no pagó ni está en el reparto), no lo borra', async () => {
+    const g = await cargar(A, 'A', act.id, 'actividad', A.id, 40, 'Hielo', [A.id, B.id]);
+    vacio(await C.api('DELETE', `gastos?id=eq.${g.id}`));
+    assert.equal((await A.api('GET', `gastos?id=eq.${g.id}`)).data.length, 1, 'C lo borró');
+    // en act2 ("Cancha", entre A y B) C ni siquiera está en las cuentas
+    vacio(await C.api('DELETE', `gastos?id=eq.${cancha.id}`));
+    assert.equal((await A.api('GET', `gastos?id=eq.${cancha.id}`)).data.length, 1, 'C borró la cancha');
+  });
+
+  await paso('20: B, que está en el reparto, borra un gasto que cargó A ("No lo reconozco")', async () => {
+    const g = await cargar(A, 'A', act.id, 'actividad', A.id, 60, 'Carbón', [A.id, B.id]);
+    const r = await B.api('DELETE', `gastos?id=eq.${g.id}`);
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    assert.equal(r.data.length, 1, 'no borró nada');
+    assert.equal((await A.api('GET', `gastos?id=eq.${g.id}`)).data.length, 0);
+    assert.equal((await A.api('GET', `gasto_partes?gasto=eq.${g.id}`)).data.length, 0, 'quedó el reparto');
+    gastosDe.A = gastosDe.A.filter((x) => x !== g.id);
+  });
+
+  await paso('20: quien pagó (sin estar en el reparto) también borra el gasto que cargó otro', async () => {
+    const g = await cargar(A, 'A', act.id, 'actividad', B.id, 70, 'Pan', [A.id]);
+    const r = await B.api('DELETE', `gastos?id=eq.${g.id}`);
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    assert.equal(r.data.length, 1, 'no borró nada');
+    gastosDe.A = gastosDe.A.filter((x) => x !== g.id);
   });
 
   let pagoB;
@@ -209,9 +231,15 @@ try {
     falla(await A.api('POST', 'pagos', { actividad: solo.id, parte: 'actividad', de: B.id, a: A.id, monto: 5 }));
   });
 
-  await paso('borrar un pago: solo quien lo cargó', async () => {
-    vacio(await A.api('DELETE', `pagos?id=eq.${pagoB.id}`));
-    assert.equal((await B.api('GET', `pagos?id=eq.${pagoB.id}`)).data.length, 1);
+  await paso('20: un pago lo borra quien lo cargó o la otra parte; un tercero no', async () => {
+    vacio(await C.api('DELETE', `pagos?id=eq.${pagoB.id}`));
+    assert.equal((await B.api('GET', `pagos?id=eq.${pagoB.id}`)).data.length, 1, 'C borró un pago entre B y A');
+    // B le paga 7 a A; A (la otra parte, no lo cargó) dice "No lo reconozco" y lo borra
+    const p = await pagar(B, 'B', { actividad: act.id, parte: 'actividad', de: B.id, a: A.id, monto: 7 });
+    const r = await A.api('DELETE', `pagos?id=eq.${p.id}`);
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    assert.equal(r.data.length, 1, 'A no lo pudo borrar');
+    pagosDe.B = pagosDe.B.filter((x) => x !== p.id);
   });
 
   await paso('Review Focus 3: C se baja y sigue viendo su deuda (gastos, reparto y pagos) y puede pagarla', async () => {
