@@ -10,5 +10,12 @@ with zz as (
   delete from public.mensajes m where m.sala in (select 'act:' || zz.id::text from zz)
 ), act as (
   delete from public.actividades a where a.id in (select zz.id from zz) returning a.id
+), ev as (
+  -- avisos en cola que dejaron las pruebas (15): los de las actividades zz y los que generaron los usuarios zz
+  delete from public.eventos_aviso e
+  where e.actividad in (select zz.id from zz) or e.sala in (select 'act:' || zz.id::text from zz)
+     or e.autor in (select u.id from auth.users u where u.email like 'zz-prueba-%@cedi.com.ar')
+), subs as (
+  delete from public.push_subs s where s.endpoint like 'https://zz-prueba.invalid/%'
 )
 select count(*) as actividades_borradas from act;

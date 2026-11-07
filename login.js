@@ -240,7 +240,12 @@
       if (e) { err.textContent = traducir(e, 'otro'); err.hidden = false; return; }
       g.App.setPerfil(data); nom.textContent = data.nombre; editorPerfil.pintar(data); g.App.toast('Nombre guardado');
     });
-    salir.addEventListener('click', () => { sb().auth.signOut(); });
+    // antes de salir, este teléfono deja de recibir los avisos de esta cuenta (con sesión, que las RLS lo piden)
+    salir.addEventListener('click', async () => {
+      salir.disabled = true;
+      if (g.Avisos && g.Avisos.alSalir) await g.Avisos.alSalir().catch(() => {});
+      sb().auth.signOut();
+    });
   }
 
   function aPantallaDeMail() {
