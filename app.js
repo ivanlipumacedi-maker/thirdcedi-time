@@ -51,6 +51,20 @@
     if (location.hash === destino) mostrar(); else location.hash = destino;
   }
 
+  // Ícono del sprite de index.html (Phosphor, ver dev/tools/iconos-sprite.js). Sin etiqueta es decorativo (aria-hidden);
+  // con etiqueta lo anuncia el lector (role="img"). Toma el color del texto (currentColor).
+  const SVG = 'http://www.w3.org/2000/svg';
+  function icono(nombre, etiqueta, clase) {
+    const s = document.createElementNS(SVG, 'svg');
+    s.setAttribute('class', 'ico' + (clase ? ' ' + clase : ''));
+    s.setAttribute('focusable', 'false');
+    if (etiqueta) { s.setAttribute('role', 'img'); s.setAttribute('aria-label', etiqueta); } else s.setAttribute('aria-hidden', 'true');
+    const u = document.createElementNS(SVG, 'use');
+    u.setAttribute('href', '#i-' + nombre);
+    s.appendChild(u);
+    return s;
+  }
+
   let tToast = null;
   function toast(texto) {
     const el = document.getElementById('toast');
@@ -62,7 +76,8 @@
 
   function aplicarTema(t) {
     document.documentElement.setAttribute('data-tema', t);
-    document.getElementById('ico-tema').textContent = t === 'oscuro' ? '☀' : '☾';
+    // el ícono muestra a qué tema se pasa al tocarlo
+    document.querySelector('#ico-tema use').setAttribute('href', t === 'oscuro' ? '#i-sol' : '#i-luna');
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute('content', t === 'oscuro' ? '#071A2E' : '#002F68');
   }
@@ -80,6 +95,6 @@
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
   }
 
-  g.App = { ir, rutaActual, sb, yo: () => perfil, setPerfil, modoAcceso, toast, SUPABASE_URL };
+  g.App = { ir, rutaActual, sb, yo: () => perfil, setPerfil, modoAcceso, toast, icono, SUPABASE_URL };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar();
 })(window);

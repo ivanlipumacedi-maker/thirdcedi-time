@@ -83,17 +83,17 @@
 
     // ---------- Estructura ----------
     const inGaleria = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, id: 'album-galeria-' + act.slice(0, 8) });
-    const linkDrive = h('a', { class: 'album-drive', id: 'album-drive', target: '_blank', rel: 'noopener', hidden: true }, '📁 Ver en Drive');
+    const linkDrive = h('a', { class: 'album-drive', id: 'album-drive', target: '_blank', rel: 'noopener', hidden: true }, g.App.icono('drive'), 'Ver en Drive');
     const elEstadoTxt = h('div', { class: 'album-estado-txt', 'aria-live': 'polite' });
     const elBarra = h('div', { class: 'barra', hidden: true }, h('i'));
     const elEstado = h('div', { class: 'album-estado' }, elEstadoTxt, elBarra);
     const elGrilla = h('div', { class: 'album-grilla' });
     cont.classList.add('album');
     cont.replaceChildren(
-      h('h2', { class: 'sub' }, '📷 Álbum'),
+      h('h2', { class: 'sub titulo-ico' }, g.App.icono('album'), 'Álbum'),
       h('div', { class: 'album-acciones' },
-        h('button', { type: 'button', id: 'album-camara', class: 'btn-primario btn-chico', on: { click: abrirCamara } }, '📷 Cámara'),
-        h('button', { type: 'button', id: 'album-galeria', class: 'btn-sec btn-chico', on: { click: () => inGaleria.click() } }, '🖼️ Galería'),
+        h('button', { type: 'button', id: 'album-camara', class: 'btn-primario btn-chico btn-con-ico', on: { click: abrirCamara } }, g.App.icono('camara'), 'Cámara'),
+        h('button', { type: 'button', id: 'album-galeria', class: 'btn-sec btn-chico btn-con-ico', on: { click: () => inGaleria.click() } }, g.App.icono('galeria'), 'Galería'),
         inGaleria),
       linkDrive, elEstado, elGrilla);
 
@@ -247,7 +247,7 @@
     const el = {};
     function armarVisor() {
       el.titulo = h('b');
-      el.cerrar = h('button', { type: 'button', class: 'album-visor-cerrar', 'aria-label': 'Volver', on: { click: salirVisor } }, '←');
+      el.cerrar = h('button', { type: 'button', class: 'album-visor-cerrar', 'aria-label': 'Volver', on: { click: salirVisor } }, g.App.icono('volver'));
       img = h('img', { alt: 'Foto del álbum' });
       el.marco = h('div', { class: 'marco' }, img);
       el.guardar = h('a', { href: '#', class: 'album-guardar', download: '', on: { click: guardar } }, 'Guardar');

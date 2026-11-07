@@ -224,6 +224,26 @@ const volver = (p) => p.evaluate(() => document.querySelector('#pantalla-activid
       assert.equal(n('A:actividades:select') - antes, 2, 'tres pedidos durante el vuelo se juntan en una sola repetición');
     });
 
+    await paso('filtro por tipo como toggle: sin "Todas"; tocar el activo lo desmarca; vacío con "Ver todas"', async () => {
+      const seg = (t) => '#pantalla-actividades .seg[data-tipo="' + t + '"]';
+      const activos = () => pa.$$eval('#pantalla-actividades .seg[aria-pressed="true"]', (xs) => xs.map((x) => x.dataset.tipo));
+      assert.equal(await cuantos(pa, '#pantalla-actividades .seg'), 6, 'un segmento por tipo, sin "Todas"');
+      assert.deepEqual(await activos(), []);
+      const todas = await cuantos(pa, '.tarjeta-act');
+      await clic(pa, seg('futbol'));
+      assert.deepEqual(await activos(), ['futbol']);
+      const tipos = await pa.$$eval('.tarjeta-act .tarjeta-tipo', (xs) => xs.map((x) => x.textContent));
+      assert.ok(tipos.length && tipos.every((t) => t === 'Fútbol'), 'solo fútbol: ' + JSON.stringify(tipos));
+      await clic(pa, seg('futbol'));
+      assert.deepEqual(await activos(), [], 'tocar el activo lo desmarca');
+      assert.equal(await cuantos(pa, '.tarjeta-act'), todas);
+      await clic(pa, seg('after'));
+      assert.match(await texto(pa, '#act-vacio'), /No hay after office en agenda/);
+      await clic(pa, '#act-ver-todas');
+      assert.deepEqual(await activos(), []);
+      assert.equal(await cuantos(pa, '.tarjeta-act'), todas);
+    });
+
     const B = await abrir(UB);
     const pb = B.page;
 

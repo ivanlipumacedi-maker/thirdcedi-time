@@ -53,13 +53,13 @@
     const elLista = h('div', { class: 'chat-lista', role: 'log', 'aria-live': 'polite', 'aria-label': 'Mensajes' });
     const inTexto = h('textarea', { class: 'chat-texto', rows: 1, maxLength: L.MAX_TEXTO, placeholder: 'Escribí un mensaje', 'aria-label': 'Mensaje', enterKeyHint: tactil ? 'enter' : 'send' });
     const inFoto = h('input', { type: 'file', accept: 'image/*', hidden: true, id: 'chat-foto-' + Math.random().toString(36).slice(2) });
-    const btnFoto = h('button', { type: 'button', class: 'chat-adj', 'aria-label': 'Mandar una foto', on: { click: () => inFoto.click() } }, '📷');
-    const btnEnviar = h('button', { type: 'submit', class: 'chat-enviar', 'aria-label': 'Enviar' }, '➤');
+    const btnFoto = h('button', { type: 'button', class: 'chat-adj', 'aria-label': 'Mandar una foto', on: { click: () => inFoto.click() } }, g.App.icono('camara'));
+    const btnEnviar = h('button', { type: 'submit', class: 'chat-enviar', 'aria-label': 'Enviar' }, g.App.icono('enviar'));
     const barraEdicion = h('div', { class: 'chat-edicion', hidden: true },
       h('span', null, 'Editando mensaje'),
       h('button', { type: 'button', class: 'btn-link', on: { click: () => cancelarEdicion() } }, 'Cancelar'));
     const form = h('form', { class: 'chat-form', autocomplete: 'off' }, btnFoto, inFoto, inTexto, btnEnviar);
-    const raiz = h('div', { class: 'chat' }, h('h2', { class: 'sub' }, '💬 Chat'), elLista, barraEdicion, form);
+    const raiz = h('div', { class: 'chat' }, h('h2', { class: 'sub titulo-ico' }, g.App.icono('chat'), 'Chat'), elLista, barraEdicion, form);
     cont.replaceChildren(raiz);
 
     // ---------- Pintar ----------
@@ -106,7 +106,7 @@
     function filaMensaje(m) {
       const mio = m.autor === yo;
       const eliminado = m.tipo === 'eliminado';
-      const hora = h('span', { class: 'chat-hora' }, (m.editado && !eliminado ? 'Editado · ' : '') + (m.subiendo ? 'Enviando…' : L.horaCorta(m.creado)));
+      const hora = h('span', { class: 'chat-hora' }, (m.editado && !eliminado ? 'Editado ' : '') + (m.subiendo ? 'Enviando…' : L.horaCorta(m.creado)));
       let cuerpo;
       if (eliminado) cuerpo = h('div', { class: 'chat-txt' }, L.resumen(m));
       else if (m.tipo === 'foto') cuerpo = nodoFoto(m);
@@ -114,7 +114,7 @@
       const burbuja = h('div', { class: 'chat-burbuja' + (eliminado ? ' eliminado' : '') + (m.tipo === 'foto' && !eliminado ? ' media' : '') + (m.subiendo ? ' subiendo' : '') }, cuerpo, hora);
       if (mio && !eliminado && !esTmp(m) && !eliminando.has(m.id)) {
         burbuja.append(h('button', { type: 'button', class: 'chat-mas-acc', 'aria-label': 'Opciones del mensaje', 'aria-expanded': menuId === m.id ? 'true' : 'false',
-          on: { click: () => { menuId = menuId === m.id ? null : m.id; confirmandoId = null; pintar(); } } }, '⋯'));
+          on: { click: () => { menuId = menuId === m.id ? null : m.id; confirmandoId = null; pintar(); } } }, g.App.icono('opciones')));
       }
       const col = h('div', { class: 'chat-col' }, !mio && h('span', { class: 'chat-autor' }, nombreDe(m.autor)), burbuja, mio && menuId === m.id && menuMensaje(m));
       return h('div', { class: 'chat-msg ' + (mio ? 'mio' : 'otro'), 'data-id': m.id }, !mio && avatarDe(m.autor), col);
@@ -347,7 +347,7 @@
       if (cerrado) return;
       cerrarVisor(false);
       focoAntes = medios.get(id) || document.activeElement;
-      const x = h('button', { type: 'button', class: 'chat-visor-x', 'aria-label': 'Cerrar', on: { click: (e) => { e.stopPropagation(); cerrarVisor(); } } }, '✕');
+      const x = h('button', { type: 'button', class: 'chat-visor-x', 'aria-label': 'Cerrar', on: { click: (e) => { e.stopPropagation(); cerrarVisor(); } } }, g.App.icono('cerrar'));
       visor = h('div', { class: 'chat-visor', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Foto', on: { click: () => cerrarVisor() } }, h('img', { src: url, alt: 'Foto' }), x);
       document.body.append(visor);
       document.addEventListener('keydown', teclaVisor, true);
@@ -356,7 +356,7 @@
     function teclaVisor(e) {
       if (!visor) return;
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cerrarVisor(); }
-      else if (e.key === 'Tab') { e.preventDefault(); visor.querySelector('.chat-visor-x').focus(); } // el ✕ es lo único enfocable
+      else if (e.key === 'Tab') { e.preventDefault(); visor.querySelector('.chat-visor-x').focus(); } // la X es lo único enfocable
     }
     function cerrarVisor(devolverFoco = true) {
       if (!visor) return;

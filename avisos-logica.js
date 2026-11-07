@@ -2,8 +2,6 @@
 // La usa la Edge Function "avisos" (copia idéntica en dev/supabase/avisos/avisos-logica.js; un test lo verifica).
 (function (g) {
   const ZONA = 'America/Argentina/Buenos_Aires';
-  // Mismos emojis que ActividadesLogica.TIPOS (un test lo verifica): la Edge Function no carga ese archivo.
-  const EMOJI = { futbol: '⚽', padel: '🎾', trekking: '🥾', asado: '🍖', after: '🍻', otra: '✨' };
   const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 
   const ms = (f) => (typeof f === 'number' ? f : f instanceof Date ? f.getTime() : Date.parse(f));
@@ -72,14 +70,14 @@
     // la actividad ya pasó y queda el tercer tiempo: el aviso es del tercer tiempo
     if (!actividadPendiente(a, ahora) && tercerPendiente(a, ahora)) {
       return {
-        title: etiquetaDia(ms(a.tercer_fecha), ahora) + ': ' + EMOJI.after + ' Tercer tiempo de ' + titulo(a) + ' a las ' + horaART(a.tercer_fecha),
-        body: '📍 ' + (a.tercer_lugar || a.lugar || ''),
+        title: etiquetaDia(ms(a.tercer_fecha), ahora) + ': Tercer tiempo de ' + titulo(a) + ' a las ' + horaART(a.tercer_fecha),
+        body: 'En ' + (a.tercer_lugar || a.lugar || ''),
         ...base,
       };
     }
     return {
-      title: etiquetaDia(ms(a.fecha), ahora) + ': ' + (EMOJI[a.tipo] || EMOJI.otra) + ' ' + titulo(a) + ' a las ' + horaART(a.fecha),
-      body: '📍 ' + (a.lugar || '') + (a.tiene_tercer && a.tercer_lugar ? '\nTercer tiempo: ' + a.tercer_lugar + ' a las ' + horaART(a.tercer_fecha) : ''),
+      title: etiquetaDia(ms(a.fecha), ahora) + ': ' + titulo(a) + ' a las ' + horaART(a.fecha),
+      body: 'En ' + (a.lugar || '') + (a.tiene_tercer && a.tercer_lugar ? '\nTercer tiempo: ' + a.tercer_lugar + ' a las ' + horaART(a.tercer_fecha) : ''),
       ...base,
     };
   }
@@ -89,7 +87,7 @@
     const t = ahora == null ? Date.now() : ahora;
     const datos = cuando(a, t) + ' · ' + (a.lugar || '');
     let title, body;
-    if (tipo === 'nueva') { title = 'Nueva actividad: ' + (EMOJI[a.tipo] || EMOJI.otra) + ' ' + titulo(a); body = datos + '\nLa armó ' + (nombre || 'un compañero') + '.'; }
+    if (tipo === 'nueva') { title = 'Nueva actividad: ' + titulo(a); body = datos + '\nLa armó ' + (nombre || 'un compañero') + '.'; }
     else if (tipo === 'confirmada') { title = 'Se confirmó ' + titulo(a); body = datos; }
     else if (tipo === 'cancelada') { title = 'Se canceló ' + titulo(a); body = (nombre || 'Quien la armó') + ' la canceló.'; }
     else if (tipo === 'reabierta') { title = titulo(a) + ' volvió a estar abierta'; body = datos; }
@@ -109,7 +107,7 @@
 
   function resumenMensaje(m) {
     if (!m) return '';
-    if (m.tipo === 'foto') return '📷 Foto';
+    if (m.tipo === 'foto') return 'Foto';
     const t = Array.from(String(m.texto || '').trim().replace(/\s+/g, ' '));
     return t.length > 80 ? t.slice(0, 79).join('') + '…' : t.join('');
   }
@@ -148,7 +146,7 @@
     return out;
   }
 
-  const AvisosLogica = { ZONA, EMOJI, diaART, horaART, recordatoriosDiarios, etiquetaDia, textoDiario, textoActividad, fusionarActividad, resumenMensaje, textoMensajes, tituloPartida, urlSala, urlActividad, mensajesListos };
+  const AvisosLogica = { ZONA, diaART, horaART, recordatoriosDiarios, etiquetaDia, textoDiario, textoActividad, fusionarActividad, resumenMensaje, textoMensajes, tituloPartida, urlSala, urlActividad, mensajesListos };
   if (typeof module !== 'undefined' && module.exports) module.exports = AvisosLogica;
   else g.AvisosLogica = AvisosLogica;
 })(typeof window !== 'undefined' ? window : globalThis);

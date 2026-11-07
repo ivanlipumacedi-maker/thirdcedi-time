@@ -297,7 +297,7 @@ async function cargarGastoUI(p, { monto, concepto, pagador, sacar = [] }) {
       const tb = await pb.$$eval('#cu-transferencias li', (ls) => ls.map((l) => [l.querySelector('.cu-txt').textContent, l.querySelectorAll('.cu-pagar').length]));
       assert.deepEqual(tb, [[pes('Le debés $ 333 a Ana Pérez'), 1], [pes('Carla Ruiz le debe $ 333 a Ana Pérez'), 0]]);
       assert.match(await cuentasTxt(pb), /Carne/);
-      assert.match(await cuentasTxt(pb), /Pagó Ana Pérez · entre 3 personas/);
+      assert.match(await cuentasTxt(pb), /Pagó Ana Pérez, entre 3 personas/);
       assert.equal(await cuantos(pb, '#cu-gastos .cu-borrar'), 0, 'B no puede borrar el gasto de A');
     });
 
@@ -502,7 +502,7 @@ async function cargarGastoUI(p, { monto, concepto, pagador, sacar = [] }) {
       const g = { id: nuevoId(), actividad: ACT, parte: 'actividad', pagador: UC, monto: 10, concepto: 'Sal', creado: new Date().toISOString(), cargado_por: UC };
       db.gastos.push(g); db.gasto_partes.push({ gasto: g.id, persona: UC });
       emitir('gastos', 'INSERT', g);
-      await enCuentasHay(pa, /Sal · /);
+      await enCuentasHay(pa, /Sal\$/);
       assert.ok(n('A:gastos:select') > antes);
       assert.equal(await pa.evaluate(() => document.activeElement && document.activeElement.id), 'cu-concepto');
       await pa.keyboard.type('chos');

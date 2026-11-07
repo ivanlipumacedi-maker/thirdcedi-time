@@ -4,7 +4,7 @@
   let actividades = [];
   let asistencias = [];
   let perfiles = new Map();
-  let filtro = 'todas';
+  let filtro = null;              // tipo elegido en el filtro; null = todas
   let vista = { tipo: 'lista' };  // { tipo:'lista' } | { tipo:'detalle', id } | { tipo:'form', id|null }
   let canal = null;
   let tRefresco = null;
@@ -46,9 +46,18 @@
 
   const tipoDe = (id) => L.TIPOS.find((t) => t.id === id) || L.TIPOS[5];
   function nombreTipo(a) { return a.tipo === 'otra' && a.tipo_otro ? a.tipo_otro : tipoDe(a.tipo).nombre; }
+  const ico = (nombre, etiqueta, clase) => g.App.icono(nombre, etiqueta, clase);
   function fmt(iso) {
     return new Date(iso).toLocaleString('es-AR', { timeZone: L.ZONA, weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
   }
+  // Partes de la fecha en hora de Argentina: { dia: 'sáb', num: '7', mes: 'nov', hora: '21:00' }
+  function partes(iso) {
+    const d = new Date(iso);
+    const p = (o) => d.toLocaleString('es-AR', { timeZone: L.ZONA, ...o }).replace('.', '');
+    return { dia: p({ weekday: 'short' }), num: p({ day: 'numeric' }), mes: p({ month: 'short' }), hora: p({ hour: '2-digit', minute: '2-digit', hour12: false }) };
+  }
+  const fechaLarga = (iso) => { const f = partes(iso); return f.dia + ' ' + f.num + ' de ' + f.mes; };
+  const volverBtn = (fn) => h('button', { type: 'button', class: 'btn-link btn-volver', on: { click: fn } }, ico('volver'), 'Volver');
   const perfilDe = (id) => perfiles.get(id) || { id, nombre: 'Compañero', foto: null };
 
   // ---------- Datos ----------
@@ -194,33 +203,56 @@
 
   function badge(texto, clase) { return h('span', { class: 'badge ' + (clase || '') }, texto); }
 
+  // Tarjeta de la lista: fecha a la izquierda como en un fixture y, si hay tercer tiempo, un talón abajo (perforado).
   function tarjeta(a) {
     const t = tipoDe(a.tipo);
     const anotados = L.participantes(a.id, asistencias, 'actividad').length;
     const cupoTxt = a.cupo != null ? anotados + '/' + a.cupo + ' anotados' : anotados + (anotados === 1 ? ' anotado' : ' anotados');
-    return h('button', { type: 'button', class: 'tarjeta-act' + (a.estado === 'cancelada' ? ' cancelada' : ''), on: { click: () => irA({ tipo: 'detalle', id: a.id }) } },
-      h('span', { class: 'tarjeta-emoji', 'aria-hidden': 'true' }, t.emoji),
-      h('span', { class: 'tarjeta-cuerpo' },
-        h('span', { class: 'tarjeta-titulo' }, a.titulo),
-        h('span', { class: 'tarjeta-meta' }, fmt(a.fecha) + ' · ' + a.lugar),
-        h('span', { class: 'tarjeta-badges' },
-          badge(nombreTipo(a)),
-          a.estado === 'confirmada' && badge('Confirmada', 'ok'),
-          a.estado === 'cancelada' && badge('Cancelada', 'mal'),
-          a.tiene_tercer && badge('Con tercer tiempo', 'acento'),
-          badge(cupoTxt))));
+    const f = partes(a.fecha);
+    return h('button', { type: 'button', class: 'tarjeta-act' + (a.estado === 'cancelada' ? ' cancelada' : '') + (a.tiene_tercer ? ' con-talon' : ''), on: { click: () => irA({ tipo: 'detalle', id: a.id }) } },
+      h('span', { class: 'tarjeta-principal' },
+        h('span', { class: 'tarjeta-fecha' }, h('span', { class: 'tf-dia' }, f.dia), h('span', { class: 'tf-num' }, f.num), h('span', { class: 'tf-mes' }, f.mes)),
+        h('span', { class: 'tarjeta-cuerpo' },
+          h('span', { class: 'tarjeta-tipo' }, ico(t.icono), nombreTipo(a)),
+          h('span', { class: 'tarjeta-titulo' }, a.titulo),
+          h('span', { class: 'tarjeta-meta' }, h('span', { class: 'hora' }, f.hora), h('span', { class: 'tm-lugar' }, a.lugar)),
+          h('span', { class: 'tarjeta-badges' },
+            a.estado === 'confirmada' && badge('Confirmada', 'ok'),
+            a.estado === 'cancelada' && badge('Cancelada', 'mal'),
+            h('span', { class: 'cupo' }, cupoTxt)))),
+      a.tiene_tercer && h('span', { class: 'talon-mini' },
+        ico('tercer'), h('span', { class: 'tm-titulo' }, 'Tercer tiempo'),
+        h('span', { class: 'hora' }, partes(a.tercer_fecha).hora), h('span', { class: 'tm-lugar' }, a.tercer_lugar)));
   }
+
+  // Filtro por tipo: un control segmentado de una sola fila que funciona como toggle. Sin nada elegido se ven todas;
+  // tocar un tipo filtra y tocarlo de nuevo lo desmarca. En el teléfono los tipos no elegidos muestran solo el
+  // pictograma (con su nombre para el lector y como title) y el elegido se estira con el nombre; con lugar, todos.
+  function elegirFiltro(id) {
+    filtro = filtro === id ? null : id;
+    pintar();
+    const b = raiz().querySelector('.seg[data-tipo="' + id + '"]');
+    if (b) b.focus({ preventScroll: true });
+  }
+  function filtroTipos() {
+    const seg = (t) => h('button', { type: 'button', class: 'chip seg' + (filtro === t.id ? ' activo' : ''), 'data-tipo': t.id, 'aria-pressed': filtro === t.id ? 'true' : 'false',
+      'aria-label': t.nombre, title: filtro === t.id ? t.nombre + ' (tocá de nuevo para ver todas)' : t.nombre, on: { click: () => elegirFiltro(t.id) } },
+    ico(t.icono), h('span', { class: 'seg-txt', 'aria-hidden': 'true' }, t.corto));
+    return h('div', { class: 'filtro-tipos' + (filtro ? ' con-filtro' : ''), role: 'group', 'aria-label': 'Filtrar por tipo' },
+      h('div', { class: 'segmentos' }, L.TIPOS.map(seg)));
+  }
+  // "No hay pádel en agenda", "No hay after office en agenda", "No hay otras actividades en agenda"
+  const sinTipo = (t) => 'No hay ' + (t.id === 'otra' ? 'otras actividades' : t.nombre.toLowerCase()) + ' en agenda.';
 
   function lista() {
     const ahora = Date.now();
-    const visibles = actividades.filter((a) => filtro === 'todas' || a.tipo === filtro);
+    const visibles = actividades.filter((a) => !filtro || a.tipo === filtro);
     const proximas = visibles.filter((a) => L.esFutura(a, ahora)).sort((x, y) => Date.parse(x.fecha) - Date.parse(y.fecha));
     const pasadas = visibles.filter((a) => !L.esFutura(a, ahora)).sort((x, y) => Date.parse(y.fecha) - Date.parse(x.fecha));
-    const chip = (id, texto) => h('button', { type: 'button', class: 'chip' + (filtro === id ? ' activo' : ''), 'aria-pressed': filtro === id ? 'true' : 'false', on: { click: () => { filtro = id; pintar(); } } }, texto);
     const out = [
       h('div', { class: 'fila-titulo' }, h('h1', null, 'Actividades'),
-        h('button', { type: 'button', id: 'btn-nueva-act', class: 'btn-primario btn-chico', on: { click: () => irA({ tipo: 'form', id: null }) } }, '+ Nueva')),
-      h('div', { class: 'chips', role: 'group', 'aria-label': 'Filtrar por tipo' }, chip('todas', 'Todas'), L.TIPOS.map((t) => chip(t.id, t.emoji + ' ' + t.nombre))),
+        h('button', { type: 'button', id: 'btn-nueva-act', class: 'btn-primario btn-chico btn-con-ico', on: { click: () => irA({ tipo: 'form', id: null }) } }, ico('mas'), 'Nueva')),
+      filtroTipos(),
     ];
     if (!cargado && estadoCarga === 'error') {
       out.push(h('div', { class: 'vacio', role: 'alert' }, h('p', null, 'No pudimos cargar las actividades.'),
@@ -228,7 +260,16 @@
       return out;
     }
     if (!cargado) { out.push(h('p', { class: 'vacio' }, 'Cargando…')); return out; }
-    if (!proximas.length) out.push(h('p', { class: 'vacio' }, filtro === 'todas' ? 'Todavía no hay actividades próximas. ¡Armá la primera!' : 'No hay actividades próximas de este tipo.'));
+    if (!proximas.length) {
+      const t = filtro ? tipoDe(filtro) : null;
+      const armar = h('button', { type: 'button', class: t ? 'btn-link' : 'btn-sec btn-chico', on: { click: () => irA({ tipo: 'form', id: null, tipoInicial: t ? t.id : null }) } },
+        t ? 'Armar ' + (t.id === 'otra' ? 'otra actividad' : t.nombre.toLowerCase()) : 'Armar una actividad');
+      out.push(h('div', { class: 'vacio vacio-act', id: 'act-vacio' }, ico(t ? t.icono : 'actividades', null, 'vacio-ico'),
+        h('p', null, t ? sinTipo(t) : 'Todavía no hay actividades próximas. ¡Armá la primera!'),
+        t ? h('div', { class: 'vacio-acciones' },
+          h('button', { type: 'button', id: 'act-ver-todas', class: 'btn-sec btn-chico', on: { click: () => { filtro = null; pintar(); } } }, 'Ver todas'), armar)
+          : armar));
+    }
     else out.push(h('div', { class: 'lista-act' }, proximas.map(tarjeta)));
     if (pasadas.length) out.push(h('h2', { class: 'sub' }, 'Anteriores'), h('div', { class: 'lista-act pasadas' }, pasadas.map(tarjeta)));
     return out;
@@ -271,25 +312,34 @@
       estoy ? 'Listo, te bajaste' : '¡Anotado!');
     const cambiarEstado = (estado, msg) => () => { confirmando = null; accion(() => sb().from('actividades').update({ estado }).eq('id', a.id), msg); };
 
+    const f = partes(a.fecha);
+    const dato = (icono, etiqueta, valor) => h('div', { class: 'dato-fila' }, ico(icono), h('dt', { class: 'sr' }, etiqueta), h('dd', null, valor));
     const out = [
-      h('button', { type: 'button', class: 'btn-link', on: { click: () => irA({ tipo: 'lista' }) } }, '← Volver'),
-      h('h1', null, t.emoji + ' ' + a.titulo),
-      h('p', { class: 'tarjeta-badges' }, badge(nombreTipo(a)), a.estado === 'confirmada' && badge('Confirmada', 'ok'), cancelada && badge('Cancelada', 'mal'), a.tiene_tercer && badge('Con tercer tiempo', 'acento')),
-      h('p', { class: 'dato' }, h('strong', null, 'Cuándo: '), fmt(a.fecha)),
-      h('p', { class: 'dato' }, h('strong', null, 'Dónde: '), a.lugar),
-      h('p', { class: 'dato' }, h('strong', null, 'Organiza: '), perfilDe(a.creador).nombre),
+      volverBtn(() => irA({ tipo: 'lista' })),
+      h('div', { class: 'det-cab' + (cancelada ? ' cancelada' : '') },
+        h('p', { class: 'tarjeta-tipo det-tipo' }, ico(t.icono), nombreTipo(a)),
+        h('h1', null, a.titulo),
+        (a.estado === 'confirmada' || cancelada) && h('p', { class: 'tarjeta-badges' }, a.estado === 'confirmada' && badge('Confirmada', 'ok'), cancelada && badge('Cancelada', 'mal'))),
+      h('dl', { class: 'datos' },
+        dato('reloj', 'Cuándo', h('span', null, fechaLarga(a.fecha) + ', ', h('span', { class: 'hora' }, f.hora))),
+        dato('lugar', 'Dónde', a.lugar),
+        dato('perfil', 'Organiza', perfilDe(a.creador).nombre)),
       a.descripcion && h('p', { class: 'dato desc' }, a.descripcion),
-      h('h2', { class: 'sub' }, 'La actividad (' + enAct.length + (a.cupo != null ? '/' + a.cupo : '') + ')'),
-      cancelada ? h('p', { class: 'ayuda' }, 'Esta actividad fue cancelada.')
-        : h('button', { type: 'button', id: 'btn-voy', class: voy ? 'btn-sec btn-ancho' : 'btn-primario btn-ancho', disabled: !voy && lleno, on: { click: alternar('actividad', voy) } }, voy ? 'Ya no voy' : (lleno ? 'Cupo completo' : 'Voy')),
-      anotadosLista(enAct),
+      h('section', { class: 'parte-act', 'aria-labelledby': 'h-parte-act' },
+        h('h2', { class: 'sub', id: 'h-parte-act' }, 'La actividad ', h('span', { class: 'cuenta' }, '(' + enAct.length + (a.cupo != null ? '/' + a.cupo : '') + ')')),
+        cancelada ? h('p', { class: 'ayuda' }, 'Esta actividad fue cancelada.')
+          : h('button', { type: 'button', id: 'btn-voy', class: voy ? 'btn-sec btn-ancho' : 'btn-primario btn-ancho', disabled: !voy && lleno, on: { click: alternar('actividad', voy) } }, voy ? 'Ya no voy' : (lleno ? 'Cupo completo' : 'Voy')),
+        anotadosLista(enAct)),
     ];
     if (a.tiene_tercer) {
-      out.push(
-        h('h2', { class: 'sub' }, '🍻 Tercer tiempo (' + enTer.length + ')'),
-        h('p', { class: 'dato' }, fmt(a.tercer_fecha) + ' · ' + a.tercer_lugar),
+      // El tercer tiempo es el talón de la entrada: se anota aparte y tiene su propia hora y lugar.
+      const ft = partes(a.tercer_fecha);
+      out.push(h('section', { class: 'talon' + (cancelada ? ' cancelada' : ''), id: 'talon-tercer', 'aria-labelledby': 'h-tercer' },
+        h('h2', { class: 'sub talon-titulo', id: 'h-tercer' }, ico('tercer', null, 'talon-ico'), 'Tercer tiempo ', h('span', { class: 'cuenta' }, '(' + enTer.length + ')')),
+        h('p', { class: 'talon-cuando' }, h('span', { class: 'talon-hora' }, ft.hora),
+          h('span', { class: 'talon-donde' }, h('span', { class: 'talon-lugar' }, a.tercer_lugar), h('span', { class: 'talon-dia' }, fechaLarga(a.tercer_fecha)))),
         cancelada ? null : h('button', { type: 'button', id: 'btn-voy-tercer', class: voyTer ? 'btn-sec btn-ancho' : 'btn-primario btn-ancho', on: { click: alternar('tercer', voyTer) } }, voyTer ? 'Ya no voy al tercer tiempo' : 'Voy al tercer tiempo'),
-        anotadosLista(enTer));
+        anotadosLista(enTer)));
     }
     out.push(cuentasDe(a, enAct, enTer, voy || voyTer));
     out.push(albumDe(a, voy || voyTer));
@@ -318,13 +368,16 @@
     const editando = !!a;
     if (editando && !L.editable(a)) {
       return h('div', { class: 'form-act paso' },
-        h('button', { type: 'button', class: 'btn-link', on: { click: () => irA({ tipo: 'detalle', id: a.id }) } }, '← Volver'),
+        volverBtn(() => irA({ tipo: 'detalle', id: a.id })),
         h('h1', null, 'Editar actividad'),
         h('p', { id: 'act-no-editable', class: 'ayuda', role: 'alert' }, MSG_CANCELADA));
     }
-    const v = a || { tipo: 'futbol', tiene_tercer: false };
+    const v = a || { tipo: vista.tipoInicial || 'futbol', tiene_tercer: false };
     const campo = (id, etiqueta, ctrl) => h('div', { class: 'campo' }, h('label', { for: id }, etiqueta), ctrl);
-    const selTipo = h('select', { id: 'f-tipo' }, L.TIPOS.map((t) => h('option', { value: t.id, selected: t.id === v.tipo }, t.emoji + ' ' + t.nombre)));
+    const selTipo = h('select', { id: 'f-tipo' }, L.TIPOS.map((t) => h('option', { value: t.id, selected: t.id === v.tipo }, t.nombre)));
+    // el pictograma del tipo elegido, al lado del selector
+    const icoTipo = h('span', { class: 'f-tipo-ico' }, ico(tipoDe(v.tipo).icono));
+    selTipo.addEventListener('change', () => icoTipo.replaceChildren(ico(tipoDe(selTipo.value).icono)));
     const inOtro = h('input', { id: 'f-otro', type: 'text', maxLength: 60, value: v.tipo_otro || '', placeholder: '¿Qué actividad es?' });
     const inTitulo = h('input', { id: 'f-titulo', type: 'text', maxLength: 80, value: v.titulo || '', placeholder: 'Ej.: Pádel del jueves' });
     const inFecha = h('input', { id: 'f-fecha', type: 'datetime-local', value: L.aInputArg(v.fecha) });
@@ -354,16 +407,18 @@
     sync();
 
     const form = h('form', { class: 'form-act paso', noValidate: true },
-      h('button', { type: 'button', class: 'btn-link', on: { click: () => irA(a ? { tipo: 'detalle', id: a.id } : { tipo: 'lista' }) } }, '← Volver'),
+      volverBtn(() => irA(a ? { tipo: 'detalle', id: a.id } : { tipo: 'lista' })),
       h('h1', null, editando ? 'Editar actividad' : 'Nueva actividad'),
-      campo('f-tipo', 'Tipo', selTipo), bloqueOtro,
+      campo('f-tipo', 'Tipo', h('div', { class: 'f-tipo' }, icoTipo, selTipo)), bloqueOtro,
       campo('f-titulo', 'Título', inTitulo),
       campo('f-fecha', 'Día y hora (hora de Argentina)', inFecha),
       campo('f-lugar', 'Lugar', inLugar),
       campo('f-cupo', 'Cupo (opcional)', inCupo),
       campo('f-desc', 'Descripción (opcional)', inDesc),
-      h('label', { class: 'check', for: 'f-tercer' }, chkTer, ' Hay tercer tiempo 🍻'),
-      bloqueTer, err, aviso,
+      h('div', { class: 'talon talon-form' },
+        h('label', { class: 'check', for: 'f-tercer' }, chkTer, ico('tercer'), 'Hay tercer tiempo'),
+        bloqueTer),
+      err, aviso,
       h('button', { type: 'submit', id: 'btn-guardar-act', class: 'btn-primario' }, editando ? 'Guardar cambios' : 'Crear actividad'));
 
     async function guardar() {

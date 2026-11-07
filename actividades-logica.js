@@ -1,12 +1,13 @@
 // Lógica pura de actividades (sin DOM): tipos, validación, cupo, participantes y vigencia.
 (function (g) {
   const TIPOS = [
-    { id: 'futbol', nombre: 'Fútbol', emoji: '⚽' },
-    { id: 'padel', nombre: 'Pádel', emoji: '🎾' },
-    { id: 'trekking', nombre: 'Trekking', emoji: '🥾' },
-    { id: 'asado', nombre: 'Asado', emoji: '🍖' },
-    { id: 'after', nombre: 'After office', emoji: '🍻' },
-    { id: 'otra', nombre: 'Otra', emoji: '✨' },
+    // icono: id del sprite de index.html; corto: el nombre en el filtro de la lista
+    { id: 'futbol', nombre: 'Fútbol', corto: 'Fútbol', icono: 'futbol' },
+    { id: 'padel', nombre: 'Pádel', corto: 'Pádel', icono: 'padel' },
+    { id: 'trekking', nombre: 'Trekking', corto: 'Trekking', icono: 'trekking' },
+    { id: 'asado', nombre: 'Asado', corto: 'Asado', icono: 'asado' },
+    { id: 'after', nombre: 'After office', corto: 'After', icono: 'after' },
+    { id: 'otra', nombre: 'Otra', corto: 'Otra', icono: 'otra' },
   ];
 
   const ms = (f) => (f instanceof Date ? f.getTime() : Date.parse(f));
