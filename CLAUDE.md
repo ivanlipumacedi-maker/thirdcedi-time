@@ -48,3 +48,5 @@ PWA en JavaScript vainilla (sin framework ni bundler) para que los compañeros d
   2. Pasarle la site key (es pública) a Claude para ponerla en `TURNSTILE_SITE_KEY` de `app.js` (y subir el cache de `sw.js`).
   3. Cargar el secret key en Supabase → Authentication → Attack Protection → Enable Captcha → Turnstile.
   OJO: con el captcha prendido, Supabase también lo pide en `signInWithPassword`, así que las pruebas en vivo con las cuentas zz (`*-rls.mjs`, `dev/tools/prueba-*.js` que no son mock) y el E2E fallan al entrar. Para correrlas hay que apagar el captcha un rato en el Dashboard (Attack Protection → Enable Captcha) y volver a prenderlo al terminar. No hay bypass.
+
+- Cuentas de prueba: desde el 2026-11-07 las `zz-prueba-a/b/c@cedi.com.ar` NO existen (se borraron por seguridad al cerrar la v1). Para volver a correr pruebas en vivo: correr `dev/supabase/usuarios-prueba.sql` con `supabase-thirdcedi`, escribir las 3 líneas en `.env`, apagar el captcha si está activo, y al terminar limpiar y volver a borrar las cuentas (`delete from auth.users where email like 'zz-prueba-%@cedi.com.ar'`).
