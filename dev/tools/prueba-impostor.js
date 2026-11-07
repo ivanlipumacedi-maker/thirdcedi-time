@@ -77,10 +77,15 @@ const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
       assert.doesNotMatch(await texto(A, '#nueva-impostor'), /Próximamente/);
       await clic(A, '#nueva-impostor');
       await A.waitForSelector('#btn-arrancar', { timeout: 15000 });
-      par = null;
+      // la partida de A por id (no la primera tarjeta: puede haber partidas reales abiertas)
+      par = await A.evaluate(async () => {
+        const yo = (await App.sb.auth.getUser()).data.user.id;
+        const { data } = await App.sb.from('partidas').select('id').eq('creador', yo).eq('estado', 'espera').order('creado', { ascending: false }).limit(1);
+        return data && data[0] ? data[0].id : null;
+      });
+      assert.ok(par);
       for (const p of [B, C]) {
-        await esperar(p, () => !!document.querySelector('#lista-abiertas .tarjeta-partida'));
-        par = par || await p.$eval('#lista-abiertas .tarjeta-partida', (e) => e.dataset.id);
+        await esperar(p, (x) => !!document.querySelector('#lista-abiertas .tarjeta-partida[data-id="' + x + '"]'), par);
         await p.$eval('.tarjeta-partida[data-id="' + par + '"]', (e) => e.click());
         await p.waitForSelector('#btn-unirme', { timeout: 15000 });
         if (p === B) assert.equal(await A.$eval('#btn-arrancar', (b) => b.disabled), true, 'con 1 jugador no debería poder arrancar');

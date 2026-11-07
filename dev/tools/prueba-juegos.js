@@ -2,7 +2,7 @@
 // A arma una Trivia; B la ve aparecer en vivo y se une; A lo ve en la sala; el chat de la partida llega en vivo;
 // A arranca, los dos responden y se revela sola; mientras la pregunta está abierta, a B no le llega la correcta
 // por ningún lado (se miran las respuestas REST y los frames del websocket de Realtime); A avanza hasta el final
-// y los dos ven el ranking final.
+// y los dos ven el ranking final. Cierre (M1): B, sin jugar, ve salir de "Abiertas" la partida que A arranca o cancela.
 // Al terminar (finally) A y B salen de toda partida en la que sigan. Las filas de prueba se borran después con
 // dev/supabase/limpiar-pruebas-juegos.sql (MCP supabase-thirdcedi o SQL Editor): la RLS no deja borrarlas.
 // Las contraseñas salen de .env (ZZ_PRUEBA_A_PASSWORD / ZZ_PRUEBA_B_PASSWORD), nunca de la línea de comandos.
@@ -57,6 +57,12 @@ const texto = (p, sel) => p.$eval(sel, (e) => e.textContent);
 const clic = (p, sel) => p.$eval(sel, (e) => e.click());
 const esperar = (p, fn, ...a) => p.waitForFunction(fn, { timeout: 15000 }, ...a);
 const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
+// la última partida en espera que armó esta ventana (no la primera tarjeta: puede haber partidas reales abiertas)
+const ultimaMia = (p) => p.evaluate(async () => {
+  const yo = (await App.sb.auth.getUser()).data.user.id;
+  const { data } = await App.sb.from('partidas').select('id').eq('creador', yo).eq('estado', 'espera').order('creado', { ascending: false }).limit(1);
+  return data && data[0] ? data[0].id : null;
+});
 
 (async () => {
   let fallas = 0;
@@ -72,9 +78,9 @@ const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
       await A.waitForSelector('#nueva-trivia');
       await clic(A, '#nueva-trivia');
       await A.waitForSelector('#btn-arrancar', { timeout: 15000 });
-      await esperar(B, () => !!document.querySelector('#lista-abiertas .tarjeta-partida'));
-      par = await B.$eval('#lista-abiertas .tarjeta-partida', (e) => e.dataset.id);
+      par = await ultimaMia(A);
       assert.ok(par);
+      await esperar(B, (x) => !!document.querySelector('#lista-abiertas .tarjeta-partida[data-id="' + x + '"]'), par);
     });
 
     await paso('B se une y A lo ve en la sala en vivo', async () => {
@@ -128,6 +134,31 @@ const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
       await B.waitForSelector('#ranking-final', { timeout: 15000 });
       const filas = await B.$$eval('#ranking-final .fila-ranking', (xs) => xs.length);
       assert.equal(filas, 2);
+    });
+
+    await paso('M1: B (sin jugar) ve salir de "Abiertas" la partida que A arranca o cancela (broadcast juegos-lista)', async () => {
+      await clic(A, '#btn-volver-juegos');
+      await clic(B, '#btn-volver-juegos');
+      await esperar(B, () => /Abiertas para unirse/.test(document.getElementById('pantalla-juegos').textContent));
+      for (const accion of ['arrancar', 'cancelar']) {
+        await esperar(A, () => !!document.getElementById('btn-nueva-partida'));
+        await clic(A, '#btn-nueva-partida');
+        await A.waitForSelector('#nueva-trivia');
+        await clic(A, '#nueva-trivia');
+        await A.waitForSelector('#btn-arrancar', { timeout: 15000 });
+        const nueva = await ultimaMia(A);
+        assert.ok(nueva);
+        await esperar(B, (x) => !!document.querySelector('#lista-abiertas .tarjeta-partida[data-id="' + x + '"]'), nueva);
+        if (accion === 'arrancar') {
+          await clic(A, '#btn-arrancar');
+          await A.waitForSelector('#trivia-pregunta', { timeout: 15000 });
+        } else {
+          await clic(A, '#btn-salir');
+          await clic(A, '#btn-salir-si');
+        }
+        await esperar(B, (x) => !document.querySelector('.tarjeta-partida[data-id="' + x + '"]'), nueva);
+        if (accion === 'arrancar') { await clic(A, '#btn-salir'); await clic(A, '#btn-salir-si'); }
+      }
     });
 
     for (const p of [A, B]) if (p && p.errores.length) { fallas++; console.log('FALLA errores de página:', p.errores); }
