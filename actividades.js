@@ -134,7 +134,8 @@
         if (antes.focoCu && antes.focoCu.isConnected) antes.focoCu.focus({ preventScroll: true });
         return;
       }
-      vista = { tipo: 'lista' };
+      // abierta desde un aviso antes de la primera carga: se espera (la lista muestra "Cargando…") en vez de soltarla
+      if (cargado) vista = { tipo: 'lista' };
     }
     cerrarAnexos();
     if (vista.tipo === 'form') { vista.nuevoRender = false; r.append(formulario(vista.id ? actividades.find((x) => x.id === vista.id) : null)); return; }
@@ -427,5 +428,8 @@
   }
   g.addEventListener('perfil', alCambiarPerfil);
 
-  g.Actividades = { refrescar };
+  // Abre el detalle de una actividad (lo usan los avisos: #/actividad/<id>).
+  function abrir(id) { if (id) irA({ tipo: 'detalle', id }); }
+
+  g.Actividades = { refrescar, abrir };
 })(window);

@@ -388,5 +388,8 @@
   }
   g.addEventListener('perfil', alCambiarPerfil);
 
-  g.Juegos = { refrescar, JUEGOS };
+  // Abre una partida (lo usan los avisos del chat de la partida: #/juegos/<id>).
+  function abrir(id) { if (id) irA({ tipo: 'partida', id }); }
+
+  g.Juegos = { refrescar, JUEGOS, abrir };
 })(window);

@@ -6,6 +6,8 @@
 
   const RUTAS = ['actividades', 'juegos', 'perfil'];
   const RUTA_INICIAL = 'actividades';
+  // #/actividad/<id> (link de los avisos) muestra la pantalla Actividades; avisos.js abre el detalle
+  const ALIAS = { actividad: 'actividades' };
 
   let sb = null;
   if (SUPABASE_URL && SUPABASE_KEY && g.supabase && g.supabase.createClient) {
@@ -26,6 +28,7 @@
 
   function rutaActual() {
     const r = (location.hash || '').replace(/^#\/?/, '').split('/')[0];
+    if (ALIAS[r]) return ALIAS[r];
     return RUTAS.indexOf(r) >= 0 ? r : RUTA_INICIAL;
   }
 
@@ -33,7 +36,7 @@
     const ruta = rutaActual();
     // si el hash no es una ruta válida lo normalizamos, para que la barra de direcciones no mienta
     const cruda = (location.hash || '').replace(/^#\/?/, '').split('/')[0];
-    if (location.hash && RUTAS.indexOf(cruda) < 0) history.replaceState(null, '', '#/' + ruta);
+    if (location.hash && RUTAS.indexOf(cruda) < 0 && !ALIAS[cruda]) history.replaceState(null, '', '#/' + ruta);
     document.querySelectorAll('.pantalla').forEach((p) => { p.hidden = p.dataset.ruta !== ruta; });
     document.querySelectorAll('.pestanas a').forEach((a) => {
       const activa = a.dataset.ruta === ruta;

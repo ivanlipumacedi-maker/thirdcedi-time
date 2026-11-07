@@ -1,6 +1,6 @@
 // Service worker de ThirdCEDI Time: caché del shell (red primero, caché si no hay señal) y notificaciones push.
-const CACHE = 'thirdcedi-shell-v16';
-const SHELL = ['./', 'index.html', 'estilos.css', 'app.js', 'dominios.js', 'errores.js', 'perfiles.js', 'actividades-logica.js', 'chat-logica.js', 'chat-medios.js', 'chat.js', 'cuentas-logica.js', 'cuentas.js', 'album-logica.js', 'album-cola.js', 'camara.js', 'editor.js', 'album.js', 'actividades.js', 'trivia-logica.js', 'trivia.js', 'juegos.js', 'login.js', 'vendor/supabase.js', 'manifest.webmanifest', 'icon-192.png', 'badge-96.png', 'img/logo-cedi.png', 'img/logo-cedi-light.png'];
+const CACHE = 'thirdcedi-shell-v17';
+const SHELL = ['./', 'index.html', 'estilos.css', 'app.js', 'dominios.js', 'errores.js', 'perfiles.js', 'actividades-logica.js', 'chat-logica.js', 'chat-medios.js', 'chat.js', 'cuentas-logica.js', 'cuentas.js', 'album-logica.js', 'album-cola.js', 'camara.js', 'editor.js', 'album.js', 'actividades.js', 'trivia-logica.js', 'trivia.js', 'juegos.js', 'avisos.js', 'login.js', 'vendor/supabase.js', 'manifest.webmanifest', 'icon-192.png', 'badge-96.png', 'img/logo-cedi.png', 'img/logo-cedi-light.png'];
 
 // La IA del editor (worker, onnxruntime y modelo de 28 MB) y el editor de filtros no van en el shell: se guardan la primera
 // vez que se usan, en una caché aparte que no se borra al cambiar de versión, y después se sirven desde el teléfono.
@@ -68,7 +68,8 @@ self.addEventListener('notificationclick', (e) => {
     const ventanas = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     const abierta = ventanas.find((v) => v.url.startsWith(self.registration.scope));
     if (abierta) {
-      if ('navigate' in abierta) await abierta.navigate(destino).catch(() => {});
+      // la app ya abierta abre la actividad o la partida sin recargar (avisos.js escucha este mensaje)
+      abierta.postMessage({ tipo: 'abrir', url: destino });
       return abierta.focus();
     }
     return self.clients.openWindow(destino);
