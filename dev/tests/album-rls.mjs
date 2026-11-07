@@ -96,6 +96,14 @@ try {
     assert.ok((await anon.subir(`${actId}/${crypto.randomUUID()}.jpg`)).status >= 400, 'anon subió');
   });
 
+  await paso('17: Storage solo acepta <actividad>/<uuid>.jpg | .t.webp | .m.jpg (ni otro nombre ni otra extensión)', async () => {
+    for (const [p, t] of [[`${actId}/malo.jpg`, 'image/jpeg'], [`${actId}/${crypto.randomUUID()}.jpeg`, 'image/jpeg'], [`${actId}/${crypto.randomUUID()}.webp`, 'image/webp'], [`${actId}/${crypto.randomUUID().toUpperCase()}.jpg`, 'image/jpeg']]) {
+      const x = await A.subir(p, t);
+      if (x.status === 200) await A.borrar([p]); // si pasó, que no quede en el bucket
+      assert.ok(x.status >= 400, 'subió ' + p);
+    }
+  });
+
   await paso('fotos: A inserta solo sus columnas y el autor sale de auth.uid()', async () => {
     const x = await A.api('POST', 'fotos', fila);
     assert.equal(x.status, 201, JSON.stringify(x.data));

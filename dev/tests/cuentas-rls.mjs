@@ -132,6 +132,40 @@ try {
     falla(await A.gasto(solo.id, 'tercer', A.id, 10, 'x', [A.id]), /no tiene tercer tiempo/i);
   });
 
+  // ---- Ajustes de cierre (17) ----
+  const act2 = await nueva(true);
+  await anotar(A, act2.id, 'actividad');
+  await anotar(B, act2.id, 'actividad');
+  await cargar(A, 'A', act2.id, 'actividad', A.id, 1000, 'Cancha', [A.id, B.id]);
+
+  await paso('17: quien no está en las cuentas recibe "No tenés permiso" (el trigger no dice quién figura)', async () => {
+    // B no figura en "solo"; C no figura en act2. Antes el trigger contestaba "Esa persona no figura..."
+    const r1 = await B.api('POST', 'pagos', { actividad: solo.id, parte: 'actividad', de: B.id, a: A.id, monto: 5 });
+    falla(r1, /42501|permiso|row-level security/i);
+    assert.doesNotMatch(JSON.stringify(r1.data), /figura/);
+    const r2 = await C.api('POST', 'pagos', { actividad: act2.id, parte: 'actividad', de: C.id, a: A.id, monto: 5 });
+    falla(r2, /42501|permiso|row-level security/i);
+    assert.doesNotMatch(JSON.stringify(r2.data), /figura/);
+  });
+
+  await paso('17: el pago tiene que ser entre personas que figuran en ESA parte (B no figura en el tercer tiempo)', async () => {
+    const r = await A.api('POST', 'pagos', { actividad: act2.id, parte: 'tercer', de: B.id, a: A.id, monto: 500 });
+    if (r.status === 201) pagosDe.A.push(r.data[0].id);
+    falla(r, /no figura/);
+  });
+
+  await paso('17: "Ya pagué" y "Me pagó" a la vez: se guarda uno solo y el otro dice "Ese pago ya está registrado"', async () => {
+    const cuerpo = { actividad: act2.id, parte: 'actividad', de: B.id, a: A.id, monto: 500 };
+    const [rb, ra] = await Promise.all([B.api('POST', 'pagos', cuerpo), A.api('POST', 'pagos', cuerpo)]);
+    if (rb.status === 201) pagosDe.B.push(rb.data[0].id);
+    if (ra.status === 201) pagosDe.A.push(ra.data[0].id);
+    const oks = [rb, ra].filter((x) => x.status === 201);
+    assert.equal(oks.length, 1, 'se guardaron ' + oks.length + ': ' + JSON.stringify([rb.data, ra.data]));
+    falla([rb, ra].find((x) => x.status !== 201), /Ese pago ya está registrado/);
+    const ps = (await A.api('GET', `pagos?actividad=eq.${act2.id}&select=id`)).data;
+    assert.equal(ps.length, 1);
+  });
+
   await paso('quien no está anotado no carga; pagador y reparto tienen que estar anotados a esa parte', async () => {
     falla(await B.gasto(solo.id, 'actividad', A.id, 10, 'x', [A.id]), /anotados pueden cargar/i);
     falla(await A.gasto(solo.id, 'actividad', B.id, 10, 'x', [A.id]), /Quien pagó/i);
@@ -196,14 +230,14 @@ try {
     await anotar(B, act.id, 'tercer');
     const gt = await cargar(B, 'B', act.id, 'tercer', B.id, 3200, 'Cerveza', [A.id, B.id]);
     const r = await A.api('PATCH', `actividades?id=eq.${act.id}`, { tiene_tercer: false, tercer_lugar: null, tercer_fecha: null });
-    falla(r, /El tercer tiempo tiene gastos cargados: borralos antes de sacarlo/);
+    falla(r, /El tercer tiempo tiene gastos cargados: pedile a quien los cargó que los borre antes de sacarlo/);
     assert.equal((await A.api('GET', `actividades?id=eq.${act.id}`)).data[0].tiene_tercer, true);
     assert.equal((await A.api('GET', `asistencias?actividad=eq.${act.id}&parte=eq.tercer`)).data.length, 2, 'quitó anotados');
     // con un pago de 'tercer' tampoco
     const pt = await pagar(A, 'A', { actividad: act.id, parte: 'tercer', de: A.id, a: B.id, monto: 1600 });
     assert.equal((await B.api('DELETE', `gastos?id=eq.${gt.id}`)).status, 200);
     gastosDe.B = gastosDe.B.filter((x) => x !== gt.id);
-    falla(await A.api('PATCH', `actividades?id=eq.${act.id}`, { tiene_tercer: false, tercer_lugar: null, tercer_fecha: null }), /pagos registrados/);
+    falla(await A.api('PATCH', `actividades?id=eq.${act.id}`, { tiene_tercer: false, tercer_lugar: null, tercer_fecha: null }), /pagos registrados: pedile a quien los registró que los borre/);
     assert.equal((await A.api('DELETE', `pagos?id=eq.${pt.id}`)).status, 200);
     pagosDe.A = pagosDe.A.filter((x) => x !== pt.id);
     // sin nada en 'tercer', se apaga (y la 10 quita a sus anotados)
