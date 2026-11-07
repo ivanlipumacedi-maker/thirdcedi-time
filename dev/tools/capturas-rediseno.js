@@ -113,22 +113,37 @@ const STUB = `
 
 const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// En un teléfono o emulador Android: CDP_URL=http://127.0.0.1:<puerto> (adb forward tcp:<puerto>
+// localabstract:chrome_devtools_remote) y SERIAL=<serial de adb>. Se maneja la pestaña de Chrome que tenga la app y
+// las capturas son de la pantalla real (adb exec-out screencap). Ahí solo se sacan las vistas sin agrandar la ventana.
+const CDP = process.env.CDP_URL;
+const SERIAL = process.env.SERIAL;
+const ADB = path.join(process.env.LOCALAPPDATA || '', 'Android', 'Sdk', 'platform-tools', 'adb.exe');
+
 (async () => {
-  const browser = await puppeteer.launch({ executablePath: process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
+  const browser = CDP ? await puppeteer.connect({ browserURL: CDP, defaultViewport: null })
+    : await puppeteer.launch({ executablePath: process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
   const errores = [];
+  const preparadas = new WeakSet();
   async function pagina(tema, conSesion) {
-    const page = await browser.newPage();
-    page.on('pageerror', (e) => errores.push(tema + ': ' + e.message));
-    await page.exposeFunction('__q', async (j) => JSON.stringify(consulta(UA, JSON.parse(j))));
+    let page;
+    if (CDP) page = (await browser.pages()).find((p) => p.url().startsWith(URL_APP)) || await browser.newPage();
+    else page = await browser.newPage();
+    if (!preparadas.has(page)) {
+      preparadas.add(page);
+      page.on('pageerror', (e) => errores.push(e.message));
+      await page.exposeFunction('__q', async (j) => JSON.stringify(consulta(UA, JSON.parse(j))));
+      await page.setBypassServiceWorker(true);
+      await page.setRequestInterception(true);
+      page.on('request', (rq) => {
+        if (rq.url().endsWith('/vendor/supabase.js')) rq.respond({ status: 200, contentType: 'application/javascript', body: STUB });
+        else rq.continue();
+      });
+    }
     await page.evaluateOnNewDocument((t) => { try { localStorage.setItem('tema', t); } catch (e) {} }, tema);
-    await page.setBypassServiceWorker(true);
-    await page.setRequestInterception(true);
-    page.on('request', (rq) => {
-      if (rq.url().endsWith('/vendor/supabase.js')) rq.respond({ status: 200, contentType: 'application/javascript', body: STUB });
-      else rq.continue();
-    });
-    await page.setViewport({ width: ANCHO, height: ALTO, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
-    await page.goto(URL_APP, { waitUntil: 'networkidle0' });
+    if (!CDP) await page.setViewport({ width: ANCHO, height: ALTO, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+    await page.goto(URL_APP + '#/actividades', { waitUntil: 'networkidle0' });
+    if (CDP) await page.reload({ waitUntil: 'networkidle0' });
     await page.evaluate(() => document.fonts.ready);
     if (conSesion) {
       await page.evaluate((p) => { App.modoAcceso(false); App.setPerfil(p); }, db.perfiles[0]);
@@ -140,12 +155,15 @@ const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
     return page;
   }
   const foto = async (page, nombre, tema, completa) => {
-    await dormir(250);
-    await page.screenshot({ path: path.join(shots, `${PREFIJO}-${nombre}-${tema}.png`), fullPage: !!completa });
+    await dormir(CDP ? 900 : 250);
+    const destino = path.join(shots, `${PREFIJO}-${nombre}-${tema}.png`);
+    if (SERIAL) fs.writeFileSync(destino, require('child_process').execFileSync(ADB, ['-s', SERIAL, 'exec-out', 'screencap', '-p'], { maxBuffer: 64e6 }));
+    else await page.screenshot({ path: destino, fullPage: !!completa });
   };
   const scrollArriba = (page) => page.evaluate(() => { document.getElementById('pantallas').scrollTop = 0; });
   // fullPage no sirve con el scroll dentro de #pantallas: se agranda la ventana al alto del contenido
   async function completa(page, nombre, tema) {
+    if (CDP) return;
     const alto = await page.evaluate(() => { const p = document.getElementById('pantallas'); return p.scrollHeight + (window.innerHeight - p.clientHeight); });
     await page.setViewport({ width: ANCHO, height: Math.min(alto, 4000), deviceScaleFactor: 2, isMobile: true, hasTouch: true });
     await foto(page, nombre, tema);
@@ -155,7 +173,7 @@ const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
   for (const tema of ['claro', 'oscuro']) {
     const login = await pagina(tema, false);
     await foto(login, 'login', tema);
-    await login.close();
+    if (!CDP) await login.close();
 
     const p = await pagina(tema, true);
     await foto(p, 'lista', tema);
@@ -171,6 +189,8 @@ const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
     await scrollArriba(p);
     await foto(p, 'detalle', tema);
     await completa(p, 'detalle-completo', tema);
+    await p.evaluate(() => document.getElementById('talon-tercer').scrollIntoView({ block: 'center' }));
+    await foto(p, 'detalle-talon', tema);
     // formulario
     await p.evaluate(() => [...document.querySelectorAll('#pantalla-actividades .btn-link')].find((b) => /Volver/.test(b.textContent)).click());
     await p.evaluate(() => document.getElementById('btn-nueva-act').click());
@@ -184,15 +204,15 @@ const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
     await p.evaluate(() => { location.hash = '#/perfil'; });
     await dormir(500);
     await completa(p, 'perfil', tema);
-    await p.close();
+    if (!CDP) await p.close();
 
     vacia = true;
     const v = await pagina(tema, true);
     await foto(v, 'lista-vacia', tema);
-    await v.close();
+    if (!CDP) await v.close();
     vacia = false;
   }
-  await browser.close();
+  if (CDP) await browser.disconnect(); else await browser.close();
   if (errores.length) { console.log('Errores en la página:\n' + errores.join('\n')); process.exitCode = 1; }
   else console.log('Capturas en', shots);
 })().catch((e) => { console.error(e); process.exit(1); });
