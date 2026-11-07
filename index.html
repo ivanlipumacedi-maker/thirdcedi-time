@@ -112,6 +112,19 @@
       <p class="error" id="err-alta" role="alert" hidden></p>
       <button class="btn-primario" id="btn-alta" type="submit">Empezar</button>
     </form>
+    <div id="paso-baja" class="paso" hidden>
+      <h1>Cuenta dada de baja</h1>
+      <p class="ayuda" id="txt-baja" role="alert">Tu cuenta está dada de baja. Si es un error, hablá con el organizador.</p>
+      <button class="btn-sec" id="btn-baja-salir" type="button">Cerrar sesión</button>
+    </div>
+    <!-- Captcha de Cloudflare Turnstile (captcha.js): solo si App.TURNSTILE_SITE_KEY tiene la clave -->
+    <div id="captcha-zona" class="captcha-zona" hidden>
+      <div id="captcha" class="captcha"></div>
+      <div id="captcha-error" class="captcha-error" hidden>
+        <p class="error" role="alert">No pudimos comprobar que sos una persona. Revisá tu conexión y probá de nuevo.</p>
+        <button class="btn-sec" id="btn-captcha-otra" type="button">Probar de nuevo</button>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -158,6 +171,7 @@
 <script src="impostor.js"></script>
 <script src="juegos.js"></script>
 <script src="avisos.js"></script>
+<script src="captcha.js"></script>
 <script src="login.js"></script>
 </body>
 </html>

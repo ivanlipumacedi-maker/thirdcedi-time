@@ -1,6 +1,6 @@
 // Service worker de ThirdCEDI Time: caché del shell (red primero, caché si no hay señal) y notificaciones push.
-const CACHE = 'thirdcedi-shell-v24';
-const SHELL = ['./', 'index.html', 'estilos.css', 'app.js', 'dominios.js', 'errores.js', 'perfiles.js', 'actividades-logica.js', 'chat-logica.js', 'chat-medios.js', 'chat.js', 'cuentas-logica.js', 'cuentas.js', 'album-logica.js', 'album-cola.js', 'camara.js', 'editor.js', 'album.js', 'actividades.js', 'trivia-logica.js', 'trivia.js', 'impostor-logica.js', 'impostor.js', 'juegos.js', 'avisos.js', 'login.js', 'vendor/supabase.js', 'manifest.webmanifest', 'icon-192.png', 'badge-96.png', 'img/logo-cedi.png', 'img/logo-cedi-light.png'];
+const CACHE = 'thirdcedi-shell-v25';
+const SHELL = ['./', 'index.html', 'estilos.css', 'app.js', 'dominios.js', 'errores.js', 'perfiles.js', 'actividades-logica.js', 'chat-logica.js', 'chat-medios.js', 'chat.js', 'cuentas-logica.js', 'cuentas.js', 'album-logica.js', 'album-cola.js', 'camara.js', 'editor.js', 'album.js', 'actividades.js', 'trivia-logica.js', 'trivia.js', 'impostor-logica.js', 'impostor.js', 'juegos.js', 'avisos.js', 'captcha.js', 'login.js', 'vendor/supabase.js', 'manifest.webmanifest', 'icon-192.png', 'badge-96.png', 'img/logo-cedi.png', 'img/logo-cedi-light.png'];
 
 // La IA del editor (worker, onnxruntime y modelo de 28 MB) y el editor de filtros no van en el shell: se guardan la primera
 // vez que se usan, en una caché aparte que no se borra al cambiar de versión, y después se sirven desde el teléfono.
@@ -21,7 +21,7 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   const u = new URL(e.request.url);
-  if (u.origin !== self.location.origin) return; // Supabase, fuentes, etc. van directo a la red
+  if (u.origin !== self.location.origin) return; // Supabase, fuentes, Turnstile (challenges.cloudflare.com), etc. van directo a la red, sin caché
   if (esIA(u)) {
     const clave = u.origin + u.pathname; // sin ?v=
     e.respondWith((async () => {

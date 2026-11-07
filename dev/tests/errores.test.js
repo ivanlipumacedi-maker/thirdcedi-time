@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { traducir, MSG_DOMINIO } = require('../../errores.js');
+const { traducir, MSG_DOMINIO, MSG_CAPTCHA } = require('../../errores.js');
 
 test('paso mail: el 403 del hook muestra el aviso de dominio', () => {
   assert.equal(traducir({ status: 403, message: 'Solo cuentas del Grupo CEDI' }, 'mail'), MSG_DOMINIO);
@@ -28,4 +28,10 @@ test('error desconocido o paso otro: mensaje genérico', () => {
   assert.equal(traducir(new Error('boom'), 'otro'), gen);
   assert.equal(traducir({ status: 403 }, 'otro'), gen);
   assert.equal(traducir(null, 'mail'), gen);
+});
+
+test('captcha rechazado (Turnstile): lo dice, aunque venga con 400 o 403, y no habla del dominio', () => {
+  assert.equal(traducir({ status: 400, code: 'captcha_failed', message: 'captcha protection: request disallowed (no captcha response)' }, 'mail'), MSG_CAPTCHA);
+  assert.equal(traducir({ status: 403, message: 'captcha verification process failed' }, 'mail'), MSG_CAPTCHA);
+  assert.notEqual(traducir({ status: 403, code: 'captcha_failed' }, 'mail'), MSG_DOMINIO);
 });

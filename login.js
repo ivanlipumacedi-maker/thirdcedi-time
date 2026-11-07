@@ -10,8 +10,8 @@
   function sb() { return g.App.sb; }
 
   function pasos(cual) {
-    ['paso-mail', 'paso-codigo', 'paso-alta'].forEach((id) => { $(id).hidden = id !== cual; });
-    const foco = { 'paso-mail': 'in-mail', 'paso-codigo': 'in-codigo', 'paso-alta': 'in-nombre' }[cual];
+    ['paso-mail', 'paso-codigo', 'paso-alta', 'paso-baja'].forEach((id) => { $(id).hidden = id !== cual; });
+    const foco = { 'paso-mail': 'in-mail', 'paso-codigo': 'in-codigo', 'paso-alta': 'in-nombre', 'paso-baja': 'btn-baja-salir' }[cual];
     setTimeout(() => { const el = $(foco); if (el && !el.closest('[hidden]')) el.focus(); }, 0);
   }
   function error(id, texto) {
@@ -94,9 +94,17 @@
   }
 
   // ---------- Pasos del acceso ----------
+  // Con captcha (Turnstile), cada envío lleva un token nuevo. verifyOtp no lo lleva: Supabase chequea el captcha al
+  // pedir el código (y en signInWithPassword), no al verificarlo, y el token ya se gastó en el envío.
   async function enviarCodigo(email) {
-    const { error: e } = await sb().auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
-    if (e) throw e;
+    let captchaToken = null;
+    try { captchaToken = await g.Captcha.token(); } catch (e) { const x = new Error('captcha'); x.code = 'captcha_failed'; x.local = true; throw x; }
+    const options = { shouldCreateUser: true };
+    if (captchaToken) options.captchaToken = captchaToken;
+    try {
+      const { error: e } = await sb().auth.signInWithOtp({ email, options });
+      if (e) throw e;
+    } finally { g.Captcha.usado(); }
   }
   function cooldownReenvio() {
     const b = $('btn-reenviar');
@@ -122,12 +130,12 @@
       error('err-codigo', '');
       pasos('paso-codigo');
       cooldownReenvio();
-    } catch (e) { error('err-mail', traducir(e, 'mail')); }
+    } catch (e) { error('err-mail', e && e.local ? '' : traducir(e, 'mail')); } // el error local del captcha ya se ve abajo, con "Probar de nuevo"
     ocupado('btn-mail', false);
   }
   async function onReenviar() {
     error('err-codigo', '');
-    try { await enviarCodigo(mail); g.App.toast('Te mandamos un código nuevo'); cooldownReenvio(); } catch (e) { error('err-codigo', traducir(e, 'mail')); }
+    try { await enviarCodigo(mail); g.App.toast('Te mandamos un código nuevo'); cooldownReenvio(); } catch (e) { error('err-codigo', e && e.local ? '' : traducir(e, 'mail')); }
   }
   async function onCodigo(ev) {
     ev.preventDefault();
@@ -151,6 +159,9 @@
   async function despuesDeEntrar(user) {
     if (!user) throw new Error('Sesión incompleta');
     const p = await cargarPerfil(user.id);
+    g.Captcha.quitar();
+    // dado de baja (20): es_miembro() da false y las RLS no le muestran nada; se le explica y no entra a la app
+    if (p && p.activo === false) { mostrarBaja(); return; }
     if (p) { await entrar(p); return; }
     mail = user.email || mail;
     fotoPendiente = null;
@@ -251,6 +262,12 @@
     });
   }
 
+  function mostrarBaja() {
+    g.App.setPerfil(null);
+    g.App.modoAcceso(true);
+    pasos('paso-baja');
+  }
+
   function aPantallaDeMail() {
     mail = '';
     $('in-mail').value = '';
@@ -264,6 +281,7 @@
     $('paso-alta').addEventListener('submit', onAlta);
     $('btn-reenviar').addEventListener('click', onReenviar);
     $('btn-cambiar-mail').addEventListener('click', aPantallaDeMail);
+    $('btn-baja-salir').addEventListener('click', () => { const b = $('btn-baja-salir'); b.disabled = true; Promise.resolve(sb().auth.signOut()).finally(() => { b.disabled = false; }); });
     $('in-codigo').addEventListener('input', (e) => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6); });
     editorAlta = editorFoto($('alta-foto'), {
       onElegida: async (blob) => { fotoPendiente = blob; editorAlta.pintar({ nombre: $('in-nombre').value, foto: null }, blob); },
@@ -277,13 +295,15 @@
     if (!sb()) { error('err-mail', 'La app no está configurada. Avisale a Ivan.'); return; }
 
     sb().auth.onAuthStateChange((evento) => {
-      if (evento === 'SIGNED_OUT') { g.App.setPerfil(null); g.Perfiles.limpiarCache(); aPantallaDeMail(); g.App.modoAcceso(true); pintarPerfil(); }
+      if (evento === 'SIGNED_OUT') { g.App.setPerfil(null); g.Perfiles.limpiarCache(); aPantallaDeMail(); g.App.modoAcceso(true); pintarPerfil(); g.Captcha.preparar(); }
     });
     try {
       const { data: { session } } = await sb().auth.getSession();
       if (session && session.user) await despuesDeEntrar(session.user);
+      else g.Captcha.preparar(); // el script de Turnstile se carga solo en la pantalla de acceso
     } catch (e) {
       g.App.toast('No pudimos verificar tu sesión. Revisá tu conexión.');
+      g.Captcha.preparar();
     }
   }
 
