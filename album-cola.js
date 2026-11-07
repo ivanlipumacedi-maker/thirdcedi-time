@@ -32,9 +32,23 @@
     };
     const leer = async () => { items = await op('readonly', (s) => s.getAll()); return items; };
     const pendientes = (actividad) => A.pendientesDe(items, actividad, yo());
-    // errores que no se arreglan reintentando (formato o tamaño rechazado, dato inválido, ya no estás anotado): se descarta
-    const PERMANENTES = new Set(['400', '403', '413', '415', '422', '23514', '22P02', '23502', '23503', '42501']);
-    const esPermanente = (e) => PERMANENTES.has(String(e?.statusCode ?? e?.status ?? '')) || PERMANENTES.has(String(e?.code ?? ''));
+    // Errores (AlbumLogica.clasificarError): los permanentes se descartan. Los dudosos (400/403/RLS) pueden ser una
+    // sesión vencida: se pregunta en_sala con la sesión de ahora. Si no contesta, se reintenta más tarde; si ya no
+    // estás anotado, se descarta; si sí estás, se reintenta, y a los DUDOSOS_MAX intentos se descarta igual.
+    const DUDOSOS_MAX = 3;
+    const dudas = new Map(); // id → intentos dudosos (en memoria: al recargar se empieza de nuevo)
+    async function descartar(e, it) {
+      const tipo = A.clasificarError(e);
+      if (tipo === 'transitorio') return false;
+      if (tipo === 'dudoso') {
+        const r = await sb.rpc('en_sala', { sala: 'act:' + it.actividad });
+        if (r.error) return false;
+        const n = (dudas.get(it.id) || 0) + 1;
+        if (r.data === true && n < DUDOSOS_MAX) { dudas.set(it.id, n); return false; }
+      }
+      dudas.delete(it.id);
+      return true;
+    }
     const pesa = (it) => it.foto.size + it.mini.size + (it.media?.size || 0);
 
     async function subirUna(it) {
@@ -71,15 +85,17 @@
             let fila;
             try { fila = await subirUna(it); }
             catch (e) {
-              if (!esPermanente(e)) throw e;
+              if (!(await descartar(e, it).catch(() => false))) throw e;
               console.error('álbum: foto descartada', e);
               const ruta = A.rutaFoto(it.actividad, it.id);
               sb.storage.from(BUCKET).remove([ruta, A.rutaMini(ruta), A.rutaMedia(ruta)]).catch(() => {});
               await op('readwrite', (s) => s.delete(it.id)); await leer();
               avisar('descartada');
+              // el aviso sale aunque el álbum no esté abierto (la cola sube en segundo plano)
+              window.App?.toast?.('Una foto no se pudo subir (formato no válido o ya no estás anotado) y se descartó.');
               continue;
             }
-            usado += pesa(it);
+            usado += pesa(it); dudas.delete(it.id);
             await op('readwrite', (s) => s.delete(it.id));
             await leer(); intento = 0;
             for (const o of oyentes) { try { o.alSubir?.(fila); } catch (x) { console.error(x); } }

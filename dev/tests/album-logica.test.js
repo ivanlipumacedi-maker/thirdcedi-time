@@ -109,3 +109,24 @@ test('lentesTraseras: con tres o más traseras no se adivina cuál es la gran an
 test('lentesTraseras: sin etiquetas (computadora) usa la actual y no inventa gran angular', () => {
   assert.deepEqual(A.lentesTraseras([{ deviceId: 'w', label: 'HD Webcam' }], 'w'), { principal: 'w', gran: null, hayFrontal: false });
 });
+
+// ---- Ajustes de cierre (Task 10) ----
+test('textoEstado: cantidad, pendientes, poco espacio y lleno (como antes)', () => {
+  const ok = { estado: 'ok', pct: 10 };
+  assert.equal(A.textoEstado({ n: 1, pend: 0, est: 'listo', espacio: ok }), '1 foto');
+  assert.equal(A.textoEstado({ n: 3, pend: 2, est: 'subiendo', espacio: ok }), '3 fotos · subiendo 2');
+  assert.equal(A.textoEstado({ n: 3, pend: 2, est: 'sin-senal', espacio: ok }), '3 fotos · 2 esperando señal');
+  assert.equal(A.textoEstado({ n: 3, pend: 0, est: 'listo', espacio: { estado: 'aviso', pct: 92 } }), '3 fotos · queda poco espacio en la app');
+  assert.match(A.textoEstado({ n: 3, pend: 1, est: 'lleno', espacio: { estado: 'ok', pct: 99 } }), /^Se llenó el espacio de la app \(99 %\).*Hay 1 esperando\.$/);
+});
+
+test('textoEstado: si la lista llegó al tope (LIMITE_FOTOS) lo dice', () => {
+  assert.equal(A.LIMITE_FOTOS, 1000);
+  assert.equal(A.textoEstado({ n: 1000, pend: 0, est: 'listo', espacio: { estado: 'ok', pct: 1 }, truncado: true }), '1000 fotos · se ven las 1000 más recientes');
+});
+
+test('clasificarError: formato o tamaño es permanente; 400/403/RLS es dudoso (puede ser la sesión); lo demás, transitorio', () => {
+  for (const e of [{ statusCode: '413' }, { statusCode: 415 }, { status: 422 }, { code: '23514' }, { code: '22P02' }, { code: '23502' }, { code: '23503' }]) assert.equal(A.clasificarError(e), 'permanente', JSON.stringify(e));
+  for (const e of [{ statusCode: '400' }, { statusCode: '403' }, { status: 403 }, { code: '42501' }]) assert.equal(A.clasificarError(e), 'dudoso', JSON.stringify(e));
+  for (const e of [{ statusCode: '500' }, { message: 'Failed to fetch' }, null, undefined]) assert.equal(A.clasificarError(e), 'transitorio', JSON.stringify(e));
+});

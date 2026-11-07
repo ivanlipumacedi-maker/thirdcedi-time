@@ -71,7 +71,31 @@
     return { principal: actualId, gran, hayFrontal };
   }
 
-  const A = { LIMITE_BYTES, MAX_LADO, rutaFoto, rutaMini, rutaMedia, verFoto, escala, porDia, espacio, fusionar, quitar, espera,
-    carpetaDrive, nombreDrive, soloMias, pendientesDe, zoomPasos, lentesTraseras };
+  // El álbum trae como mucho las LIMITE_FOTOS más recientes de una actividad (limit de la consulta).
+  const LIMITE_FOTOS = 1000;
+  /** la línea de estado del álbum: cuántas fotos, qué falta subir y el espacio */
+  function textoEstado({ n, pend, est, espacio: e, truncado }) {
+    if (e.estado === 'lleno' || est === 'lleno') return `Se llenó el espacio de la app (${e.pct} %). Borren fotos que no quieran para seguir subiendo.` + (pend ? ` Hay ${pend} esperando.` : '');
+    let t = n === 1 ? '1 foto' : n + ' fotos';
+    if (truncado) t += ` · se ven las ${LIMITE_FOTOS} más recientes`;
+    if (pend) t += est === 'sin-senal' ? ` · ${pend} esperando señal` : ` · subiendo ${pend}`;
+    if (e.estado === 'aviso') t += ' · queda poco espacio en la app';
+    return t;
+  }
+
+  // Errores de la subida. 'permanente': no se arregla reintentando (formato, tamaño, dato inválido): se descarta.
+  // 'dudoso' (400, 403, RLS): puede ser que ya no estés anotado... o que la sesión haya vencido: la cola pregunta
+  // en_sala antes de descartar. 'transitorio': señal, servidor; se reintenta con espera.
+  const PERMANENTES = new Set(['413', '415', '422', '23514', '22P02', '23502', '23503']);
+  const DUDOSOS = new Set(['400', '403', '42501']);
+  function clasificarError(e) {
+    const st = String(e?.statusCode ?? e?.status ?? ''), cod = String(e?.code ?? '');
+    if (PERMANENTES.has(st) || PERMANENTES.has(cod)) return 'permanente';
+    if (DUDOSOS.has(st) || DUDOSOS.has(cod)) return 'dudoso';
+    return 'transitorio';
+  }
+
+  const A = { LIMITE_BYTES, LIMITE_FOTOS, MAX_LADO, rutaFoto, rutaMini, rutaMedia, verFoto, escala, porDia, espacio, fusionar, quitar, espera,
+    carpetaDrive, nombreDrive, soloMias, pendientesDe, zoomPasos, lentesTraseras, textoEstado, clasificarError };
   if (typeof module !== 'undefined' && module.exports) module.exports = A; else g.AlbumLogica = A;
 })(typeof window !== 'undefined' ? window : globalThis);

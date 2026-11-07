@@ -35,6 +35,7 @@ const db = {
 const paginas = []; // { page, uid }
 const enSala = (uid, sala) => { const m = /^act:(.+)$/.exec(sala || ''); return !!m && db.asistencias.some((a) => a.actividad === m[1] && a.persona === uid); };
 let fallarFotos = 0;
+let fallarSubida = null; // { uid, status, veces }: las próximas subidas de ese usuario contestan ese error
 const lecturas = {}; // selects a fotos por usuario
 
 function emitir(tabla, evento, fila) {
@@ -47,11 +48,13 @@ const cumple = (fila, filtros) => filtros.every(([op, col, v]) => (op === 'eq' ?
 function consulta(uid, s) {
   if (s.rpc) {
     if (s.rpc === 'album_uso') return { data: 123 * 1048576 };
+    if (s.rpc === 'en_sala') return { data: enSala(uid, s.args && s.args.sala) };
     return { error: { message: 'rpc desconocida ' + s.rpc } };
   }
   if (s.storage) {
     const carpeta = s.path.split('/')[0];
     if (s.storage === 'upload') {
+      if (fallarSubida && fallarSubida.uid === uid && fallarSubida.veces > 0) { fallarSubida.veces--; return { error: { statusCode: fallarSubida.status, message: 'error ' + fallarSubida.status } }; }
       if (!enSala(uid, carpeta.startsWith('act:') ? carpeta : 'act:' + carpeta)) return { error: { statusCode: '403', message: 'RLS' } };
       db.storage.set(s.path, uid); return { data: { path: s.path } };
     }
@@ -143,7 +146,7 @@ const STUB = `
 })();`;
 
 const navegadores = [];
-async function abrir(uid, tema) {
+async function abrir(uid, tema, antes) {
   // un navegador por ventana (una pestaña en segundo plano no avanza); cámara falsa de Chrome para probar el disparo
   const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] });
   navegadores.push(browser);
@@ -168,6 +171,7 @@ async function abrir(uid, tema) {
   await page.goto(URL_APP, { waitUntil: 'networkidle0' });
   // la cola es del teléfono (IndexedDB): cada corrida arranca limpia
   await page.evaluate(() => new Promise((ok) => { const r = indexedDB.deleteDatabase('thirdcedi-album'); r.onsuccess = r.onerror = r.onblocked = () => ok(); }));
+  if (antes) await antes(page);
   await page.evaluate((p) => { App.modoAcceso(false); App.setPerfil(p); }, db.perfiles.find((p) => p.id === uid));
   await page.waitForSelector('.tarjeta-act', { timeout: 8000 });
   return reg;
@@ -332,6 +336,119 @@ const celdas = (p) => cuantos(p, '#album-act .album-cel');
       await pb.evaluate(() => { dispatchEvent(new Event('online')); document.dispatchEvent(new Event('visibilitychange')); });
       await new Promise((r) => setTimeout(r, 400));
       assert.equal(lecturas[UB], antes);
+    });
+
+    // ---- Ajustes de cierre (Task 10) ----
+    await paso('la línea de estado no se vuelve a anunciar si no cambió (aria-live solo con el texto)', async () => {
+      await pa.waitForSelector('#album-act .album-estado [aria-live]');
+      // primero se pone al día (puede haber cambios de verdad pendientes); después, sin cambios, no se anuncia nada
+      await pa.evaluate(() => window.__estadoCanales('SUBSCRIBED'));
+      await new Promise((r) => setTimeout(r, 400));
+      await pa.evaluate(() => {
+        window.__mutEstado = 0;
+        const viva = document.querySelector('#album-act [aria-live]');
+        new MutationObserver((ms) => { window.__mutEstado += ms.length; }).observe(viva, { childList: true, characterData: true, subtree: true });
+      });
+      await pa.evaluate(() => window.__estadoCanales('SUBSCRIBED'));
+      await new Promise((r) => setTimeout(r, 400));
+      await pa.evaluate(() => window.__estadoCanales('SUBSCRIBED'));
+      await new Promise((r) => setTimeout(r, 400));
+      assert.equal(await pa.evaluate(() => window.__mutEstado), 0);
+      assert.equal(await pa.evaluate(() => !!document.querySelector('#album-act [aria-live] .barra')), false, 'la barra no va dentro del aria-live');
+    });
+
+    await paso('un 403 con en_sala = sí (sesión que se renovó) no descarta la foto: se reintenta y sube', async () => {
+      const antes = db.fotos.length;
+      fallarSubida = { uid: UA, status: '403', veces: 1 };
+      const input = await pa.$('#album-act input[type=file]');
+      await input.uploadFile(fixture);
+      for (let i = 0; i < 60 && db.fotos.length === antes; i++) await new Promise((r) => setTimeout(r, 200));
+      assert.equal(db.fotos.length, antes + 1, 'se descartó: ' + await texto(pa, '#toast'));
+      assert.equal(fallarSubida.veces, 0);
+      fallarSubida = null;
+    });
+
+    await paso('visor: Tab no se escapa del visor; con el editor abierto, Escape y las flechas no lo tocan', async () => {
+      const id = await pa.$eval('#album-act .album-cel', (e) => e.dataset.id);
+      await pa.click(`#album-act .album-cel[data-id="${id}"]`);
+      await pa.waitForSelector('.album-visor');
+      for (let i = 0; i < 8; i++) {
+        await pa.keyboard.press('Tab');
+        assert.equal(await pa.evaluate(() => !!document.activeElement.closest('.album-visor')), true, 'el foco salió del visor en el Tab ' + (i + 1));
+      }
+      await pa.keyboard.down('Shift'); await pa.keyboard.press('Tab'); await pa.keyboard.up('Shift');
+      assert.equal(await pa.evaluate(() => !!document.activeElement.closest('.album-visor')), true, 'Shift+Tab');
+      const titulo = await texto(pa, '.album-visor .cab');
+      await pa.evaluate(() => { window.__abiertoReal = EditorFoto.abierto; EditorFoto.abierto = () => true; });
+      await pa.keyboard.press('ArrowRight');
+      await pa.keyboard.press('ArrowLeft');
+      await pa.keyboard.press('ArrowLeft');
+      await pa.keyboard.press('Escape');
+      await new Promise((r) => setTimeout(r, 200));
+      assert.ok(await pa.$('.album-visor'), 'Escape cerró el visor que estaba debajo del editor');
+      assert.equal(await texto(pa, '.album-visor .cab'), titulo, 'las flechas pasaron de foto');
+      await pa.evaluate(() => { EditorFoto.abierto = window.__abiertoReal; });
+      await pa.keyboard.press('Escape');
+      await esperar(pa, () => !document.querySelector('.album-visor'));
+    });
+
+    await paso('cámara: Escape la cierra', async () => {
+      await pa.click('#album-camara');
+      await pa.waitForSelector('#camara:not([hidden])');
+      await pa.keyboard.press('Escape');
+      await esperar(pa, () => document.getElementById('camara').hidden);
+      assert.equal(await pa.evaluate(() => !!(history.state && history.state.cam)), false, 'quedó la entrada de la cámara');
+    });
+
+    await paso('si el álbum se cierra con el visor abierto (me sacaron de la actividad), no quedan entradas de "atrás"', async () => {
+      const id = await pa.$eval('#album-act .album-cel', (e) => e.dataset.id);
+      await pa.click(`#album-act .album-cel[data-id="${id}"]`);
+      await pa.waitForSelector('.album-visor');
+      assert.equal(await pa.evaluate(() => !!(history.state && history.state.albumFoto)), true);
+      const fila = db.asistencias.find((x) => x.persona === UA);
+      db.asistencias = db.asistencias.filter((x) => x !== fila);
+      emitir('asistencias', 'DELETE', fila);
+      await esperar(pa, () => !document.querySelector('#album-act') && !document.querySelector('.album-visor'));
+      await new Promise((r) => setTimeout(r, 300));
+      assert.equal(await pa.evaluate(() => !!(history.state && (history.state.albumFoto || history.state.albumConf))), false, 'quedó la entrada del visor');
+      db.asistencias.push(fila);
+      emitir('asistencias', 'INSERT', fila);
+      await pa.waitForSelector('#album-act');
+    });
+
+    await paso('"se descartó" avisa aunque el álbum esté cerrado (la cola sube en segundo plano)', async () => {
+      await pa.setOfflineMode(true);
+      await pa.evaluate(() => dispatchEvent(new Event('offline')));
+      const input = await pa.$('#album-act input[type=file]');
+      await input.uploadFile(fixture);
+      await esperar(pa, () => /esperando señal/.test(document.querySelector('#album-act .album-estado').textContent));
+      await pa.evaluate(() => [...document.querySelectorAll('#pantalla-actividades .btn-link')].find((b) => /Volver/.test(b.textContent)).click());
+      await pa.waitForSelector('.tarjeta-act');
+      fallarSubida = { uid: UA, status: '415', veces: 1 };
+      await pa.setOfflineMode(false);
+      await pa.evaluate(() => dispatchEvent(new Event('online')));
+      await esperar(pa, () => /se descartó/.test(document.getElementById('toast').textContent) && !document.getElementById('toast').hidden);
+      fallarSubida = null;
+    });
+
+    await paso('la cola arranca al entrar: lo pendiente de antes sube sin abrir el álbum', async () => {
+      const id = 'dddddddd-0000-4000-8000-000000000001';
+      const B2 = await abrir(UB, 'light', (page) => page.evaluate((id, act, autor) => new Promise((ok, mal) => {
+        const c = document.createElement('canvas'); c.width = 8; c.height = 8;
+        c.toBlob((foto) => {
+          const r = indexedDB.open('thirdcedi-album', 1);
+          r.onupgradeneeded = () => r.result.createObjectStore('pendientes', { keyPath: 'id' });
+          r.onerror = () => mal(r.error);
+          r.onsuccess = () => {
+            const t = r.result.transaction('pendientes', 'readwrite');
+            t.objectStore('pendientes').put({ id, actividad: act, autor, foto, mini: foto, media: null, ancho: 8, alto: 8, tomada: new Date().toISOString(), editada_de: null });
+            t.oncomplete = () => { r.result.close(); ok(); }; t.onerror = () => mal(t.error);
+          };
+        }, 'image/jpeg');
+      }), id, ACT, UB));
+      for (let i = 0; i < 40 && !db.fotos.some((f) => f.id === id); i++) await new Promise((r) => setTimeout(r, 200));
+      assert.ok(db.fotos.some((f) => f.id === id), 'no se subió sin abrir el álbum');
+      assert.equal(await cuantos(B2.page, '#album-act'), 0, 'el álbum no estaba abierto');
     });
 
     await paso('sin errores de JavaScript', async () => {

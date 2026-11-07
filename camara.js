@@ -271,6 +271,8 @@
     function ocultar() { raiz.hidden = true; soltar(); raiz.querySelector('.cuenta').hidden = true; }
     function cerrar() { if (raiz.hidden) return; if (history.state?.cam) history.back(); else ocultar(); }
     addEventListener('popstate', () => { if (!raiz.hidden && !history.state?.cam) ocultar(); });
+    // Escape cierra la cámara (como el botón ✕)
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !raiz.hidden) { e.preventDefault(); cerrar(); } });
     document.addEventListener('visibilitychange', () => { if (raiz.hidden) return; if (document.hidden) soltar(); else encender(); });
 
     api = { abrir, cerrar, abierta: () => !raiz.hidden, pendientes, _track: () => track };

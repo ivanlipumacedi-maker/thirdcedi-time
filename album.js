@@ -59,6 +59,8 @@
     if (!cola) cola = g.AlbumCola.crear({ sb: g.App.sb, yo: () => (g.App.yo() ? g.App.yo().id : null) });
     return cola;
   }
+  // al entrar (perfil cargado) se crea la cola: lo que quedó pendiente se sube sin tener que abrir el álbum
+  g.addEventListener('perfil', (e) => { if (e.detail && g.App && g.App.sb && g.AlbumCola) laCola(); });
   const fmtHora = new Intl.DateTimeFormat('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
 
   function abrir(cont, act) {
@@ -69,7 +71,7 @@
     if (!estilo) { estilo = true; document.head.appendChild(h('style', null, CSS)); }
     const q = laCola();
 
-    let fotos = [], uso = 0, driveUrl = null;
+    let fotos = [], uso = 0, driveUrl = null, truncado = false;
     let estado = 'cargando';      // 'cargando' | 'error' | 'ok'
     let cerrado = false;
     let enVuelo = null;           // la sincronización en curso (una sola a la vez)
@@ -82,7 +84,9 @@
     // ---------- Estructura ----------
     const inGaleria = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, id: 'album-galeria-' + act.slice(0, 8) });
     const linkDrive = h('a', { class: 'album-drive', id: 'album-drive', target: '_blank', rel: 'noopener', hidden: true }, '📁 Ver en Drive');
-    const elEstado = h('div', { class: 'album-estado', 'aria-live': 'polite' });
+    const elEstadoTxt = h('div', { class: 'album-estado-txt', 'aria-live': 'polite' });
+    const elBarra = h('div', { class: 'barra', hidden: true }, h('i'));
+    const elEstado = h('div', { class: 'album-estado' }, elEstadoTxt, elBarra);
     const elGrilla = h('div', { class: 'album-grilla' });
     cont.classList.add('album');
     cont.replaceChildren(
@@ -97,11 +101,11 @@
     function pintarEstado() {
       const e = A.espacio(uso, A.LIMITE_BYTES), pend = q.pendientes(act), est = q.estado();
       elEstado.className = 'album-estado ' + e.estado;
-      let t = fotos.length === 1 ? '1 foto' : fotos.length + ' fotos';
-      if (pend) t += est === 'sin-senal' ? ` · ${pend} esperando señal` : ` · subiendo ${pend}`;
-      if (e.estado === 'aviso') t += ' · queda poco espacio en la app';
-      if (e.estado === 'lleno' || est === 'lleno') t = `Se llenó el espacio de la app (${e.pct} %). Borren fotos que no quieran para seguir subiendo.` + (pend ? ` Hay ${pend} esperando.` : '');
-      elEstado.replaceChildren(...nodos([h('div', null, t), e.estado !== 'ok' && h('div', { class: 'barra' }, h('i', { style: `width:${e.pct}%` }))]));
+      const t = A.textoEstado({ n: fotos.length, pend, est, espacio: e, truncado });
+      // el lector de pantalla lo anuncia solo si cambió (no en cada repintado)
+      if (elEstadoTxt.textContent !== t) elEstadoTxt.textContent = t;
+      elBarra.hidden = e.estado === 'ok';
+      elBarra.firstChild.style.width = e.pct + '%';
       g.Camara.pendientes(pend);
       linkDrive.hidden = !driveUrl;
       if (driveUrl) linkDrive.href = driveUrl;
@@ -154,7 +158,7 @@
       enVuelo = (async () => {
         try {
           const [r, a, u] = await Promise.all([
-            sb.from('fotos').select('*').eq('actividad', act).order('tomada', { ascending: false }).limit(1000),
+            sb.from('fotos').select('*').eq('actividad', act).order('tomada', { ascending: false }).limit(A.LIMITE_FOTOS),
             sb.from('actividades').select('drive_url').eq('id', act).maybeSingle(),
             sb.rpc('album_uso'),
           ]);
@@ -163,6 +167,7 @@
           await asegurarPerfiles(r.data || []);
           if (cerrado) return;
           fotos = r.data || [];
+          truncado = fotos.length >= A.LIMITE_FOTOS;
           if (!a.error) driveUrl = (a.data && a.data.drive_url) || null;
           if (!u.error) uso = Number(u.data) || 0;
           estado = 'ok';
@@ -196,11 +201,7 @@
 
     const dejarDeOir = q.escuchar({
       alSubir: (fila) => { meter(fila); refrescarUso(); },
-      alEstado: (e) => {
-        if (cerrado) return;
-        pintarEstado();
-        if (e.estado === 'descartada') toast('Una foto no se pudo subir (formato no válido o ya no estás anotado) y se descartó.');
-      },
+      alEstado: () => { if (!cerrado) pintarEstado(); }, // el aviso de "descartada" lo da la cola (aunque el álbum esté cerrado)
     });
 
     // ---------- Realtime (topic único y filtro del servidor; nada de polling) ----------
@@ -284,8 +285,18 @@
     }
     function teclaVisor(e) {
       if (!visor || !visor.isConnected) return;
+      if (g.EditorFoto && g.EditorFoto.abierto()) return; // el editor está encima: las teclas son suyas
       if (e.key === 'Escape') { e.preventDefault(); if (!el.conf.hidden) el.no.click(); else salirVisor(); }
       else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') pasar(e.key === 'ArrowRight' ? 1 : -1);
+      else if (e.key === 'Tab') atraparFoco(e);
+    }
+    // el foco no se va del visor (es modal): Tab y Shift+Tab dan la vuelta entre sus botones visibles
+    function atraparFoco(e) {
+      const xs = [...visor.querySelectorAll('button, a[href]')].filter((x) => !x.closest('[hidden]') && !x.closest('[inert]') && x.offsetParent !== null);
+      if (!xs.length) return;
+      const i = xs.indexOf(document.activeElement);
+      const sig = e.shiftKey ? (i <= 0 ? xs[xs.length - 1] : xs[i - 1]) : (i < 0 || i === xs.length - 1 ? xs[0] : xs[i + 1]);
+      e.preventDefault(); sig.focus();
     }
     function abrirVisor(id) {
       const f = fotos.find((x) => x.id === id); if (!f) return;
@@ -435,7 +446,10 @@
       document.removeEventListener('visibilitychange', alVolver);
       g.removeEventListener('online', alVolver);
       g.removeEventListener('popstate', alPopstate);
+      // con el visor abierto, sus entradas de "atrás" (foto y confirmación) se van con él: si no, "atrás" no haría nada
+      const n = visor && visor.isConnected ? (history.state && history.state.albumConf ? 1 : 0) + (history.state && history.state.albumFoto ? 1 : 0) : 0;
       cerrarVisor();
+      if (n) history.go(-n);
       if (g.Camara.abierta()) g.Camara.cerrar();
       cont.replaceChildren();
     };
