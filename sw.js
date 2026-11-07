@@ -1,5 +1,5 @@
 // Service worker de ThirdCEDI Time: caché del shell (red primero, caché si no hay señal) y notificaciones push.
-const CACHE = 'thirdcedi-shell-v22';
+const CACHE = 'thirdcedi-shell-v23';
 const SHELL = ['./', 'index.html', 'estilos.css', 'app.js', 'dominios.js', 'errores.js', 'perfiles.js', 'actividades-logica.js', 'chat-logica.js', 'chat-medios.js', 'chat.js', 'cuentas-logica.js', 'cuentas.js', 'album-logica.js', 'album-cola.js', 'camara.js', 'editor.js', 'album.js', 'actividades.js', 'trivia-logica.js', 'trivia.js', 'impostor-logica.js', 'impostor.js', 'juegos.js', 'avisos.js', 'login.js', 'vendor/supabase.js', 'manifest.webmanifest', 'icon-192.png', 'badge-96.png', 'img/logo-cedi.png', 'img/logo-cedi-light.png'];
 
 // La IA del editor (worker, onnxruntime y modelo de 28 MB) y el editor de filtros no van en el shell: se guardan la primera
@@ -36,7 +36,11 @@ self.addEventListener('fetch', (e) => {
   }
   e.respondWith((async () => {
     try {
-      const r = await fetch(e.request);
+      // 'no-cache': revalida contra el servidor (ETag) en vez de usar la caché HTTP del navegador. GitHub Pages manda
+      // max-age=600 y, sin esto, después de publicar el teléfono podía mezclar archivos viejos y nuevos y romperse.
+      const r = e.request.mode === 'navigate'
+        ? await fetch(e.request.url, { cache: 'no-cache', credentials: 'same-origin' })
+        : await fetch(e.request, { cache: 'no-cache' });
       if (r.ok) { const c = await caches.open(CACHE); e.waitUntil(c.put(e.request, r.clone())); }
       return r;
     } catch (err) {
