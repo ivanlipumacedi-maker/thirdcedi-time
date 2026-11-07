@@ -9,8 +9,8 @@
   const textoEditado = (nuevo, original) => { const t = String(nuevo ?? '').trim(); return textoValido(t) && t !== String(original ?? '').trim() ? t : null; };
 
   function resumen(m) {
-    if (m.tipo === 'eliminado') return '🚫 Se eliminó este mensaje';
-    if (m.tipo === 'foto') return '📷 Foto';
+    if (m.tipo === 'eliminado') return 'Se eliminó este mensaje';
+    if (m.tipo === 'foto') return 'Foto';
     const t = String(m.texto ?? '').trim();
     return t.length > 80 ? t.slice(0, 79) + '…' : t;
   }

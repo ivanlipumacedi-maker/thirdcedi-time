@@ -123,17 +123,17 @@
     } else if (e === 'sin-soporte') {
       out.push(h('p', { class: 'ayuda', id: 'avisos-sin-soporte' }, 'Este navegador no permite avisos. Probá con Chrome en Android o con la app instalada en iPhone.'));
     } else if (e === 'bloqueado') {
-      out.push(h('p', { class: 'ayuda', id: 'avisos-bloqueados' }, '🔕 Los avisos están bloqueados para ThirdCEDI Time. Para habilitarlos:'),
+      out.push(h('p', { class: 'ayuda estado-avisos', id: 'avisos-bloqueados' }, g.App.icono('campana-off'), 'Los avisos están bloqueados para ThirdCEDI Time. Para habilitarlos:'),
         esIOS()
           ? h('p', { class: 'ayuda' }, 'Andá a Ajustes ▸ Notificaciones ▸ ThirdCEDI Time y activá "Permitir notificaciones". Después volvé a abrir la app.')
           : h('p', { class: 'ayuda' }, 'Tocá el candado (o los tres puntos ▸ Información del sitio) al lado de la dirección ▸ Permisos ▸ Notificaciones ▸ Permitir. Después recargá la página.'));
     } else if (e === 'activos') {
-      out.push(h('p', { class: 'ayuda', id: 'avisos-activos' }, '🔔 Avisos activados en este teléfono.'),
+      out.push(h('p', { class: 'ayuda estado-avisos activos', id: 'avisos-activos' }, g.App.icono('campana'), 'Avisos activados en este teléfono.'),
         h('div', { class: 'fila-links' },
           boton('btn-avisos-probar', 'Mandarme una prueba', 'btn-sec btn-chico', probar, ERROR_PRUEBA),
           boton('btn-avisos-off', 'Desactivar', 'btn-link', desactivar)));
     } else {
-      out.push(boton('btn-avisos-on', '🔔 Activar avisos', 'btn-primario', activar),
+      out.push(boton('btn-avisos-on', [g.App.icono('campana'), 'Activar avisos'], 'btn-primario btn-con-ico', activar),
         h('p', { class: 'ayuda' }, 'Te avisamos de actividades nuevas, cambios en las tuyas, mensajes del chat y un recordatorio a las 12 los días que tenés algo confirmado.'));
     }
     if (aviso) out.push(h('p', { class: 'ayuda', id: 'avisos-msg', role: 'status' }, aviso));

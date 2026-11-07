@@ -160,7 +160,7 @@
           h('li', { class: 'fila-ranking' + (id === yo() ? ' yo' : '') + (fueron.has(id) ? ' apagada' : '') },
             h('span', { class: 'puesto' }, (i + 1) + '°'),
             g.Perfiles.avatar(api.perfil(id), 28),
-            h('span', { class: 'rk-nombre' }, nombre(id) + (fueron.has(id) ? ' · se fue' : ''))))),
+            h('span', { class: 'rk-nombre' }, nombre(id) + (fueron.has(id) ? ' (se fue)' : ''))))),
         botonAvanzar(),
       ];
     }
@@ -215,7 +215,7 @@
           const n = conteo[j.persona] || 0;
           return h('li', { class: 'fila-ranking' + (j.persona === yo() ? ' yo' : '') + (j.persona === imp ? ' es-impostor' : '') },
             g.Perfiles.avatar(api.perfil(j.persona), 28),
-            h('span', { class: 'rk-nombre' }, nombre(j.persona) + (j.se_fue ? ' · se fue' : '') + (votos[j.persona] ? ' → votó a ' + api.perfil(votos[j.persona]).nombre : '')),
+            h('span', { class: 'rk-nombre' }, nombre(j.persona) + (j.se_fue ? ' (se fue)' : '') + (votos[j.persona] ? ', votó a ' + api.perfil(votos[j.persona]).nombre : '')),
             h('span', { class: 'rk-puntos' }, n + (n === 1 ? ' voto' : ' votos')));
         })),
         h('button', { type: 'button', id: 'btn-volver-juegos', class: 'btn-primario btn-ancho', on: { click: api.volver } }, 'Volver a Juegos'),

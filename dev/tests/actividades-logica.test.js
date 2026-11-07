@@ -7,9 +7,12 @@ const base = () => ({
   cupo: 4, tiene_tercer: false,
 });
 
-test('TIPOS tiene los seis tipos con emoji', () => {
+test('TIPOS tiene los seis tipos con ícono y nombre corto, sin emojis', () => {
   assert.deepEqual(A.TIPOS.map((t) => t.id), ['futbol', 'padel', 'trekking', 'asado', 'after', 'otra']);
-  A.TIPOS.forEach((t) => { assert.ok(t.nombre && t.emoji); });
+  A.TIPOS.forEach((t) => {
+    assert.ok(t.nombre && t.corto && t.icono);
+    assert.doesNotMatch(t.nombre + t.corto, /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]/u);
+  });
 });
 
 test('validar acepta una actividad correcta', () => {

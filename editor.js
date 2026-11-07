@@ -9,7 +9,7 @@
 /* solo nuestros botones: los del editor de filtros (Filerobot) quedan con sus propios colores */
 #editorFoto > .cab button, #editorFoto > .modos button, #editorFoto .herr button { font: inherit; color: #fff; background: rgba(255,255,255,.12); border: 0; border-radius: 999px; padding: 10px 14px; font-weight: 700; font-size: .9rem }
 #editorFoto > .cab button:disabled, #editorFoto > .modos button:disabled, #editorFoto .herr button:disabled { opacity: .45 }
-/* el guardar y el cerrar de Filerobot sobran: están "Guardar copia" y la ✕ de arriba */
+/* el guardar y el cerrar de Filerobot sobran: están "Guardar copia" y la X de arriba */
 #editorFoto .fr .FIE_topbar-save-button, #editorFoto .fr .FIE_topbar-close-button { display: none !important }
 #editorFoto #editorGuardar { background: #00B1EF; color: #001E3D }
 #editorFoto .modos { display: flex; gap: 6px; padding: 0 10px 8px }
@@ -79,10 +79,10 @@
     document.head.appendChild(st);
     const b = (id, txt, extra) => h('button', { type: 'button', id, ...(extra || {}) }, txt);
     raiz = h('div', { id: 'editorFoto', hidden: true, role: 'dialog', 'aria-label': 'Editar foto' },
-      h('div', { class: 'cab' }, b('editorCancelar', '✕', { 'aria-label': 'Cancelar' }), h('b', null, 'Editar foto'), b('editorGuardar', 'Guardar copia', { disabled: true })),
+      h('div', { class: 'cab' }, b('editorCancelar', g.App.icono('cerrar'), { 'aria-label': 'Cancelar' }), h('b', null, 'Editar foto'), b('editorGuardar', 'Guardar copia', { disabled: true })),
       h('div', { id: 'editorDescartar', hidden: true, role: 'alertdialog', 'aria-label': 'Descartar cambios' },
         h('p', null, '¿Descartar los cambios?'), h('div', null, b('editorDescartarNo', 'Seguir editando'), b('editorDescartarSi', 'Descartar'))),
-      h('div', { class: 'modos' }, b('editorModoIA', '✨ Borrar con IA', { 'aria-pressed': 'false' }), b('editorModoAjustes', '🎚️ Ajustar y filtros', { 'aria-pressed': 'false' })),
+      h('div', { class: 'modos' }, b('editorModoIA', [g.App.icono('varita'), 'Borrar con IA'], { 'aria-pressed': 'false' }), b('editorModoAjustes', [g.App.icono('ajustes'), 'Ajustar y filtros'], { 'aria-pressed': 'false' })),
       h('div', { class: 'lienzo' }, h('canvas', { class: 'foto' }), h('canvas', { class: 'mascara', hidden: true })),
       h('div', { class: 'fr', hidden: true }),
       h('div', { class: 'herr', 'data-h': 'ia', hidden: true },

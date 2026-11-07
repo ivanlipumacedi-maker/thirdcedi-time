@@ -87,12 +87,12 @@
       h('div', { class: 'cuenta', hidden: true }),
       h('div', { class: 'destello' }),
       h('div', { class: 'arriba' },
-        b('cerrar', 'Cerrar la cámara', '✕'),
+        b('cerrar', 'Cerrar la cámara', g.App.icono('cerrar')),
         h('span', { class: 'esp' }),
-        b('luz', 'Linterna', '🔦', { 'aria-pressed': 'false', hidden: true }),
-        b('exp', 'Exposición', '☀', { 'aria-pressed': 'false', hidden: true }),
-        b('grilla', 'Cuadrícula', '#', { 'aria-pressed': 'false' }),
-        b('timer', 'Temporizador', '⏱ 0')),
+        b('luz', 'Linterna', g.App.icono('linterna'), { 'aria-pressed': 'false', hidden: true }),
+        b('exp', 'Exposición', g.App.icono('exposicion'), { 'aria-pressed': 'false', hidden: true }),
+        b('grilla', 'Cuadrícula', g.App.icono('grilla'), { 'aria-pressed': 'false' }),
+        b('timer', 'Temporizador', [g.App.icono('temporizador'), h('span', { class: 'segs' }, '0')])),
       h('div', { class: 'abajo' },
         h('input', { type: 'range', 'data-c': 'expRango', 'aria-label': 'Exposición', hidden: true }),
         h('div', { class: 'zooms' }),
@@ -100,7 +100,7 @@
         h('div', { class: 'fila' },
           h('button', { type: 'button', class: 'ultima', 'data-c': 'ultima', 'aria-label': 'Ver en el álbum' }),
           h('button', { type: 'button', class: 'disparo', 'data-c': 'disparo', 'aria-label': 'Sacar foto' }),
-          b('lente', 'Cambiar de cámara', '🔄'))),
+          b('lente', 'Cambiar de cámara', g.App.icono('cambiar-camara')))),
       h('div', { class: 'error', hidden: true }));
     document.body.appendChild(raiz);
 
@@ -154,7 +154,7 @@
         camaras = (traseras.length ? traseras : ds).map((d) => d.deviceId);
         hayFrontal = !traseras.length || ds.some((d) => /front|user|frontal/i.test(d.label));
         const actual = track?.getSettings?.().deviceId; idxCam = Math.max(0, camaras.indexOf(actual));
-        // si hay una sola trasera extra es la gran angular: va como botón .6× y 🔄 queda para frontal/trasera
+        // si hay una sola trasera extra es la gran angular: va como botón .6× y el de cambiar de cámara queda para frontal/trasera
         gran = A.lentesTraseras(ds, actual).gran;
         if (gran) { camaras = [actual]; idxCam = 0; }
       } catch (e) { console.error(e); }
@@ -218,7 +218,7 @@
         case 'luz': { const on = bt.getAttribute('aria-pressed') !== 'true'; try { await track.applyConstraints({ advanced: [{ torch: on }] }); bt.setAttribute('aria-pressed', String(on)); } catch {} return; }
         case 'exp': { const on = bt.getAttribute('aria-pressed') !== 'true'; bt.setAttribute('aria-pressed', String(on)); q('expRango').hidden = !on; return; }
         case 'grilla': { const gr = raiz.querySelector('.grilla'); gr.hidden = !gr.hidden; bt.setAttribute('aria-pressed', String(!gr.hidden)); try { localStorage.setItem('camGrilla', gr.hidden ? '0' : '1'); } catch {} return; }
-        case 'timer': segs = TIMERS[(TIMERS.indexOf(segs) + 1) % TIMERS.length]; bt.textContent = '⏱ ' + segs; return;
+        case 'timer': segs = TIMERS[(TIMERS.indexOf(segs) + 1) % TIMERS.length]; bt.querySelector('.segs').textContent = String(segs); return;
         case 'lente':
           enGran = false;
           if (!frontal && idxCam < camaras.length - 1) idxCam++;
@@ -271,7 +271,7 @@
     function ocultar() { raiz.hidden = true; soltar(); raiz.querySelector('.cuenta').hidden = true; }
     function cerrar() { if (raiz.hidden) return; if (history.state?.cam) history.back(); else ocultar(); }
     addEventListener('popstate', () => { if (!raiz.hidden && !history.state?.cam) ocultar(); });
-    // Escape cierra la cámara (como el botón ✕)
+    // Escape cierra la cámara (como el botón de cerrar)
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !raiz.hidden) { e.preventDefault(); cerrar(); } });
     document.addEventListener('visibilitychange', () => { if (raiz.hidden) return; if (document.hidden) soltar(); else encender(); });
 

@@ -50,8 +50,8 @@
     const anotadosParte = () => (ctx.anotados && ctx.anotados[parte]) || [];
 
     // ---------- Estructura (el formulario no se rehace: no se pierde lo que se está escribiendo) ----------
-    const titulo = h('h2', { class: 'sub', id: 'cu-titulo' }, '💸 Cuentas claras');
-    const selector = h('div', { class: 'chips cu-partes', role: 'group', 'aria-label': 'Cuentas de' });
+    const titulo = h('h2', { class: 'sub titulo-ico', id: 'cu-titulo' }, g.App.icono('cuentas'), 'Cuentas claras');
+    const selector = h('div', { class: 'segmentos cu-partes', role: 'group', 'aria-label': 'Cuentas de' });
     const arriba = h('div', { class: 'cu-arriba' });
     const zonaForm = h('div', { class: 'cu-zona-form' });
     const abajo = h('div', { class: 'cu-abajo' });
@@ -75,7 +75,7 @@
       reparto, err,
       h('div', { class: 'fila-botones' }, btnGuardar,
         h('button', { type: 'button', id: 'cu-cerrar', class: 'btn-sec', on: { click: () => cerrarForm(true) } }, 'Cancelar')));
-    const btnNuevo = h('button', { type: 'button', id: 'cu-nuevo', class: 'btn-sec btn-ancho', 'aria-expanded': 'false', 'aria-controls': 'cu-form', on: { click: abrirForm } }, '+ Cargar un gasto');
+    const btnNuevo = h('button', { type: 'button', id: 'cu-nuevo', class: 'btn-sec btn-ancho btn-con-ico', 'aria-expanded': 'false', 'aria-controls': 'cu-form', on: { click: abrirForm } }, g.App.icono('mas'), 'Cargar un gasto');
     form.addEventListener('submit', (ev) => { ev.preventDefault(); guardarGasto(); });
     inMonto.addEventListener('input', verReparto);
     listaEntre.addEventListener('change', () => { tocado = true; verReparto(); });
@@ -266,9 +266,9 @@
       selector.textContent = '';
       selector.hidden = !a.tiene_tercer;
       if (a.tiene_tercer) {
-        const chip = (p, texto) => h('button', { type: 'button', id: 'cu-parte-' + p, class: 'chip' + (parte === p ? ' activo' : ''), 'aria-pressed': parte === p ? 'true' : 'false',
+        const chip = (p, texto) => h('button', { type: 'button', id: 'cu-parte-' + p, class: 'chip seg' + (parte === p ? ' activo' : ''), 'aria-pressed': parte === p ? 'true' : 'false',
           on: { click: () => { if (parte === p) return; parte = p; elegida = true; recordada.set(act, p); confirmando = null; formAbierto = false; err.hidden = true; focoTras = '#cu-parte-' + p; pintar(); } } }, texto);
-        selector.append(chip('actividad', 'La actividad'), chip('tercer', '🍻 Tercer tiempo'));
+        selector.append(chip('actividad', 'La actividad'), chip('tercer', [g.App.icono('tercer'), 'Tercer tiempo']));
       }
 
       arriba.textContent = ''; abajo.textContent = '';
@@ -315,7 +315,7 @@
           return h('li', { class: 'cu-trans', 'data-de': t.de, 'data-a': t.a }, h('span', { class: 'cu-txt' }, txt), accion);
         })));
       } else if (d.gastos.length) {
-        arriba.append(h('p', { class: 'ayuda', id: 'cu-a-mano' }, 'Están todos a mano. 🙌'));
+        arriba.append(h('p', { class: 'ayuda', id: 'cu-a-mano' }, 'Están todos a mano.'));
       }
 
       // cargar un gasto
@@ -355,8 +355,8 @@
                 accion: () => escribir(() => sb.from('gastos').delete().eq('id', x.id), 'Gasto borrado', 'No pudimos borrar el gasto. Probá de nuevo en un momento.') }) } }, 'Borrar');
           }
           return h('li', { class: 'cu-gasto', 'data-id': x.id },
-            h('span', { class: 'cu-txt' }, h('strong', null, x.concepto + ' · ' + L.pesos(x.monto)),
-              h('span', { class: 'cu-meta' }, quien + ' · entre ' + n + (n === 1 ? ' persona' : ' personas'))),
+            h('span', { class: 'cu-txt' }, h('span', { class: 'cu-gasto-cab' }, h('strong', null, x.concepto), h('span', { class: 'cu-monto-txt' }, L.pesos(x.monto))),
+              h('span', { class: 'cu-meta' }, quien + ', entre ' + n + (n === 1 ? ' persona' : ' personas'))),
             accion);
         })));
       }

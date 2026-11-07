@@ -15,7 +15,7 @@ test('resumen trunca a 80 con … y nombra la foto', () => {
   assert.equal(r.length, 80);
   assert.ok(r.endsWith('…'));
   assert.equal(L.resumen({ tipo: 'texto', texto: '  hola  ' }), 'hola');
-  assert.equal(L.resumen({ tipo: 'foto' }), '📷 Foto');
+  assert.equal(L.resumen({ tipo: 'foto' }), 'Foto');
 });
 
 test('fusionar es idempotente por id y ordena por creado', () => {
@@ -74,7 +74,7 @@ test('puedeEditar: solo mis textos, hasta 15 minutos', () => {
 });
 
 test('eliminado: resumen', () => {
-  assert.equal(L.resumen({ tipo: 'eliminado' }), '🚫 Se eliminó este mensaje');
+  assert.equal(L.resumen({ tipo: 'eliminado' }), 'Se eliminó este mensaje');
 });
 
 test('fusionar: un mensaje eliminado no vuelve por una respuesta o un evento atrasado', () => {

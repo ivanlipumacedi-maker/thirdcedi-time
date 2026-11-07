@@ -113,9 +113,9 @@
       return h('ol', { class: 'ranking' + (final ? ' final' : ''), id: final ? 'ranking-final' : 'ranking-parcial' }, filas.map((f) => {
         const p = api.perfil(f.persona);
         return h('li', { class: 'fila-ranking' + (f.persona === yo() ? ' yo' : '') + (final && f.puesto === 1 ? ' primero' : '') },
-          h('span', { class: 'puesto' }, final && f.puesto <= 3 ? ['🥇', '🥈', '🥉'][f.puesto - 1] : f.puesto + '°'),
+          h('span', { class: 'puesto' + (final && f.puesto <= 3 ? ' podio-' + f.puesto : '') }, f.puesto + '°'),
           g.Perfiles.avatar(p, 28),
-          h('span', { class: 'rk-nombre' }, p.nombre + (f.persona === yo() ? ' (vos)' : '') + (fueron.has(f.persona) ? ' · se fue' : '')),
+          h('span', { class: 'rk-nombre' }, p.nombre + (f.persona === yo() ? ' (vos)' : '') + (fueron.has(f.persona) ? ' (se fue)' : '')),
           !final && pr[f.persona] ? h('span', { class: 'rk-suma' }, '+' + pr[f.persona]) : null,
           h('span', { class: 'rk-puntos' }, f.puntos.toLocaleString('es-AR')));
       }));
@@ -139,7 +139,7 @@
           h('span', { class: 'op-letra', 'aria-hidden': 'true' }, LETRAS[i]),
           h('span', { class: 'op-texto' }, txt),
           revelada && e.conteo ? h('span', { class: 'op-conteo', 'aria-label': e.conteo[i] + ' eligieron esta' }, String(e.conteo[i])) : null,
-          revelada && i === e.ok ? h('span', { class: 'op-marca', 'aria-hidden': 'true' }, '✓') : null);
+          revelada && i === e.ok ? h('span', { class: 'op-marca' }, g.App.icono('check')) : null);
       });
       const out = [
         h('div', { class: 'trivia-cabecera' },
@@ -170,7 +170,7 @@
       const filas = T.ranking(datos.jugadores.map((j) => ({ persona: j.persona, puntos: j.puntos })));
       const puesto = T.textoPuesto(filas, yo());
       return [
-        h('h2', { class: 'sub titulo-final' }, '🏆 Ranking final'),
+        h('h2', { class: 'sub titulo-final titulo-ico' }, g.App.icono('trofeo'), 'Ranking final'),
         puesto ? h('p', { class: 'ayuda', id: 'mi-puesto' }, puesto) : null,
         rankingLista(true),
         h('button', { type: 'button', id: 'btn-volver-juegos', class: 'btn-primario btn-ancho', on: { click: api.volver } }, 'Volver a Juegos'),

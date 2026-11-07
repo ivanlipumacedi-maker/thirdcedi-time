@@ -5,8 +5,8 @@
 // se cancela, porque a quien no juega la RLS ya no le manda ese cambio por postgres_changes.
 (function (g) {
   const JUEGOS = {
-    trivia: { emoji: '🧠', nombre: 'Trivia', desc: '10 preguntas, 15 segundos cada una. Se puede jugar solo.', minimo: 1 },
-    impostor: { emoji: '🕵️', nombre: 'El Impostor', desc: 'De 3 jugadores en adelante. Uno tiene otra palabra: descubrilo.', minimo: 3 },
+    trivia: { icono: 'trivia', nombre: 'Trivia', desc: '10 preguntas, 15 segundos cada una. Se puede jugar solo.', minimo: 1 },
+    impostor: { icono: 'impostor', nombre: 'El Impostor', desc: 'De 3 jugadores en adelante. Uno tiene otra palabra: descubrilo.', minimo: 3 },
   };
   const VIGENCIA_ESPERA = 12 * 3600e3;   // una partida abierta más vieja que esto ya no se ofrece para unirse
   const VIGENCIA_TERMINADA = 24 * 3600e3;
@@ -300,10 +300,10 @@
     const n = activosDe(p.id, jugadores).length;
     const fin = p.estado === 'terminada';
     return h('button', { type: 'button', class: 'tarjeta-act tarjeta-partida', 'data-id': p.id, on: { click: () => irA({ tipo: 'partida', id: p.id }) } },
-      h('span', { class: 'tarjeta-emoji', 'aria-hidden': 'true' }, j.emoji),
+      h('span', { class: 'tarjeta-pict' }, g.App.icono(j.icono)),
       h('span', { class: 'tarjeta-cuerpo' },
         h('span', { class: 'tarjeta-titulo' }, j.nombre + ' de ' + perfilDe(p.creador).nombre),
-        h('span', { class: 'tarjeta-meta' }, n + (n === 1 ? ' jugador' : ' jugadores') + ' · ' + hace(p.creado)),
+        h('span', { class: 'tarjeta-meta' }, n + (n === 1 ? ' jugador' : ' jugadores') + ', ' + hace(p.creado)),
         h('span', { class: 'tarjeta-badges' },
           p.estado === 'espera' && badge('En espera', 'acento'),
           p.estado === 'jugando' && badge('Jugando', 'ok'),
@@ -314,7 +314,7 @@
   function vistaLista() {
     const ahora = Date.now();
     const out = [h('div', { class: 'fila-titulo' }, h('h1', null, 'Juegos'),
-      h('button', { type: 'button', id: 'btn-nueva-partida', class: 'btn-primario btn-chico', on: { click: () => irA({ tipo: 'nueva' }) } }, '+ Nueva partida'))];
+      h('button', { type: 'button', id: 'btn-nueva-partida', class: 'btn-primario btn-chico btn-con-ico', on: { click: () => irA({ tipo: 'nueva' }) } }, g.App.icono('mas'), 'Nueva partida'))];
     if (!cargado && estadoCarga === 'error') {
       out.push(h('div', { class: 'vacio', role: 'alert' }, h('p', null, 'No pudimos cargar las partidas.'),
         h('button', { type: 'button', id: 'jue-reintentar', class: 'btn-sec btn-chico', on: { click: () => { estadoCarga = 'cargando'; pintar(); refrescar(); } } }, 'Reintentar')));
@@ -338,13 +338,13 @@
     const opcion = (id) => {
       const j = JUEGOS[id];
       return h('button', { type: 'button', id: 'nueva-' + id, class: 'tarjeta-act tarjeta-juego', disabled: ocupado, on: { click: () => crear(id) } },
-        h('span', { class: 'tarjeta-emoji', 'aria-hidden': 'true' }, j.emoji),
+        h('span', { class: 'tarjeta-pict' }, g.App.icono(j.icono)),
         h('span', { class: 'tarjeta-cuerpo' },
           h('span', { class: 'tarjeta-titulo' }, j.nombre),
           h('span', { class: 'tarjeta-meta' }, j.desc)));
     };
     return [
-      h('button', { type: 'button', class: 'btn-link', on: { click: () => irA({ tipo: 'lista' }) } }, '← Volver'),
+      h('button', { type: 'button', class: 'btn-link btn-volver', on: { click: () => irA({ tipo: 'lista' }) } }, g.App.icono('volver'), 'Volver'),
       h('h1', null, 'Nueva partida'),
       h('p', { class: 'ayuda' }, '¿A qué juegan? La partida queda abierta para que se sumen los demás.'),
       h('div', { class: 'lista-act' }, opcion('trivia'), opcion('impostor')),
@@ -355,7 +355,7 @@
     const js = jugadores.filter((j) => j.partida === p.id && !j.se_fue);
     return h('ul', { class: 'anotados', id: 'sala-jugadores' }, js.map((j) => {
       const pf = perfilDe(j.persona);
-      return h('li', null, g.Perfiles.avatar(pf, 32), h('span', null, pf.nombre + (j.persona === yoId() ? ' (vos)' : '') + (j.persona === p.creador ? ' · armó la partida' : '')));
+      return h('li', null, g.Perfiles.avatar(pf, 32), h('span', null, pf.nombre + (j.persona === yoId() ? ' (vos)' : '') + (j.persona === p.creador ? ', armó la partida' : '')));
     }));
   }
 
@@ -372,7 +372,7 @@
   }
 
   function vistaPartida() {
-    const volver = h('button', { type: 'button', class: 'btn-link', on: { click: () => irA({ tipo: 'lista' }) } }, '← Volver');
+    const volver = h('button', { type: 'button', class: 'btn-link btn-volver', on: { click: () => irA({ tipo: 'lista' }) } }, g.App.icono('volver'), 'Volver');
     if (!cargado && estadoCarga === 'error') {
       cerrarChat(); cerrarJuego();
       return [volver, h('div', { class: 'vacio', role: 'alert' }, h('p', null, 'No pudimos cargar la partida.'),
@@ -387,7 +387,7 @@
     const j = JUEGOS[p.juego];
     const activo = soyActivo(p.id, jugadores);
     const yo = yoId();
-    const out = [volver, h('h1', null, j.emoji + ' ' + j.nombre)];
+    const out = [volver, h('h1', { class: 'titulo-ico' }, g.App.icono(j.icono), j.nombre)];
     if (p.estado === 'espera') {
       cerrarJuego();
       const n = activosDe(p.id, jugadores).length;

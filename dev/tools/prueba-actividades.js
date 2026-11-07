@@ -76,7 +76,7 @@ const texto = (p, sel) => p.$eval(sel, (e) => e.textContent);
     await B.waitForFunction((t) => [...document.querySelectorAll('.tarjeta-titulo')].some((e) => e.textContent === t), { timeout: 15000 }, titulo);
     await B.screenshot({ path: path.join(shots, 'actividades-lista-b-claro.png') });
     const tarj = await B.evaluate((t) => { const e = [...document.querySelectorAll('.tarjeta-act')].find((x) => x.querySelector('.tarjeta-titulo').textContent === t); return e.textContent; }, titulo);
-    assert.match(tarj, /Con tercer tiempo/);
+    assert.match(tarj, /Tercer tiempo/);
 
     // B entra y se anota SOLO al tercer tiempo
     await B.evaluate((t) => { [...document.querySelectorAll('.tarjeta-act')].find((x) => x.querySelector('.tarjeta-titulo').textContent === t).click(); }, titulo);

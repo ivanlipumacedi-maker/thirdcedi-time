@@ -162,7 +162,7 @@ async function avisoMensajes(g: { sala: string; autor: string; ids: number[] }) 
   return enviar(await subsDe(personas), { ...t, tag: 'chat-' + g.sala, url: L.urlSala(g.sala) });
 }
 
-const PRUEBA: Payload = { title: 'ThirdCEDI Time 🔔', body: 'Prueba: los avisos andan en este teléfono.', tag: 'prueba', url: '#/perfil' };
+const PRUEBA: Payload = { title: 'ThirdCEDI Time', body: 'Prueba: los avisos andan en este teléfono.', tag: 'prueba', url: '#/perfil' };
 
 async function cambios() {
   const ahora = Date.now();

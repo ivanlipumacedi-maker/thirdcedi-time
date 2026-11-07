@@ -73,11 +73,11 @@ test('anotado solo a la actividad: recibe mientras la actividad no pasó, aunque
 test('textoDiario: si la actividad ya pasó y queda el tercer tiempo, el aviso es del tercer tiempo', () => {
   const a = act('a1', '2026-11-06T12:00:00Z', { titulo: 'Pádel', tiene_tercer: true, tercer_fecha: '2026-11-06T23:30:00Z', tercer_lugar: 'Bar Roma' });
   const t = L.textoDiario(a, HOY_12);
-  assert.equal(t.title, 'Hoy: 🍻 Tercer tiempo de Pádel a las 20:30');
+  assert.equal(t.title, 'Hoy: Tercer tiempo de Pádel a las 20:30');
   assert.match(t.body, /Bar Roma/);
   assert.equal(t.url, '#/actividad/a1');
   // si la actividad todavía no pasó, el título es de la actividad
-  assert.match(L.textoDiario(act('a1', '2026-11-06T22:00:00Z', { titulo: 'Pádel' }), HOY_12).title, /^Hoy: 🎾 Pádel a las 19:00$/);
+  assert.match(L.textoDiario(act('a1', '2026-11-06T22:00:00Z', { titulo: 'Pádel' }), HOY_12).title, /^Hoy: Pádel a las 19:00$/);
 });
 
 test('evento mañana a las 00:30 ART (03:30Z): recibe hoy y dice "Mañana"', () => {
@@ -100,15 +100,15 @@ test('etiquetaDia: Hoy, Mañana o El <día>', () => {
   assert.equal(L.etiquetaDia(Date.parse('2026-11-10T15:00:00Z'), HOY_12), 'El martes 10/11');
 });
 
-test('textoDiario: "Hoy: ⚽ título a las 21:00"', () => {
+test('textoDiario: "Hoy: título a las 21:00"', () => {
   const t = L.textoDiario(act('a1', '2026-11-07T00:00:00Z', { tipo: 'futbol', titulo: 'Fútbol 5', lugar: 'Cancha' }), HOY_12);
-  assert.equal(t.title, 'Hoy: ⚽ Fútbol 5 a las 21:00');
+  assert.equal(t.title, 'Hoy: Fútbol 5 a las 21:00');
   assert.match(t.body, /Cancha/);
 });
 
 test('textoActividad para nueva, confirmada, cambio y cancelada', () => {
   const a = act('a1', '2026-11-07T00:00:00Z', { tipo: 'asado', titulo: 'Asado', lugar: 'Quincho' });
-  assert.equal(L.textoActividad('nueva', a, 'Ana').title, 'Nueva actividad: 🍖 Asado');
+  assert.equal(L.textoActividad('nueva', a, 'Ana').title, 'Nueva actividad: Asado');
   assert.match(L.textoActividad('nueva', a, 'Ana').body, /Ana/);
   assert.equal(L.textoActividad('confirmada', a, 'Ana').title, 'Se confirmó Asado');
   assert.equal(L.textoActividad('cambio', a, 'Ana').title, 'Cambió Asado');
@@ -119,8 +119,14 @@ test('textoActividad para nueva, confirmada, cambio y cancelada', () => {
   assert.equal(L.textoActividad('confirmada', a, 'Ana').url, '#/actividad/a1');
 });
 
-test('el emoji sale de los tipos de actividades', () => {
-  A.TIPOS.forEach((t) => assert.equal(L.EMOJI[t.id], t.emoji, t.id));
+test('los avisos van sin emojis', () => {
+  const emoji = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/u;
+  A.TIPOS.forEach((t) => {
+    const a = act('a-' + t.id, '2026-11-07T00:00:00Z', { tipo: t.id, titulo: 'Algo', lugar: 'Acá', tiene_tercer: true, tercer_fecha: '2026-11-07T02:00:00Z', tercer_lugar: 'Bar' });
+    const textos = [L.textoDiario(a, HOY_12), ...['nueva', 'confirmada', 'cambio', 'cancelada', 'reabierta'].map((k) => L.textoActividad(k, a, 'Ana', HOY_12))];
+    textos.forEach((x) => { assert.doesNotMatch(x.title, emoji, t.id); assert.doesNotMatch(x.body, emoji, t.id); });
+  });
+  assert.doesNotMatch(L.textoMensajes('Sala', 'Ana', [{ tipo: 'foto' }, { tipo: 'texto', texto: 'hola' }]).body, emoji);
 });
 
 test('fusionarActividad: nueva gana; si no, el último cambio de estado; si no, cambio de fecha o lugar', () => {
@@ -133,7 +139,7 @@ test('fusionarActividad: nueva gana; si no, el último cambio de estado; si no, 
 });
 
 test('resumenMensaje: texto recortado o foto', () => {
-  assert.equal(L.resumenMensaje({ tipo: 'foto', texto: null }), '📷 Foto');
+  assert.equal(L.resumenMensaje({ tipo: 'foto', texto: null }), 'Foto');
   assert.equal(L.resumenMensaje({ tipo: 'texto', texto: '  hola  ' }), 'hola');
   const largo = L.resumenMensaje({ tipo: 'texto', texto: 'x'.repeat(200) });
   assert.equal(Array.from(largo).length, 80);
