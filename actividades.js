@@ -4,7 +4,7 @@
   let actividades = [];
   let asistencias = [];
   let perfiles = new Map();
-  let filtro = 'todas';
+  let filtro = null;              // tipo elegido en el filtro; null = todas
   let vista = { tipo: 'lista' };  // { tipo:'lista' } | { tipo:'detalle', id } | { tipo:'form', id|null }
   let canal = null;
   let tRefresco = null;
@@ -225,19 +225,28 @@
         h('span', { class: 'hora' }, partes(a.tercer_fecha).hora), h('span', { class: 'tm-lugar' }, a.tercer_lugar)));
   }
 
-  // Filtro por tipo: un control segmentado de una sola fila. En el teléfono los tipos no elegidos muestran solo el
+  // Filtro por tipo: un control segmentado de una sola fila que funciona como toggle. Sin nada elegido se ven todas;
+  // tocar un tipo filtra y tocarlo de nuevo lo desmarca. En el teléfono los tipos no elegidos muestran solo el
   // pictograma (con su nombre para el lector y como title) y el elegido se estira con el nombre; con lugar, todos.
-  function filtroTipos() {
-    const seg = (id, nombre, corto, icono) => h('button', { type: 'button', class: 'chip seg' + (filtro === id ? ' activo' : ''), 'aria-pressed': filtro === id ? 'true' : 'false',
-      'aria-label': nombre, title: nombre, on: { click: () => { filtro = id; pintar(); const b = raiz().querySelector('.seg.activo'); if (b) b.focus({ preventScroll: true }); } } },
-    ico(icono), h('span', { class: 'seg-txt', 'aria-hidden': 'true' }, corto));
-    return h('div', { class: 'filtro-tipos', role: 'group', 'aria-label': 'Filtrar por tipo' },
-      h('div', { class: 'segmentos' }, seg('todas', 'Todas', 'Todas', 'todas'), L.TIPOS.map((t) => seg(t.id, t.nombre, t.corto, t.icono))));
+  function elegirFiltro(id) {
+    filtro = filtro === id ? null : id;
+    pintar();
+    const b = raiz().querySelector('.seg[data-tipo="' + id + '"]');
+    if (b) b.focus({ preventScroll: true });
   }
+  function filtroTipos() {
+    const seg = (t) => h('button', { type: 'button', class: 'chip seg' + (filtro === t.id ? ' activo' : ''), 'data-tipo': t.id, 'aria-pressed': filtro === t.id ? 'true' : 'false',
+      'aria-label': t.nombre, title: filtro === t.id ? t.nombre + ' (tocá de nuevo para ver todas)' : t.nombre, on: { click: () => elegirFiltro(t.id) } },
+    ico(t.icono), h('span', { class: 'seg-txt', 'aria-hidden': 'true' }, t.corto));
+    return h('div', { class: 'filtro-tipos' + (filtro ? ' con-filtro' : ''), role: 'group', 'aria-label': 'Filtrar por tipo' },
+      h('div', { class: 'segmentos' }, L.TIPOS.map(seg)));
+  }
+  // "No hay pádel en agenda", "No hay after office en agenda", "No hay otras actividades en agenda"
+  const sinTipo = (t) => 'No hay ' + (t.id === 'otra' ? 'otras actividades' : t.nombre.toLowerCase()) + ' en agenda.';
 
   function lista() {
     const ahora = Date.now();
-    const visibles = actividades.filter((a) => filtro === 'todas' || a.tipo === filtro);
+    const visibles = actividades.filter((a) => !filtro || a.tipo === filtro);
     const proximas = visibles.filter((a) => L.esFutura(a, ahora)).sort((x, y) => Date.parse(x.fecha) - Date.parse(y.fecha));
     const pasadas = visibles.filter((a) => !L.esFutura(a, ahora)).sort((x, y) => Date.parse(y.fecha) - Date.parse(x.fecha));
     const out = [
@@ -252,10 +261,14 @@
     }
     if (!cargado) { out.push(h('p', { class: 'vacio' }, 'Cargando…')); return out; }
     if (!proximas.length) {
-      const t = filtro === 'todas' ? null : tipoDe(filtro);
-      out.push(h('div', { class: 'vacio vacio-act' }, ico(t ? t.icono : 'actividades', null, 'vacio-ico'),
-        h('p', null, t ? 'No hay actividades próximas de este tipo.' : 'Todavía no hay actividades próximas. ¡Armá la primera!'),
-        h('button', { type: 'button', class: 'btn-sec btn-chico', on: { click: () => irA({ tipo: 'form', id: null, tipoInicial: t ? t.id : null }) } }, t ? 'Armar ' + (t.id === 'otra' ? 'otra actividad' : t.nombre.toLowerCase()) : 'Armar una actividad')));
+      const t = filtro ? tipoDe(filtro) : null;
+      const armar = h('button', { type: 'button', class: t ? 'btn-link' : 'btn-sec btn-chico', on: { click: () => irA({ tipo: 'form', id: null, tipoInicial: t ? t.id : null }) } },
+        t ? 'Armar ' + (t.id === 'otra' ? 'otra actividad' : t.nombre.toLowerCase()) : 'Armar una actividad');
+      out.push(h('div', { class: 'vacio vacio-act', id: 'act-vacio' }, ico(t ? t.icono : 'actividades', null, 'vacio-ico'),
+        h('p', null, t ? sinTipo(t) : 'Todavía no hay actividades próximas. ¡Armá la primera!'),
+        t ? h('div', { class: 'vacio-acciones' },
+          h('button', { type: 'button', id: 'act-ver-todas', class: 'btn-sec btn-chico', on: { click: () => { filtro = null; pintar(); } } }, 'Ver todas'), armar)
+          : armar));
     }
     else out.push(h('div', { class: 'lista-act' }, proximas.map(tarjeta)));
     if (pasadas.length) out.push(h('h2', { class: 'sub' }, 'Anteriores'), h('div', { class: 'lista-act pasadas' }, pasadas.map(tarjeta)));

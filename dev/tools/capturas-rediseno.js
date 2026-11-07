@@ -178,10 +178,15 @@ const ADB = path.join(process.env.LOCALAPPDATA || '', 'Android', 'Sdk', 'platfor
     const p = await pagina(tema, true);
     await foto(p, 'lista', tema);
     await completa(p, 'lista-completa', tema);
-    // filtro sin próximas: Otra (el último segmento; su única actividad ya pasó)
-    await p.evaluate(() => { const cs = document.querySelectorAll('#pantalla-actividades .chip'); cs[cs.length - 1].click(); });
+    // el filtro es un toggle: Pádel filtra; Otra no tiene próximas (su única actividad ya pasó); tocarla de nuevo
+    // vuelve a mostrar todas
+    const tocar = (tipo) => p.evaluate((t) => document.querySelector('#pantalla-actividades .seg[data-tipo="' + t + '"]').click(), tipo);
+    await tocar('padel');
+    await foto(p, 'lista-padel', tema);
+    await tocar('otra');
     await foto(p, 'lista-filtro', tema);
-    await p.evaluate(() => { document.querySelectorAll('#pantalla-actividades .chip')[0].click(); });
+    await tocar('otra');
+    if (await p.$('#pantalla-actividades .seg.activo')) throw new Error('tocar el tipo activo no desmarcó el filtro');
     // detalle del asado
     await p.evaluate((t) => [...document.querySelectorAll('.tarjeta-act')].find((e) => e.textContent.includes(t)).click(), ASADO.titulo);
     await p.waitForSelector('#chat-act');

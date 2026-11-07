@@ -10,7 +10,7 @@ const PESO = 'regular';
 // nombre en la app -> nombre en Phosphor
 const ICONOS = {
   // tipos de actividad
-  futbol: 'soccer-ball', padel: 'racquet', trekking: 'mountains', asado: 'fire', after: 'beer-stein', otra: 'ticket', todas: 'squares-four',
+  futbol: 'soccer-ball', padel: 'racquet', trekking: 'mountains', asado: 'fire', after: 'beer-stein', otra: 'ticket',
   // secciones y bloques
   actividades: 'calendar-blank', juegos: 'dice-five', perfil: 'user-circle',
   tercer: 'cheers', chat: 'chat-circle', cuentas: 'receipt', album: 'images', camara: 'camera', galeria: 'image', drive: 'folder-simple',
