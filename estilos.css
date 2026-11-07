@@ -137,7 +137,6 @@ input:focus-visible, button:focus-visible, .btn-sec:focus-within { outline: 2px 
 .fila-titulo h1 { margin: 0; }
 .btn-chico { margin-top: 0; padding: .55rem .9rem; white-space: nowrap; }
 .chips { display: flex; flex-wrap: wrap; gap: .4rem; padding: .75rem 0; }
-.chips::-webkit-scrollbar { display: none; }
 .chip {
   flex: none; padding: .4rem .8rem; font: inherit; font-size: .85rem; font-weight: 600; cursor: pointer;
   background: var(--bg-alt); color: var(--text); border: 1px solid var(--border); border-radius: 999px;

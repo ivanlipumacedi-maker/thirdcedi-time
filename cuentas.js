@@ -7,7 +7,7 @@
   const CAMPOS_G = 'id,actividad,parte,pagador,monto,concepto,creado,cargado_por';
   const CAMPOS_P = 'id,actividad,parte,de,a,monto,creado,cargado_por';
   // los motivos que devuelve la base ya están en español: se muestran tal cual
-  const MOTIVO = /^(La actividad|Quien pagó|Solo |Elegí|El monto|El concepto|Son demasiadas|Esa persona)/;
+  const MOTIVO = /^(La actividad|Quien pagó|Solo |Elegí|El monto|El concepto|Son demasiadas|Esa persona|Ese pago)/;
 
   const nodos = (xs) => xs.flat(Infinity).filter((c) => c != null && c !== false && c !== '');
   function h(tag, props, ...hijos) {
@@ -245,6 +245,7 @@
     function pintar() {
       if (cerrado) return;
       activo = cont.contains(document.activeElement) ? document.activeElement : null;
+      selActivo = activo ? selectorDe(activo) : null;
       const a = ctx.actividad;
       const cancelada = a.estado === 'cancelada';
       if (!a.tiene_tercer && parte === 'tercer') { parte = 'actividad'; confirmando = null; }
@@ -258,7 +259,8 @@
         else parte = !ctx.anotados.actividad.includes(yo()) && ctx.anotados.tercer.includes(yo()) ? 'tercer' : 'actividad';
         if (parte !== antes) { formAbierto = false; confirmando = null; }
       }
-      cont.hidden = !(ctx.anotado || hayDatos);
+      // quien se bajó (y puede deber plata) también ve el error con "Reintentar": si no, la sección desaparecería
+      cont.hidden = !(ctx.anotado || hayDatos || estado === 'error');
 
       // selector de parte
       selector.textContent = '';
@@ -293,7 +295,8 @@
       // transferencias
       if (trans.length) {
         arriba.append(h('h3', { class: 'cu-h3' }, 'Para quedar a mano'), h('ul', { class: 'cu-lista', id: 'cu-transferencias' }, trans.map((t) => {
-          const clave = 't:' + t.de + ':' + t.a;
+          // el monto va en la clave: si cambia en vivo, la confirmación abierta (con el monto viejo) se cierra
+          const clave = 't:' + t.de + ':' + t.a + ':' + t.monto;
           const txt = t.de === yo() ? 'Le debés ' + L.pesos(t.monto) + ' a ' + nombre(t.a)
             : t.a === yo() ? nombre(t.de) + ' te debe ' + L.pesos(t.monto)
               : nombre(t.de) + ' le debe ' + L.pesos(t.monto) + ' a ' + nombre(t.a);
@@ -302,8 +305,9 @@
           if (t.de === yo() || t.a === yo()) {
             const soyDeudor = t.de === yo();
             const etiqueta = soyDeudor ? 'Ya pagué' : 'Me pagó';
+            const aria = soyDeudor ? 'Ya le pagué ' + L.pesos(t.monto) + ' a ' + nombre(t.a) : nombre(t.de) + ' me pagó ' + L.pesos(t.monto);
             if (confirmando && confirmando.clave === clave) accion = botonConfirmar(confirmando);
-            else accion = h('button', { type: 'button', class: 'btn-sec btn-chico cu-pagar', 'data-clave': clave, disabled: ocupado,
+            else accion = h('button', { type: 'button', class: 'btn-sec btn-chico cu-pagar', 'data-clave': clave, 'aria-label': aria, disabled: ocupado,
               on: { click: () => pedirConfirmacion({ clave, volver: '[data-clave="' + clave + '"]', volverOk: '#cu-resumen',
                 texto: soyDeudor ? '¿Ya le pagaste ' + L.pesos(t.monto) + ' a ' + nombre(t.a) + '?' : '¿' + nombre(t.de) + ' te pagó ' + L.pesos(t.monto) + '?',
                 si: soyDeudor ? 'Sí, ya le pagué' : 'Sí, me pagó', accion: registrar }) } }, etiqueta);
@@ -346,7 +350,8 @@
             if (confirmando && confirmando.clave === clave) accion = botonConfirmar(confirmando);
             else accion = h('button', { type: 'button', class: 'btn-link cu-borrar', 'data-clave': clave, 'aria-label': 'Borrar el gasto ' + x.concepto, disabled: ocupado,
               on: { click: () => pedirConfirmacion({ clave, volver: '[data-clave="' + clave + '"]', volverOk: '#cu-resumen', peligro: true,
-                texto: '¿Borramos el gasto "' + x.concepto + '" de ' + L.pesos(x.monto) + '? Las cuentas se recalculan.', si: 'Sí, borrarlo',
+                texto: '¿Borramos el gasto "' + x.concepto + '" de ' + L.pesos(x.monto) + '? Las cuentas se recalculan.'
+                  + (d.pagos.length ? ' Ya hay pagos registrados: revisalos después.' : ''), si: 'Sí, borrarlo',
                 accion: () => escribir(() => sb.from('gastos').delete().eq('id', x.id), 'Gasto borrado', 'No pudimos borrar el gasto. Probá de nuevo en un momento.') }) } }, 'Borrar');
           }
           return h('li', { class: 'cu-gasto', 'data-id': x.id },
@@ -377,11 +382,19 @@
       if (confirmando && !cont.querySelector('#cu-confirmar-si')) confirmando = null; // lo que se confirmaba ya no está
       enfocar();
     }
-    let activo = null;
+    let activo = null, selActivo = null;
+    // cómo volver a encontrar el control después de un repintado (los botones se rehacen): por id o por data-clave
+    function selectorDe(el) {
+      if (el.id) return '#' + CSS.escape(el.id);
+      if (el.dataset && el.dataset.clave) return '[data-clave="' + CSS.escape(el.dataset.clave) + '"]';
+      return null;
+    }
     function enfocar() {
       if (!focoTras) {
         // un repintado en vivo no le saca el foco a quien está usando la sección con el teclado
-        if (activo && activo.isConnected && document.activeElement !== activo) activo.focus({ preventScroll: true });
+        let el = activo && activo.isConnected ? activo : null;
+        if (!el && selActivo && !cont.hidden) el = cont.querySelector(selActivo);
+        if (el && document.activeElement !== el) el.focus({ preventScroll: true });
         return;
       }
       const sel = focoTras; focoTras = null;

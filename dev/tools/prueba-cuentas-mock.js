@@ -40,6 +40,7 @@ const letra = (uid) => (uid === UA ? 'A' : uid === UB ? 'B' : 'C');
 const contar = (uid, k) => { const c = letra(uid) + ':' + k; cuenta[c] = (cuenta[c] || 0) + 1; };
 const n = (k) => cuenta[k] || 0;
 let fallarGastosA = 0; // cuántas lecturas de gastos de A fallan (error de la primera carga)
+let fallarGastosB = 0; // ídem para B
 let nid = 0;
 const nuevoId = () => 'f0000000-0000-4000-8000-' + String(++nid).padStart(12, '0');
 
@@ -47,6 +48,8 @@ const enSala = (uid, sala) => { const m = /^act:(.+)$/.exec(sala || ''); return 
 const anotadoA = (act, uid, parte) => db.asistencias.some((a) => a.actividad === act && a.persona === uid && a.parte === parte);
 const figura = (act, uid) => db.gastos.some((g) => g.actividad === act && (g.pagador === uid || db.gasto_partes.some((p) => p.gasto === g.id && p.persona === uid)))
   || db.pagos.some((p) => p.actividad === act && (p.de === uid || p.a === uid));
+const figuraEnParte = (act, parte, uid) => db.gastos.some((g) => g.actividad === act && g.parte === parte && (g.pagador === uid || db.gasto_partes.some((p) => p.gasto === g.id && p.persona === uid)))
+  || db.pagos.some((p) => p.actividad === act && p.parte === parte && (p.de === uid || p.a === uid));
 const enCuentas = (uid, act) => enSala(uid, 'act:' + act) || figura(act, uid);
 
 function emitir(tabla, evento, fila) {
@@ -84,14 +87,15 @@ function consulta(uid, s) {
     return { error: { message: 'sin rpc' } };
   }
   if (s.table === 'gastos' && s.action === 'select' && uid === UA && fallarGastosA > 0) { fallarGastosA--; return { error: { message: 'sin red' } }; }
+  if (s.table === 'gastos' && s.action === 'select' && uid === UB && fallarGastosB > 0) { fallarGastosB--; return { error: { message: 'sin red' } }; }
   if (s.table === 'actividades' && s.action === 'update') {
     const filas = db.actividades.filter((f) => cumple(f, s.filtros) && f.creador === uid);
     for (const f of filas) {
       if (f.estado === 'cancelada') return P0001('La actividad está cancelada');
       // trigger actividades_tercer_con_cuentas (11)
       if (f.tiene_tercer && s.values.tiene_tercer === false) {
-        if (db.gastos.some((g) => g.actividad === f.id && g.parte === 'tercer')) return P0001('El tercer tiempo tiene gastos cargados: borralos antes de sacarlo');
-        if (db.pagos.some((p) => p.actividad === f.id && p.parte === 'tercer')) return P0001('El tercer tiempo tiene pagos registrados: borralos antes de sacarlo');
+        if (db.gastos.some((g) => g.actividad === f.id && g.parte === 'tercer')) return P0001('El tercer tiempo tiene gastos cargados: pedile a quien los cargó que los borre antes de sacarlo');
+        if (db.pagos.some((p) => p.actividad === f.id && p.parte === 'tercer')) return P0001('El tercer tiempo tiene pagos registrados: pedile a quien los registró que los borre antes de sacarlo');
       }
     }
     const out = filas.map((f) => {
@@ -121,7 +125,8 @@ function consulta(uid, s) {
   if (s.table === 'pagos' && s.action === 'insert') {
     const v = s.values;
     if (!enCuentas(uid, v.actividad) || !(v.de === uid || v.a === uid) || v.de === v.a || !(v.monto >= 1)) return { error: { code: '42501', message: 'new row violates row-level security policy' } };
-    if (!figura(v.actividad, v.de) || !figura(v.actividad, v.a)) return P0001('Esa persona no figura en las cuentas de la actividad');
+    if (!figuraEnParte(v.actividad, v.parte, v.de) || !figuraEnParte(v.actividad, v.parte, v.a)) return P0001('Esa persona no figura en las cuentas de esa parte');
+    if (db.pagos.some((p) => p.actividad === v.actividad && p.parte === v.parte && p.de === v.de && p.a === v.a && p.monto === v.monto && Date.now() - Date.parse(p.creado) < 6e5)) return P0001('Ese pago ya está registrado');
     const p = { id: nuevoId(), ...v, creado: new Date().toISOString(), cargado_por: uid };
     db.pagos.push(p); emitir('pagos', 'INSERT', p);
     return { data: null };
@@ -296,6 +301,41 @@ async function cargarGastoUI(p, { monto, concepto, pagador, sacar = [] }) {
       assert.equal(await cuantos(pb, '#cu-gastos .cu-borrar'), 0, 'B no puede borrar el gasto de A');
     });
 
+    await paso('"Ya pagué" y "Me pagó" dicen a quién y cuánto (aria-label)', async () => {
+      assert.equal(await pb.$eval('#cu-transferencias .cu-pagar', (e) => e.getAttribute('aria-label')), pes('Ya le pagué $ 333 a Ana Pérez'));
+      assert.deepEqual(await pa.$$eval('#cu-transferencias .cu-pagar', (es) => es.map((e) => e.getAttribute('aria-label'))), [pes('Beto Gómez me pagó $ 333'), pes('Carla Ruiz me pagó $ 333')]);
+    });
+
+    await paso('un repintado en vivo no le saca el foco a un botón (se rehace, pero el foco vuelve)', async () => {
+      await pb.focus('#cu-transferencias .cu-pagar');
+      const antes = n('B:gastos:select');
+      emitir('gastos', 'INSERT', { id: nuevoId(), actividad: ACT }); // fuerza una relectura (no cambia nada)
+      for (let i = 0; i < 30 && n('B:gastos:select') === antes; i++) await dormir(50);
+      await dormir(300);
+      assert.ok(n('B:gastos:select') > antes, 'no releyó');
+      assert.equal(await pb.evaluate(() => !!document.activeElement && document.activeElement.classList.contains('cu-pagar')), true,
+        'el foco quedó en ' + await pb.evaluate(() => document.activeElement && (document.activeElement.id || document.activeElement.tagName)));
+      // también en el selector de parte
+      await pa.focus('#cu-parte-actividad');
+      emitir('gastos', 'INSERT', { id: nuevoId(), actividad: ACT });
+      await dormir(500);
+      assert.equal(await pa.evaluate(() => document.activeElement && document.activeElement.id), 'cu-parte-actividad');
+    });
+
+    await paso('si el monto cambia en vivo con la confirmación abierta, la confirmación vieja se cierra', async () => {
+      await clic(pb, '#cu-transferencias .cu-pagar');
+      await pb.waitForSelector('#cu-confirmar-si');
+      assert.match(await texto(pb, '#cu-confirmar-txt'), new RegExp(pes('\\$ 333')));
+      const g = { id: nuevoId(), actividad: ACT, parte: 'actividad', pagador: UA, monto: 300, concepto: 'Pan', creado: new Date().toISOString(), cargado_por: UA };
+      db.gastos.push(g); [UA, UB].forEach((p) => db.gasto_partes.push({ gasto: g.id, persona: p }));
+      emitir('gastos', 'INSERT', g);
+      await enCuentasHay(pb, new RegExp(pes('Le debés \\$ 483 a Ana Pérez')));
+      assert.equal(await cuantos(pb, '#cu-confirmar-si'), 0, 'quedó abierta la confirmación de $ 333');
+      db.gastos = db.gastos.filter((x) => x !== g); db.gasto_partes = db.gasto_partes.filter((p) => p.gasto !== g.id);
+      emitir('gastos', 'DELETE', { id: g.id });
+      await enCuentasHay(pb, new RegExp(pes('Le debés \\$ 333 a Ana Pérez')));
+    });
+
     await paso('"Ya pagué" pide confirmación en la página (foco en "No"); "No" no registra; "Sí" registra y A lo ve en vivo', async () => {
       await clic(pb, '#cu-transferencias .cu-pagar');
       await pb.waitForSelector('#cu-confirmar-no');
@@ -326,6 +366,19 @@ async function cargarGastoUI(p, { monto, concepto, pagador, sacar = [] }) {
       assert.equal(db.pagos.length, 2);
     });
 
+    await paso('borrar un gasto cuando ya hay pagos: la confirmación avisa que hay que revisarlos', async () => {
+      await clic(pa, '#cu-gastos .cu-borrar');
+      await pa.waitForSelector('#cu-confirmar-txt');
+      assert.match(await texto(pa, '#cu-confirmar-txt'), /Ya hay pagos registrados: revisalos después\./);
+      await clic(pa, '#cu-confirmar-no');
+      assert.equal(db.gastos.length, 1);
+    });
+
+    await paso('pagar dos veces lo mismo (los dos a la vez): la base lo rechaza con el motivo', async () => {
+      const r = consulta(UB, { table: 'pagos', action: 'insert', values: { actividad: ACT, parte: 'actividad', de: UB, a: UA, monto: 333 }, filtros: [], ordenes: [] });
+      assert.match(r.error.message, /Ese pago ya está registrado/);
+    });
+
     await paso('tercer tiempo: sus propias cuentas, entre los anotados al tercer tiempo (B no está)', async () => {
       await clic(pa, '#cu-parte-tercer');
       assert.equal(await pa.$eval('#cu-parte-tercer', (e) => e.getAttribute('aria-pressed')), 'true');
@@ -349,7 +402,7 @@ async function cargarGastoUI(p, { monto, concepto, pagador, sacar = [] }) {
       await clic(pa, '#btn-guardar-act');
       await pa.waitForSelector('#aviso-tercer:not([hidden])');
       await clic(pa, '#btn-confirmar-tercer');
-      await esperar(pa, () => /El tercer tiempo tiene gastos cargados: borralos antes de sacarlo/.test((document.querySelector('form.form-act .error') || {}).textContent || ''));
+      await esperar(pa, () => /El tercer tiempo tiene gastos cargados: pedile a quien los cargó que los borre antes de sacarlo/.test((document.querySelector('form.form-act .error') || {}).textContent || ''));
       assert.equal(await pa.$eval('form.form-act .error', (e) => e.hidden), false);
       assert.equal(await pa.$eval('#f-tercer', (e) => e.checked), true, 'el switch vuelve a prendido');
       const a = db.actividades.find((x) => x.id === ACT);
@@ -397,7 +450,11 @@ async function cargarGastoUI(p, { monto, concepto, pagador, sacar = [] }) {
       assert.equal(await cuentasTxt(pb), '[oculta]');
       assert.doesNotMatch(await pantalla(pb), /null|undefined/);
       await volver(pb);
+      fallarGastosB = 5; // B se bajó: si su primera carga falla, igual ve el error con "Reintentar"
       await abrirTarjeta(pb, 'Asado del viernes');
+      await pb.waitForSelector('#cuentas-act:not([hidden]) #cu-reintentar', { timeout: 6000 });
+      fallarGastosB = 0;
+      await clic(pb, '#cu-reintentar');
       await enCuentasHay(pb, /Estás al día/);
     });
 

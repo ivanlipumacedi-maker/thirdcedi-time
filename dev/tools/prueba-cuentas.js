@@ -156,7 +156,7 @@ async function pagarPrimera(p) {
     await clic(A, '#btn-guardar-act');
     await A.waitForSelector('#aviso-tercer:not([hidden])');
     await clic(A, '#btn-confirmar-tercer');
-    await A.waitForFunction(() => /El tercer tiempo tiene gastos cargados: borralos antes de sacarlo/.test(document.querySelector('form.form-act .error').textContent), { timeout: T });
+    await A.waitForFunction(() => /El tercer tiempo tiene gastos cargados: pedile a quien los cargó que los borre antes de sacarlo/.test(document.querySelector('form.form-act .error').textContent), { timeout: T });
     assert.equal(await A.$eval('#f-tercer', (e) => e.checked), true);
     assert.equal(await api(A, async (a) => (await App.sb.from('actividades').select('tiene_tercer').eq('id', a).single()).data.tiene_tercer, actId), true);
     await A.evaluate(() => document.querySelector('#pantalla-actividades .btn-link').click());
