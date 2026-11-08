@@ -30,7 +30,7 @@
   font-size: 11px; font-weight: 800; display: grid; place-items: center; font-variant-numeric: tabular-nums }
 #camara .arriba { position: absolute; top: 0; left: 0; right: 0; display: flex; gap: 10px; align-items: center; padding: calc(12px + env(safe-area-inset-top, 0px)) 14px 10px }
 #camara .arriba .esp { flex: 1 }
-#camara .opc { height: 34px; padding: 0 13px; border-radius: 999px; font-size: .8rem; font-weight: 700; letter-spacing: .02em; font-variant-numeric: tabular-nums; transition: transform .15s ease }
+#camara .opc { height: 34px; padding: 0 13px; border-radius: 999px; white-space: nowrap; flex: none; font-size: .8rem; font-weight: 700; letter-spacing: .02em; font-variant-numeric: tabular-nums; transition: transform .15s ease }
 #camara .opc[aria-expanded="true"] { color: #FFD24A }
 #camara .rec { position: absolute; left: 50%; top: calc(16px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); display: flex; align-items: center; gap: 8px; height: 34px;
   padding: 0 14px; border-radius: 999px; font-weight: 700; font-variant-numeric: tabular-nums; font-size: .95rem }
