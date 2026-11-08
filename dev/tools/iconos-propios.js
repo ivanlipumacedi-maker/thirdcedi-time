@@ -284,23 +284,37 @@ svg('trekking', [
   ]),
 ]);
 
-// Fútbol: jugador en plena patada, brazos abiertos para el equilibrio, y la pelota grande con el pentágono calado
+// Fútbol: la pelota clásica de gajos. Contorno, pentágono negro al centro, cinco costuras que salen de sus puntas y cinco
+// pentágonos cortados por el borde; en la versión de un color los pentágonos van llenos y el cuero blanco queda calado.
 {
-  const BX = 38.6, BY = 37.8, BR = 7.2;
-  const ip = poly(BX, BY, 2.9, 5, -90), ep = poly(BX, BY, BR, 5, -90);
+  const CX = 24, CY = 24, RB = 20.5;
+  const centro = poly(CX, CY, 6.6, 5, -90);
+  const bordes = [], costuras = [];
+  for (let i = 0; i < 5; i++) {
+    const ang = -90 + 72 * i, rad = ang * Math.PI / 180;
+    const px = CX + 20.5 * Math.cos(rad), py = CY + 20.5 * Math.sin(rad);
+    bordes.push(pts(poly(px, py, 7.4, 5, ang + 180)));
+    const [x1, y1] = centro[i];
+    const x2 = CX + 13.4 * Math.cos(rad), y2 = CY + 13.4 * Math.sin(rad);
+    costuras.push(`M${x1.toFixed(2)} ${y1.toFixed(2)} L${x2.toFixed(2)} ${y2.toFixed(2)}`);
+    // costuras entre dos gajos del borde: de un vértice lateral de este pentágono al del siguiente, pasando por un nudo
+    // que sale hacia el borde de la pelota
+    const pa = poly(px, py, 7.4, 5, ang + 180)[1];
+    const r3 = (ang + 72) * Math.PI / 180;
+    const pb = poly(CX + 20.5 * Math.cos(r3), CY + 20.5 * Math.sin(r3), 7.4, 5, ang + 72 + 180)[4];
+    const rad2 = (ang + 36) * Math.PI / 180;
+    const jx = CX + 16.4 * Math.cos(rad2), jy = CY + 16.4 * Math.sin(rad2);
+    const x4 = CX + 21 * Math.cos(rad2), y4 = CY + 21 * Math.sin(rad2);
+    const f = (n) => n.toFixed(2);
+    costuras.push(`M${f(pa[0])} ${f(pa[1])} L${f(jx)} ${f(jy)} L${f(pb[0])} ${f(pb[1])} M${f(jx)} ${f(jy)} L${f(x4)} ${f(y4)}`);
+  }
   svg('futbol', [
-    C(17.5, 7.2, 4.6, '#F2C29B'),
-    M('M18 14.5 L21.5 26'),
-    M('M18.5 15.8 L11.5 20 L6.5 17.2'),
-    M('M19.5 16 L26.5 15.2 L30.5 10.6'),
-    M('M21.5 26 L16.5 33.5 L17.5 42.5'),
-    M('M17.5 42.5 L12.8 43', 4.6),
-    M('M21.5 26 L28.5 28.5 L31.8 33.8'),
-    C(BX, BY, BR, '#fff', { sw: 2.2 }),
-    P(pts(ip), INK, { sw: 1, mono: 'cut' }),
-    L(ip.map(([x, y], i) => `M${x.toFixed(2)} ${y.toFixed(2)} L${ep[i][0].toFixed(2)} ${ep[i][1].toFixed(2)}`).join(' '), INK, 1.5, { mono: 'cut' }),
-    L('M3 46 H28', INK, 2.4),
-  ]);
+    { ...C(CX, CY, RB, '#fff', { sw: 0.01 }), mono: 'skip' },
+    { t: 'g', a: { 'clip-path': 'url(#tct-pelota)' }, g: bordes.map((d) => ({ ...P(d, INK, { sw: 0.01 }), monoSinCorte: true })) },
+    { ...P(pts(centro), INK, { sw: 1.4 }), monoSinCorte: true },
+    { ...L(costuras.join(' '), INK, 2.3), monoSinCorte: true },
+    { ...C(CX, CY, RB, 'none', { sw: 3.2 }), monoSinCorte: true },
+  ], `<clipPath id="tct-pelota"><circle cx="${CX}" cy="${CY}" r="${RB}"/></clipPath>`);
 }
 
 // ---------- Tercer tiempo A (principal): el silbato del final y un chopp
