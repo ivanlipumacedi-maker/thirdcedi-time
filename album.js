@@ -21,10 +21,17 @@
 .album .album-cel { position: relative; aspect-ratio: 1; background: var(--bg-alt); border-radius: 4px; overflow: hidden; padding: 0; border: 0; cursor: pointer }
 .album .album-cel img { width: 100%; height: 100%; object-fit: cover; display: block }
 .album .album-cel .avatar { position: absolute; left: 4px; bottom: 4px; box-shadow: 0 0 0 1.5px #fff; font-size: .6rem }
+/* video: play en el centro y la duración abajo a la derecha, sobre un degradé para que se lean en cualquier foto */
+.album .album-cel.es-video::after { content: ''; position: absolute; inset: 55% 0 0; background: linear-gradient(transparent, rgba(0,0,0,.55)); pointer-events: none }
+.album .album-cel .play { position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%; display: grid; place-items: center; color: #fff;
+  background: rgba(20,22,26,.45); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); box-shadow: inset 0 0 0 .5px rgba(255,255,255,.3) }
+.album .album-cel .play .ico { width: 16px; height: 16px; margin-left: 2px }
+.album .album-cel .dur { position: absolute; right: 5px; bottom: 4px; z-index: 1; color: #fff; font-size: .7rem; font-weight: 700; font-variant-numeric: tabular-nums; text-shadow: 0 1px 2px rgba(0,0,0,.6) }
 .album .vacio { color: var(--muted) }
 .album-visor { position: fixed; inset: 0; z-index: 85; background: #000; color: #fff; display: flex; flex-direction: column; touch-action: none; font-family: var(--fuente-ui) }
 .album-visor [hidden] { display: none !important }
 .album-visor .marco { flex: 1; overflow: hidden; display: grid; place-items: center; position: relative; min-height: 0 }
+.album-visor .marco video { max-width: 100%; max-height: 100%; background: #000 }
 .album-visor .marco img { max-width: 100%; max-height: 100%; object-fit: contain; transform-origin: center; will-change: transform; user-select: none; -webkit-user-drag: none }
 .album-visor .cab { display: flex; align-items: center; gap: 10px; padding: calc(10px + env(safe-area-inset-top, 0px)) 12px 8px }
 .album-visor .cab b { flex: 1; font-size: .95rem; font-weight: 600 }
@@ -135,8 +142,11 @@
           const img = h('img', { alt: '', loading: 'lazy' });
           img.dataset.ruta = f.mini;
           const u = M.firmada(f.mini); if (u) img.src = u;
-          return h('button', { type: 'button', class: 'album-cel', 'data-id': f.id, 'aria-label': 'Foto de ' + perfilDe(f.autor).nombre, on: { click: () => abrirVisor(f.id) } },
-            img, g.Perfiles.avatar(perfilDe(f.autor), 20));
+          const video = A.esVideo(f);
+          return h('button', { type: 'button', class: 'album-cel' + (video ? ' es-video' : ''), 'data-id': f.id,
+            'aria-label': (video ? `Video de ${A.duracion(f.duracion_ms)} de ` : 'Foto de ') + perfilDe(f.autor).nombre, on: { click: () => abrirVisor(f.id) } },
+            img, g.Perfiles.avatar(perfilDe(f.autor), 20),
+            video && h('span', { class: 'play' }, g.App.icono('play')), video && h('span', { class: 'dur' }, A.duracion(f.duracion_ms)));
         })))));
       firmarYPoner([...elGrilla.querySelectorAll('img')].filter((i) => !M.vigente(i.dataset.ruta)));
     }
@@ -221,7 +231,9 @@
     g.addEventListener('online', alVolver);
 
     // ---------- Sumar fotos ----------
-    const agregar = (p, extra) => q.agregar({ id: extra.id || crypto.randomUUID(), actividad: act, autor: yo(), foto: p.foto, mini: p.mini, media: p.media, ancho: p.ancho, alto: p.alto, tomada: extra.tomada, editada_de: extra.editada_de || null });
+    const agregar = (p, extra) => (p.video
+      ? q.agregar({ id: extra.id || crypto.randomUUID(), actividad: act, autor: yo(), tipo: 'video', video: p.video, mime: p.mime, mini: p.mini, duracion_ms: p.duracion_ms, ancho: p.ancho, alto: p.alto, tomada: extra.tomada })
+      : q.agregar({ id: extra.id || crypto.randomUUID(), actividad: act, autor: yo(), foto: p.foto, mini: p.mini, media: p.media, ancho: p.ancho, alto: p.alto, tomada: extra.tomada, editada_de: extra.editada_de || null }));
     function abrirCamara() {
       g.Camara.abrir({
         alSacar: (p, extra) => agregar(p, extra),
@@ -249,7 +261,9 @@
       el.titulo = h('b');
       el.cerrar = h('button', { type: 'button', class: 'album-visor-cerrar', 'aria-label': 'Volver', on: { click: salirVisor } }, g.App.icono('volver'));
       img = h('img', { alt: 'Foto del álbum' });
-      el.marco = h('div', { class: 'marco' }, img);
+      el.video = h('video', { controls: true, playsInline: true, preload: 'metadata', hidden: true, 'aria-label': 'Video del álbum' });
+      el.video.setAttribute('playsinline', '');
+      el.marco = h('div', { class: 'marco' }, img, el.video);
       el.guardar = h('a', { href: '#', class: 'album-guardar', download: '', on: { click: guardar } }, 'Guardar');
       el.chat = h('button', { type: 'button', class: 'album-al-chat', on: { click: alChat } }, 'Mandar al chat');
       el.editar = h('button', { type: 'button', class: 'album-editar', on: { click: editar } }, 'Editar');
@@ -257,8 +271,9 @@
       el.confD = h('span', { id: 'album-confirmar-d' });
       el.no = h('button', { type: 'button', class: 'album-borrar-no', on: { click: () => { if (history.state && history.state.albumConf) history.back(); else ocultarConf(); } } }, 'Cancelar');
       el.si = h('button', { type: 'button', class: 'album-borrar-si', on: { click: borrar } }, 'Borrar foto');
+      el.confT = h('b', { id: 'album-confirmar-t' }, '¿Borrar esta foto?');
       el.conf = h('div', { class: 'album-confirmar', hidden: true, role: 'alertdialog', 'aria-modal': 'true', 'aria-labelledby': 'album-confirmar-t', 'aria-describedby': 'album-confirmar-d' },
-        h('p', null, h('b', { id: 'album-confirmar-t' }, '¿Borrar esta foto?'), el.confD), h('div', { class: 'fila' }, el.no, el.si));
+        h('p', null, el.confT, el.confD), h('div', { class: 'fila' }, el.no, el.si));
       el.cab = h('div', { class: 'cab' }, el.cerrar, el.titulo);
       el.pie = h('div', { class: 'pie' }, el.guardar, el.chat, el.editar, el.borrar);
       visor = h('div', { class: 'album-visor', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Foto del álbum' }, el.cab, el.marco, el.pie, el.conf);
@@ -272,6 +287,23 @@
       el.borrar.hidden = f.autor !== yo(); ocultarConf();
       el.chat.hidden = !(g.Chat && g.Chat.puedeEnviar && g.Chat.puedeEnviar(sala));
       el.guardar.href = '#';
+      const video = A.esVideo(f);
+      el.editar.hidden = video; // el editor es solo para fotos
+      el.si.textContent = video ? 'Borrar video' : 'Borrar foto';
+      el.confT.textContent = video ? '¿Borrar este video?' : '¿Borrar esta foto?';
+      visor.setAttribute('aria-label', video ? 'Video del álbum' : 'Foto del álbum');
+      el.video.pause(); el.video.removeAttribute('src'); el.video.removeAttribute('poster'); el.video.hidden = !video; img.hidden = video;
+      if (video) {
+        // con la miniatura de póster mientras se firma el link del video
+        const pon = () => { const pm = M.firmada(f.mini); if (pm) el.video.poster = pm; };
+        pon();
+        (async () => {
+          try { await M.firmar(sb, [f.ruta, f.mini], 'album'); } catch {}
+          if (!actual || actual.id !== f.id) return;
+          pon(); const u = M.firmada(f.ruta); if (u) el.video.src = u;
+        })();
+        return;
+      }
       const opciones = [A.verFoto(f), f.media, f.mini].filter((x, i, xs) => x && xs.indexOf(x) === i);
       (async () => {
         for (const ruta of opciones) {
@@ -311,7 +343,7 @@
     }
     function cerrarVisor() {
       if (!visor || !visor.isConnected) return;
-      ocultarConf(); visor.remove(); actual = null; img.removeAttribute('src');
+      ocultarConf(); visor.remove(); actual = null; img.removeAttribute('src'); el.video.pause(); el.video.removeAttribute('src'); el.video.load();
       document.removeEventListener('keydown', teclaVisor, true);
       const f = focoAntes; focoAntes = null;
       if (f && f.isConnected && typeof f.focus === 'function') f.focus({ preventScroll: true });
@@ -334,6 +366,7 @@
     function gestos(marco) {
       const dedos = new Map(); let ini = null, ultimoToque = 0;
       marco.addEventListener('pointerdown', (e) => {
+        if (e.target.tagName === 'VIDEO') return; // los controles del video son suyos (adelantar no pasa de foto)
         dedos.set(e.pointerId, { x: e.clientX, y: e.clientY });
         const ps = [...dedos.values()];
         ini = ps.length === 2 ? { d: Math.hypot(ps[0].x - ps[1].x, ps[0].y - ps[1].y), s: z.s, x: z.x, y: z.y } : { px: e.clientX, py: e.clientY, x: z.x, y: z.y, s: z.s, t: Date.now() };
@@ -371,13 +404,21 @@
       e.preventDefault(); if (!actual) return;
       try {
         const b = await blobDe(actual), u = URL.createObjectURL(b);
-        const a = h('a', { href: u, download: `thirdcedi-${actual.tomada.slice(0, 10)}-${actual.id.slice(0, 6)}.jpg` });
+        const a = h('a', { href: u, download: `thirdcedi-${actual.tomada.slice(0, 10)}-${actual.id.slice(0, 6)}.${(/\.(mp4|webm)$/.exec(actual.ruta || '') || [])[1] || 'jpg'}` });
         document.body.appendChild(a); a.click(); a.remove();
         setTimeout(() => URL.revokeObjectURL(u), 10000);
-      } catch (x) { console.error(x); toast('No se pudo bajar la foto. Revisá la señal.'); }
+      } catch (x) { console.error(x); toast(A.esVideo(actual) ? 'No se pudo bajar el video. Revisá la señal.' : 'No se pudo bajar la foto. Revisá la señal.'); }
     }
     async function alChat() {
       if (!actual) return;
+      if (A.esVideo(actual)) {
+        // un video no se sube al chat: va un mensaje con el link al álbum de la actividad
+        const url = location.origin + location.pathname + '#/actividad/' + act;
+        const texto = `${perfilDe(actual.autor).nombre.split(' ')[0]} subió un video (${A.duracion(actual.duracion_ms)}) al álbum: ${url}`;
+        const r = await sb.from('mensajes').insert({ sala, tipo: 'texto', texto }).select('id').single();
+        toast(r.error ? 'No se pudo mandar al chat. Revisá la señal.' : 'Mandamos al chat el link al video.');
+        return;
+      }
       try {
         const b = await blobDe(actual);
         toast('Mandando al chat…'); // si falla, el chat avisa con su propio mensaje

@@ -31,6 +31,7 @@ const db = {
   fotos: [],
   mensajes: [],
   storage: new Map(), // ruta → dueño
+  tipos: new Map(), // ruta → tipo del archivo subido
 };
 const paginas = []; // { page, uid }
 const enSala = (uid, sala) => { const m = /^act:(.+)$/.exec(sala || ''); return !!m && db.asistencias.some((a) => a.actividad === m[1] && a.persona === uid); };
@@ -56,7 +57,7 @@ function consulta(uid, s) {
     if (s.storage === 'upload') {
       if (fallarSubida && fallarSubida.uid === uid && fallarSubida.veces > 0) { fallarSubida.veces--; return { error: { statusCode: fallarSubida.status, message: 'error ' + fallarSubida.status } }; }
       if (!enSala(uid, carpeta.startsWith('act:') ? carpeta : 'act:' + carpeta)) return { error: { statusCode: '403', message: 'RLS' } };
-      db.storage.set(s.path, uid); return { data: { path: s.path } };
+      db.storage.set(s.path, uid); if (s.tipo) db.tipos.set(s.path, s.tipo); return { data: { path: s.path } };
     }
     if (s.storage === 'remove') { for (const p of s.paths) if (db.storage.get(p) === uid) db.storage.delete(p); return { data: [] }; }
   }
@@ -136,9 +137,11 @@ const STUB = `
       },
       removeChannel(c) { canales.delete(c); },
       storage: { from() { return {
-        upload: (p) => Q({ storage: 'upload', path: p }).then(R),
+        // lo subido queda también en la página: así un video se puede reproducir desde su "URL firmada"
+        upload: (p, b) => { (window.__subidos = window.__subidos || {})[p] = b; return Q({ storage: 'upload', path: p, tipo: b && b.type }).then(R); },
         remove: (ps) => Q({ storage: 'remove', path: '', paths: ps }).then(R),
-        createSignedUrls: async (paths) => ({ data: paths.map((p) => ({ path: p, error: null, signedUrl: window.__fotoUrl || svg })), error: null }),
+        createSignedUrls: async (paths) => ({ data: paths.map((p) => ({ path: p, error: null,
+          signedUrl: /\\.(mp4|webm)$/.test(p) && window.__subidos && window.__subidos[p] ? URL.createObjectURL(window.__subidos[p]) : window.__fotoUrl || svg })), error: null }),
       }; } },
       auth: { getSession: async () => ({ data: { session: null } }), onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }), signOut: async () => ({}), getUser: async () => ({ data: { user: null } }) },
     };
@@ -151,7 +154,7 @@ async function abrir(uid, tema, antes) {
   const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] });
   navegadores.push(browser);
   const ctx = browser.defaultBrowserContext();
-  await ctx.overridePermissions(URL_APP, ['camera']);
+  await ctx.overridePermissions(URL_APP, ['camera', 'microphone']);
   const page = await browser.newPage();
   const reg = { page, uid };
   paginas.push(reg);
@@ -183,7 +186,7 @@ const celdas = (p) => cuantos(p, '#album-act .album-cel');
 
 (async () => {
   let fallas = 0;
-  const paso = async (n, fn) => { try { await fn(); console.log('ok', n); } catch (e) { fallas++; console.log('FALLA', n, '-', e.message); } };
+  const paso = async (n, fn) => { try { await fn(); console.log('ok', n); } catch (e) { fallas++; console.log('FALLA', n, '-', e.message, (e.stack || '').split('\n').filter((l) => l.includes('prueba-album-mock')).map((l) => l.replace(/.*:(\d+):\d+\)?$/, 'línea $1')).join(' < ')); } };
   // una foto de prueba (PNG generado con un canvas) para la galería
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'album-mock-'));
   const fixture = path.join(tmp, 'foto-prueba.png');
@@ -368,6 +371,55 @@ const celdas = (p) => cuantos(p, '#album-act .album-cel');
       fallarSubida = null;
     });
 
+    await paso('editor: filtro, intensidad, recorte 1:1, giro y "Guardar copia" suma una foto nueva al álbum', async () => {
+      const antes = db.fotos.length, id = await pa.$eval('#album-act .album-cel', (e) => e.dataset.id);
+      await pa.click(`#album-act .album-cel[data-id="${id}"]`);
+      await pa.waitForSelector('.album-visor');
+      const titulo = await texto(pa, '.album-visor .cab');
+      await pa.click('.album-editar');
+      await pa.waitForSelector('#editorFoto:not([hidden]) .fl[data-f="pelicula"]');
+      await esperar(pa, () => document.querySelector('#editorFoto canvas.vista').width > 0);
+      assert.equal(await pa.$eval('#editorGuardar', (b) => b.disabled), true, 'sin cambios no se guarda');
+      assert.equal(await pa.$$eval('#editorFoto .fl', (xs) => xs.length), 8);
+      await pa.click('#editorFoto .fl[data-f="pelicula"]');
+      assert.equal(await pa.$eval('#editorFoto .fl[data-f="pelicula"]', (b) => b.getAttribute('aria-pressed')), 'true');
+      await pa.$eval('#editorIntensidad', (r) => { r.value = '60'; r.dispatchEvent(new Event('input', { bubbles: true })); r.dispatchEvent(new Event('change', { bubbles: true })); });
+      assert.equal(await texto(pa, '#editorFoto .int output'), '60 %');
+      await pa.screenshot({ path: path.join(shots, 'album-editor-filtros-claro.png') });
+      await pa.click('#editorFoto [data-modo="recorte"]');
+      await pa.waitForSelector('#editorFoto .caja:not([hidden])');
+      await pa.click('#editorFoto [data-r="1:1"]');
+      // arrastrar la esquina de abajo a la derecha hacia adentro (con la proporción fija)
+      const m = await pa.$eval('#editorFoto .m[data-m="se"]', (e) => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+      await pa.mouse.move(m.x, m.y); await pa.mouse.down(); await pa.mouse.move(m.x - 30, m.y - 30, { steps: 4 }); await pa.mouse.up();
+      await pa.screenshot({ path: path.join(shots, 'album-editor-recorte-claro.png') });
+      await pa.click('#editorFoto [data-e="rotar"]');
+      // con el editor abierto, las flechas y el Escape no llegan al visor: Escape pide confirmar y un segundo Escape vuelve
+      await pa.keyboard.press('ArrowRight'); await pa.keyboard.press('ArrowLeft');
+      await pa.click('#editorFoto [data-modo="filtros"]');
+      await pa.keyboard.press('Escape');
+      await pa.waitForSelector('#editorDescartar:not([hidden])');
+      await pa.keyboard.press('Escape');
+      await esperar(pa, () => document.getElementById('editorDescartar').hidden);
+      assert.ok(await pa.$('.album-visor'), 'el visor se cerró con el editor abierto');
+      assert.equal(await texto(pa, '.album-visor .cab'), titulo, 'las flechas pasaron de foto debajo del editor');
+      // deshacer el giro y volver a girar
+      await pa.click('#editorFoto [data-e="deshacer"]');
+      await pa.click('#editorFoto [data-e="rotar"]');
+      await pa.click('#editorGuardar');
+      await esperar(pa, () => document.getElementById('editorFoto').hidden);
+      for (let i = 0; i < 40 && db.fotos.length === antes; i++) await new Promise((r) => setTimeout(r, 200));
+      assert.equal(db.fotos.length, antes + 1, 'no se subió la copia');
+      const nueva = db.fotos[db.fotos.length - 1];
+      assert.equal(nueva.editada_de, id);
+      assert.equal(nueva.ancho, nueva.alto, `el recorte 1:1 no quedó cuadrado: ${nueva.ancho}x${nueva.alto}`);
+      assert.ok(nueva.ancho < 300 && nueva.ancho > 200, 'el arrastre de la esquina no achicó el recorte: ' + nueva.ancho);
+      assert.ok(db.fotos.some((f) => f.id === id), 'la original sigue');
+      await esperar(pa, (n) => document.querySelectorAll('#album-act .album-cel').length === n, db.fotos.filter((f) => f.actividad === ACT).length);
+      await pa.keyboard.press('Escape');
+      await esperar(pa, () => !document.querySelector('.album-visor'));
+    });
+
     await paso('visor: Tab no se escapa del visor; con el editor abierto, Escape y las flechas no lo tocan', async () => {
       const id = await pa.$eval('#album-act .album-cel', (e) => e.dataset.id);
       await pa.click(`#album-act .album-cel[data-id="${id}"]`);
@@ -398,6 +450,68 @@ const celdas = (p) => cuantos(p, '#album-act .album-cel');
       await pa.keyboard.press('Escape');
       await esperar(pa, () => document.getElementById('camara').hidden);
       assert.equal(await pa.evaluate(() => !!(history.state && history.state.cam)), false, 'quedó la entrada de la cámara');
+    });
+
+    await paso('video: graba con la cámara, aparece en la grilla con play y duración, se reproduce, va al chat como link y se borra', async () => {
+      const antes = db.fotos.length, msjs = db.mensajes.length;
+      await pa.click('#album-camara');
+      await pa.waitForSelector('#camara:not([hidden]) video');
+      await esperar(pa, () => document.querySelector('#camara video').videoWidth > 0);
+      await pa.click('#camara [data-c="m-video"]');
+      await esperar(pa, () => document.querySelector('#camara.modo-video') && document.querySelector('#camara video').videoWidth > 0 && !document.querySelector('#camara [data-c="opc"]').hidden);
+      assert.match(await texto(pa, '#camara [data-c="opc"]'), /^(720p|1080p|4K) · \d+$/);
+      await pa.click('#camara [data-c="opc"]');
+      await pa.waitForSelector('#camara .panel:not([hidden])');
+      assert.match(await texto(pa, '#camara .panel'), /Resolución.*Cuadros por segundo.*Formato.*Sonido/s);
+      await pa.screenshot({ path: path.join(shots, 'album-camara-video-opciones-claro.png') });
+      await pa.keyboard.press('Escape');
+      await esperar(pa, () => document.querySelector('#camara .panel').hidden && !document.getElementById('camara').hidden);
+      await pa.click('#camara [data-c="disparo"]');
+      await esperar(pa, () => document.querySelector('#camara.grabando'));
+      assert.equal(await pa.$eval('#camara [data-c="lente"]', (b) => b.disabled), true, 'se puede cambiar de cámara grabando');
+      await new Promise((r) => setTimeout(r, 1800));
+      assert.match(await texto(pa, '#camara .rec'), /0:0[12]/);
+      await pa.click('#camara [data-c="disparo"]');
+      for (let i = 0; i < 50 && db.fotos.length === antes; i++) await new Promise((r) => setTimeout(r, 200));
+      assert.equal(db.fotos.length, antes + 1, 'no se subió el video');
+      const v = db.fotos[db.fotos.length - 1];
+      assert.equal(v.tipo, 'video'); assert.ok(v.duracion_ms >= 1000 && v.duracion_ms < 4000, 'duración ' + v.duracion_ms);
+      assert.match(v.ruta, new RegExp(`^${ACT}/${v.id}\\.(mp4|webm)$`)); assert.equal(v.media, null);
+      assert.equal(v.mime, v.ruta.endsWith('.mp4') ? 'video/mp4' : 'video/webm');
+      assert.equal(db.tipos.get(v.ruta), v.mime, 'el archivo subió con el tipo del video');
+      assert.ok(db.storage.has(v.mini), 'subió la miniatura');
+      await pa.click('#camara [data-c="cerrar"]');
+      await esperar(pa, () => document.getElementById('camara').hidden);
+      // en la grilla: play y duración
+      await esperar(pa, (id) => !!document.querySelector(`#album-act .album-cel.es-video[data-id="${id}"] .dur`), v.id);
+      assert.match(await pa.$eval(`#album-act .album-cel[data-id="${v.id}"] .dur`, (e) => e.textContent), /^0:0[1-3]$/);
+      assert.match(await pa.$eval(`#album-act .album-cel[data-id="${v.id}"]`, (e) => e.getAttribute('aria-label')), /^Video de 0:0\d de Ana/);
+      await pa.evaluate((id) => document.querySelector(`#album-act .album-cel[data-id="${id}"]`).scrollIntoView({ block: 'center' }), v.id);
+      await pa.screenshot({ path: path.join(shots, 'album-video-grilla-claro.png') });
+      // visor: se reproduce, sin "Editar"
+      await pa.click(`#album-act .album-cel[data-id="${v.id}"]`);
+      await pa.waitForSelector('.album-visor video:not([hidden])');
+      assert.equal(await pa.$eval('.album-editar', (e) => e.hidden), true, 'Editar en un video');
+      await esperar(pa, () => { const x = document.querySelector('.album-visor video'); return x.src && x.readyState >= 2; });
+      await pa.evaluate(() => { const x = document.querySelector('.album-visor video'); x.muted = true; return x.play(); });
+      await esperar(pa, () => document.querySelector('.album-visor video').currentTime > 0.3);
+      await pa.screenshot({ path: path.join(shots, 'album-video-visor-claro.png') });
+      // al chat va un link, no el archivo
+      if (!(await pa.$eval('.album-al-chat', (e) => e.hidden))) {
+        await pa.click('.album-al-chat');
+        for (let i = 0; i < 30 && db.mensajes.length === msjs; i++) await new Promise((r) => setTimeout(r, 100));
+        const m = db.mensajes[db.mensajes.length - 1];
+        assert.equal(m.tipo, 'texto'); assert.match(m.texto, new RegExp(`subió un video \\(0:0\\d\\) al álbum: .*#/actividad/${ACT}$`));
+      }
+      // borrar
+      await pa.click('.album-borrar');
+      await pa.waitForSelector('.album-confirmar:not([hidden])');
+      assert.match(await texto(pa, '.album-confirmar'), /¿Borrar este video\?/);
+      await new Promise((r) => setTimeout(r, 600));
+      await pa.click('.album-borrar-si');
+      await esperar(pa, () => !document.querySelector('.album-visor'));
+      assert.ok(!db.fotos.some((f) => f.id === v.id), 'quedó la fila');
+      assert.ok(![...db.storage.keys()].some((k) => k.includes(v.id)), 'quedaron archivos del video');
     });
 
     await paso('si el álbum se cierra con el visor abierto (me sacaron de la actividad), no quedan entradas de "atrás"', async () => {

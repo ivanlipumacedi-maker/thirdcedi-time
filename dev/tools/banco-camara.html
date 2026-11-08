@@ -1,0 +1,70 @@
+<!doctype html>
+<!-- Banco de pruebas de la cámara y el editor del álbum, sueltos (sin Supabase ni sesión). Sirve para el emulador y para capturas.
+     Servir la raíz con `npx --yes http-server -p 8087 -c-1` y abrir http://127.0.0.1:8087/dev/tools/banco-camara.html
+     ?foto=<url> abre el editor con esa foto. Lo que se saca o se guarda queda abajo, en la página. -->
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Banco: cámara y editor</title>
+<link rel="stylesheet" href="../../estilos.css">
+<style>
+  body { padding: 16px; } .acciones { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px }
+  #res { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px } #res img, #res video { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; background: #222 }
+  #res figure { margin: 0; font-size: .75rem } #log { font: 12px monospace; white-space: pre-wrap; margin-top: 10px }
+</style>
+</head>
+<body>
+<div id="sprite"></div>
+<h1>Banco de la cámara y el editor</h1>
+<div class="acciones">
+  <button type="button" id="b-camara" class="btn-primario">Cámara</button>
+  <label class="btn-secundario">Editar una foto <input type="file" id="b-archivo" accept="image/*" hidden></label>
+</div>
+<div id="res"></div>
+<div id="log"></div>
+<div id="toast" hidden></div>
+<script>
+  // lo mínimo de App que usan camara.js y editor.js
+  window.App = {
+    icono(nombre, etiqueta) {
+      const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('class', 'ico'); s.setAttribute('aria-hidden', 'true');
+      const u = document.createElementNS('http://www.w3.org/2000/svg', 'use'); u.setAttribute('href', '#i-' + nombre); s.appendChild(u); return s;
+    },
+    toast(t) { const el = document.getElementById('toast'); el.textContent = t; el.hidden = false; clearTimeout(el._t); el._t = setTimeout(() => (el.hidden = true), 3000); log('toast: ' + t); },
+  };
+  window.log = (t) => { document.getElementById('log').textContent += t + '\n'; };
+  // los errores y avisos de la consola quedan a la vista (en el teléfono no hay DevTools)
+  for (const k of ['error', 'warn']) { const o = console[k].bind(console); console[k] = (...a) => { o(...a); log(k + ': ' + a.map((x) => (x && x.message) || String(x)).join(' ')); }; }
+  addEventListener('error', (e) => log('error: ' + e.message));
+  // el sprite de íconos vive en index.html
+  fetch('../../index.html').then((r) => r.text()).then((t) => { const m = /<!-- iconos:inicio -->[\s\S]*?<!-- iconos:fin -->/.exec(t); document.getElementById('sprite').innerHTML = m ? m[0] : ''; });
+</script>
+<script src="../../chat-medios.js"></script>
+<script src="../../album-logica.js"></script>
+<script src="../../camara-logica.js"></script>
+<script src="../../camara.js"></script>
+<script src="../../editor-logica.js"></script>
+<script src="../../editor.js"></script>
+<script>
+  const res = document.getElementById('res');
+  window.__resultados = [];
+  function mostrar(blob, txt) {
+    const u = URL.createObjectURL(blob), es = /^video/.test(blob.type);
+    const el = document.createElement(es ? 'video' : 'img'); el.src = u; if (es) { el.controls = true; el.playsInline = true; el.muted = true; }
+    const f = document.createElement('figure'); f.append(el, txt); res.prepend(f);
+    window.__resultados.push({ tipo: blob.type, bytes: blob.size, txt });
+    log(txt + ' · ' + blob.type + ' · ' + Math.round(blob.size / 1024) + ' KB');
+  }
+  document.getElementById('b-camara').addEventListener('click', () => Camara.abrir({
+    alSacar: async (p, extra) => { mostrar(p.foto || p.video, (extra.tipo || 'foto') + ' ' + (p.ancho || '') + 'x' + (p.alto || '') + (p.duracion_ms ? ' ' + (p.duracion_ms / 1000).toFixed(1) + ' s' : '')); },
+    alTocarUltima: () => Camara.cerrar(),
+  }));
+  const editar = (b) => EditorFoto.abrir(b, { alGuardar: async (ed) => { mostrar(ed, 'editada'); } });
+  document.getElementById('b-archivo').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) editar(f); });
+  const q = new URLSearchParams(location.search).get('foto');
+  if (q) fetch(q).then((r) => r.blob()).then((b) => setTimeout(() => editar(b), 300));
+  window.__editar = (url) => fetch(url).then((r) => r.blob()).then(editar);
+</script>
+</body>
+</html>

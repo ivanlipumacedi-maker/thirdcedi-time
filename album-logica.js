@@ -5,8 +5,9 @@
   const ZONA = 'America/Argentina/Buenos_Aires';
 
   // bucket 'album': <actividad>/<id>.jpg (original), .t.webp (miniatura) y .m.jpg (1600 px, queda siempre en la app)
-  const rutaFoto = (actividad, id) => `${actividad}/${id}.jpg`;
-  const rutaMini = (ruta) => ruta.replace(/\.jpg$/, '.t.webp');
+  // un video es <actividad>/<id>.mp4 o .webm, con miniatura .t.webp (el primer cuadro) y sin media
+  const rutaFoto = (actividad, id, ext = 'jpg') => `${actividad}/${id}.${ext}`;
+  const rutaMini = (ruta) => ruta.replace(/\.(jpg|mp4|webm)$/, '.t.webp');
   const rutaMedia = (ruta) => ruta.replace(/\.jpg$/, '.m.jpg');
   /** qué mostrar en grande: la original si sigue en la app; si se liberó (está en Drive), la media; si no hay, la miniatura */
   const verFoto = (f) => (!f.liberada ? f.ruta : f.media || f.mini);
@@ -45,8 +46,8 @@
   const limpio = (s) => String(s || '').replace(/[\\/]/g, '-').replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim();
   const carpetaDrive = (a) => `${fmtDia.format(new Date(a.fecha))} ${limpio(a.titulo)}`;
   const nombreDrive = (f, autor) => {
-    const d = new Date(f.tomada);
-    return `${fmtDia.format(d)} ${fmtHora.format(d).replace(':', '.')} ${limpio(autor)}${f.editada_de ? ' editada' : ''} (${String(f.id).slice(0, 8)}).jpg`;
+    const d = new Date(f.tomada), ext = (/\.(mp4|webm)$/.exec(f.ruta || '') || [])[1] || 'jpg';
+    return `${fmtDia.format(d)} ${fmtHora.format(d).replace(':', '.')} ${limpio(autor)}${f.editada_de ? ' editada' : ''} (${String(f.id).slice(0, 8)}).${ext}`;
   };
 
   // La cola es del teléfono: si entra otra persona, lo que sacó la anterior no se sube con la sesión nueva.
@@ -95,7 +96,11 @@
     return 'transitorio';
   }
 
-  const A = { LIMITE_BYTES, LIMITE_FOTOS, MAX_LADO, rutaFoto, rutaMini, rutaMedia, verFoto, escala, porDia, espacio, fusionar, quitar, espera,
+  const esVideo = (f) => !!f && f.tipo === 'video';
+  /** duración de un video para la grilla: "0:07", "1:00" */
+  const duracion = (ms) => { const s = Math.max(0, Math.round((ms || 0) / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+
+  const A = { esVideo, duracion, LIMITE_BYTES, LIMITE_FOTOS, MAX_LADO, rutaFoto, rutaMini, rutaMedia, verFoto, escala, porDia, espacio, fusionar, quitar, espera,
     carpetaDrive, nombreDrive, soloMias, pendientesDe, zoomPasos, lentesTraseras, textoEstado, clasificarError };
   if (typeof module !== 'undefined' && module.exports) module.exports = A; else g.AlbumLogica = A;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -1,12 +1,6 @@
 // Service worker de ThirdCEDI Time: caché del shell (red primero, caché si no hay señal) y notificaciones push.
-const CACHE = 'thirdcedi-shell-v27';
-const SHELL = ['./', 'index.html', 'estilos.css', 'app.js', 'dominios.js', 'errores.js', 'perfiles.js', 'actividades-logica.js', 'chat-logica.js', 'chat-medios.js', 'chat.js', 'cuentas-logica.js', 'cuentas.js', 'album-logica.js', 'album-cola.js', 'camara.js', 'editor.js', 'album.js', 'actividades.js', 'trivia-logica.js', 'trivia.js', 'impostor-logica.js', 'impostor.js', 'juegos.js', 'avisos.js', 'captcha.js', 'login.js', 'vendor/supabase.js', 'manifest.webmanifest', 'icon-192.png', 'badge-96.png', 'img/logo-cedi.png', 'img/logo-cedi-light.png',
-  'img/iconos-propios/futbol.svg', 'img/iconos-propios/padel.svg', 'img/iconos-propios/trekking.svg', 'img/iconos-propios/asado.svg', 'img/iconos-propios/after.svg', 'img/iconos-propios/otra.svg', 'img/iconos-propios/tercer-tiempo.svg', 'img/iconos-propios/chat.svg', 'img/iconos-propios/cuentas.svg', 'img/iconos-propios/album.svg', 'img/iconos-propios/trivia.svg', 'img/iconos-propios/impostor.svg', 'img/iconos-propios/nav-actividades.svg', 'img/iconos-propios/nav-juegos.svg', 'img/iconos-propios/nav-perfil.svg'];
-
-// La IA del editor (worker, onnxruntime y modelo de 28 MB) y el editor de filtros no van en el shell: se guardan la primera
-// vez que se usan, en una caché aparte que no se borra al cambiar de versión, y después se sirven desde el teléfono.
-const CACHE_IA = 'thirdcedi-ia-v1';
-const esIA = (u) => u.origin === self.location.origin && /\/(ia-worker\.js|vendor\/ort\/[^/]+|vendor\/filerobot-[^/]+\.js|modelos\/[^/]+\.onnx)$/.test(u.pathname);
+const CACHE = 'thirdcedi-shell-v29';
+const SHELL = ['./', 'index.html', 'estilos.css', 'app.js', 'dominios.js', 'errores.js', 'perfiles.js', 'actividades-logica.js', 'chat-logica.js', 'chat-medios.js', 'chat.js', 'cuentas-logica.js', 'cuentas.js', 'album-logica.js', 'album-cola.js', 'camara-logica.js', 'camara.js', 'editor-logica.js', 'editor.js', 'album.js', 'actividades.js', 'trivia-logica.js', 'trivia.js', 'impostor-logica.js', 'impostor.js', 'juegos.js', 'avisos.js', 'captcha.js', 'login.js', 'vendor/supabase.js', 'manifest.webmanifest', 'icon-192.png', 'badge-96.png', 'img/logo-cedi.png', 'img/logo-cedi-light.png', 'img/iconos-propios/futbol.svg', 'img/iconos-propios/padel.svg', 'img/iconos-propios/trekking.svg', 'img/iconos-propios/asado.svg', 'img/iconos-propios/after.svg', 'img/iconos-propios/otra.svg', 'img/iconos-propios/tercer-tiempo.svg', 'img/iconos-propios/chat.svg', 'img/iconos-propios/cuentas.svg', 'img/iconos-propios/album.svg', 'img/iconos-propios/trivia.svg', 'img/iconos-propios/impostor.svg', 'img/iconos-propios/nav-actividades.svg', 'img/iconos-propios/nav-juegos.svg', 'img/iconos-propios/nav-perfil.svg'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).catch(() => {}).then(() => self.skipWaiting()));
@@ -14,7 +8,8 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil((async () => {
     const claves = await caches.keys();
-    await Promise.all(claves.filter((k) => k !== CACHE && k !== CACHE_IA).map((k) => caches.delete(k)));
+    // borra también la caché vieja de la IA del editor ('thirdcedi-ia-v1', ~43 MB), que ya no existe
+    await Promise.all(claves.filter((k) => k !== CACHE).map((k) => caches.delete(k)));
     await self.clients.claim();
   })());
 });
@@ -23,18 +18,6 @@ self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   const u = new URL(e.request.url);
   if (u.origin !== self.location.origin) return; // Supabase, fuentes, Turnstile (challenges.cloudflare.com), etc. van directo a la red, sin caché
-  if (esIA(u)) {
-    const clave = u.origin + u.pathname; // sin ?v=
-    e.respondWith((async () => {
-      const cache = await caches.open(CACHE_IA);
-      const guardada = await cache.match(clave);
-      if (guardada) return guardada;
-      const r = await fetch(e.request);
-      if (r.ok) e.waitUntil(cache.put(clave, r.clone()));
-      return r;
-    })());
-    return;
-  }
   e.respondWith((async () => {
     try {
       // 'no-cache': revalida contra el servidor (ETag) en vez de usar la caché HTTP del navegador. GitHub Pages manda

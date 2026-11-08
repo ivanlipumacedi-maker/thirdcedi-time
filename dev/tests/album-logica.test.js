@@ -130,3 +130,15 @@ test('clasificarError: formato o tamaño es permanente; 400/403/RLS es dudoso (p
   for (const e of [{ statusCode: '400' }, { statusCode: '403' }, { status: 403 }, { code: '42501' }]) assert.equal(A.clasificarError(e), 'dudoso', JSON.stringify(e));
   for (const e of [{ statusCode: '500' }, { message: 'Failed to fetch' }, null, undefined]) assert.equal(A.clasificarError(e), 'transitorio', JSON.stringify(e));
 });
+
+test('videos: ruta .mp4/.webm con miniatura .t.webp, nombre en Drive con su extensión y duración', () => {
+  assert.equal(A.rutaFoto(ACT, ID, 'mp4'), `${ACT}/${ID}.mp4`);
+  assert.equal(A.rutaMini(`${ACT}/${ID}.mp4`), `${ACT}/${ID}.t.webp`);
+  assert.equal(A.rutaMini(`${ACT}/${ID}.webm`), `${ACT}/${ID}.t.webp`);
+  assert.equal(A.rutaFoto(ACT, ID), `${ACT}/${ID}.jpg`, 'una foto sigue igual');
+  const f = { id: ID, tomada: '2026-11-20T23:05:00Z', editada_de: null, ruta: `${ACT}/${ID}.webm` };
+  assert.match(A.nombreDrive(f, 'Ana'), /\(7c9e6679\)\.webm$/);
+  assert.match(A.nombreDrive({ ...f, ruta: undefined }, 'Ana'), /\.jpg$/);
+  assert.equal(A.esVideo({ tipo: 'video' }), true); assert.equal(A.esVideo({ tipo: 'foto' }), false); assert.equal(A.esVideo(null), false);
+  assert.equal(A.duracion(7400), '0:07'); assert.equal(A.duracion(60000), '1:00'); assert.equal(A.duracion(null), '0:00');
+});
