@@ -479,7 +479,8 @@
     pintar();
     sincronizar();
 
-    return function cerrar() {
+    // la barra de abajo (botón Cámara) abre la cámara de este álbum sin pasar por el botón de la sección
+    const fin = function cerrar() {
       if (cerrado) return;
       cerrado = true;
       dejarDeOir();
@@ -494,6 +495,8 @@
       if (g.Camara.abierta()) g.Camara.cerrar();
       cont.replaceChildren();
     };
+    fin.camara = () => { if (!cerrado) abrirCamara(); };
+    return fin;
   }
 
   g.Album = { abrir };

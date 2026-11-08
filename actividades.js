@@ -483,8 +483,61 @@
   }
   g.addEventListener('perfil', alCambiarPerfil);
 
+  // ---------- Cámara de la barra de abajo ----------
+  // La foto va al álbum de una actividad a la que estás anotado. Si hay una sola en curso (de 12 h antes a 4 h después
+  // de su hora), abre directo su cámara; si no, pregunta a cuál, con las más cercanas a hoy primero.
+  const HORA = 3600e3;
+  function misActividades() {
+    const yo = g.App.yo()?.id; if (!yo) return [];
+    const ahora = Date.now();
+    return actividades
+      .filter((a) => a.estado !== 'cancelada' && asistencias.some((s) => s.actividad === a.id && s.persona === yo))
+      .filter((a) => Math.abs(new Date(a.fecha).getTime() - ahora) < 30 * 24 * HORA)
+      .sort((x, y) => Math.abs(new Date(x.fecha).getTime() - ahora) - Math.abs(new Date(y.fecha).getTime() - ahora));
+  }
+  function camaraDe(id) {
+    if (location.hash.replace(/^#\/?/, '').split('/')[0] !== 'actividades') history.replaceState(null, '', '#/actividades');
+    g.App.ir('actividades');
+    irA({ tipo: 'detalle', id });
+    // el detalle arma el álbum al pintarse; la cámara se abre en el cuadro siguiente
+    requestAnimationFrame(() => { if (albumAct === id && albumCerrar && albumCerrar.camara) albumCerrar.camara(); else g.App.toast('No se pudo abrir la cámara de esa actividad.'); });
+  }
+  let hoja = null;
+  function cerrarHoja() { if (!hoja) return; const hj = hoja; hoja = null; hj.close(); hj.remove(); }
+  function elegirActividad(lista) {
+    cerrarHoja();
+    const fila = (a) => {
+      const f = partes(a.fecha), t = tipoDe(a.tipo);
+      return h('li', null, h('button', { type: 'button', class: 'hoja-act', on: { click: () => { cerrarHoja(); camaraDe(a.id); } } },
+        h('span', { class: 'hoja-ico' }, ico(t.icono)),
+        h('span', { class: 'hoja-txt' }, h('strong', null, a.titulo), h('span', null, f.dia + ' ' + f.num + ' ' + f.mes + ', ' + f.hora))));
+    };
+    hoja = h('dialog', { class: 'hoja', 'aria-labelledby': 'hoja-camara-t' },
+      h('h2', { id: 'hoja-camara-t' }, '¿Para qué actividad es la foto?'),
+      h('ul', null, lista.slice(0, 8).map(fila)),
+      h('button', { type: 'button', class: 'btn-link hoja-cancelar', on: { click: cerrarHoja } }, 'Cancelar'));
+    hoja.addEventListener('cancel', (e) => { e.preventDefault(); cerrarHoja(); });
+    hoja.addEventListener('click', (e) => { if (e.target === hoja) cerrarHoja(); }); // tocar afuera la cierra
+    document.body.appendChild(hoja);
+    hoja.showModal();
+  }
+  async function camaraRapida() {
+    if (!g.App.yo()) return;
+    if (!cargado) { await refrescar(); if (!cargado) return g.App.toast('No se pudieron cargar las actividades. Probá de nuevo.'); }
+    const lista = misActividades(), ahora = Date.now();
+    if (!lista.length) {
+      g.App.ir('actividades');
+      return g.App.toast('Anotate en una actividad para sacar fotos a su álbum.');
+    }
+    const enCurso = lista.filter((a) => { const d = new Date(a.fecha).getTime() - ahora; return d > -12 * HORA && d < 4 * HORA; });
+    if (enCurso.length === 1 || lista.length === 1) return camaraDe((enCurso[0] || lista[0]).id);
+    elegirActividad(lista);
+  }
+
   // Abre el detalle de una actividad (lo usan los avisos: #/actividad/<id>).
   function abrir(id) { if (id) irA({ tipo: 'detalle', id }); }
 
-  g.Actividades = { refrescar, abrir };
+  document.querySelector('.pestana-camara')?.addEventListener('click', camaraRapida);
+
+  g.Actividades = { refrescar, abrir, camaraRapida };
 })(window);
