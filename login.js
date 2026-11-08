@@ -120,7 +120,8 @@
     ev.preventDefault();
     const email = $('in-mail').value.trim().toLowerCase();
     error('err-mail', '');
-    if (!g.Dominios.permitido(email)) { error('err-mail', g.Errores.MSG_DOMINIO); return; }
+    // los del grupo pasan; otro mail va igual al servidor, que deja pasar solo a los invitados (si no, 'Usá tu mail del Grupo CEDI')
+    if (!g.Dominios.tieneForma(email)) { error('err-mail', g.Errores.MSG_DOMINIO); return; }
     ocupado('btn-mail', true, 'Enviando…');
     try {
       await enviarCodigo(email);
@@ -179,7 +180,8 @@
     ocupado('btn-alta', true, 'Guardando…');
     try {
       const { data: { user } } = await sb().auth.getUser();
-      const empresa = g.Dominios.empresa(user.email);
+      let empresa = g.Dominios.empresa(user.email);
+      if (!empresa) { const r = await sb().rpc('es_invitado', { p_email: user.email }); if (r.data === true) empresa = 'Invitado'; }
       if (!empresa) throw new Error('Dominio no permitido');
       const { error: e } = await sb().from('perfiles').insert({ id: user.id, nombre, empresa });
       if (e) throw e;

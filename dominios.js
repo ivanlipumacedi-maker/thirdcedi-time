@@ -26,7 +26,10 @@
     return d !== null && DOMINIOS.indexOf(d) >= 0 ? EMPRESAS[d] : null;
   }
 
-  const Dominios = { DOMINIOS, permitido, empresa };
+  // un mail con forma de mail (sea o no del grupo): los invitados de afuera (23-invitados.sql) los decide el servidor
+  const tieneForma = (email) => dominioDe(email) !== null && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(email).trim());
+
+  const Dominios = { DOMINIOS, permitido, empresa, tieneForma };
   if (typeof module !== 'undefined' && module.exports) module.exports = Dominios;
   else g.Dominios = Dominios;
 })(typeof window !== 'undefined' ? window : globalThis);

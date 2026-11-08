@@ -20,6 +20,11 @@ with zz as (
   delete from public.push_subs s
   where s.endpoint like 'https://zz-prueba.invalid/%'
      or s.persona in (select u.id from auth.users u where u.email like 'zz-prueba-%@cedi.com.ar')
+), todos as (
+  -- fotos de prueba en el álbum de todos (22): las de los usuarios zz (los archivos del bucket los borran los tests)
+  delete from public.fotos f
+  where f.actividad = '00000000-0000-4000-8000-000000000000'
+    and f.autor in (select u.id from auth.users u where u.email like 'zz-prueba-%@cedi.com.ar')
 ), pruebas as (
   delete from public.avisos_pruebas p where p.persona in (select u.id from auth.users u where u.email like 'zz-prueba-%@cedi.com.ar')
 )
