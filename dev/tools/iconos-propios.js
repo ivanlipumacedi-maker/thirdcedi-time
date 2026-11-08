@@ -284,41 +284,37 @@ svg('trekking', [
   ]),
 ]);
 
-// Fútbol: la pelota clásica (como img/referencias/Futbol.png). Contorno grueso, pentágono negro al centro con la punta
-// arriba, cinco pentágonos alrededor apuntando al centro y las costuras finas que arman los hexágonos blancos.
+// Fútbol: la pelota clásica de gajos. Contorno, pentágono negro al centro, cinco costuras que salen de sus puntas y cinco
+// pentágonos cortados por el borde; en la versión de un color los pentágonos van llenos y el cuero blanco queda calado.
 {
-  const CX = 24, CY = 24, RB = 20.6, RC = 5.4, D = 13.5, RO = 5.6;
-  const f = (n) => n.toFixed(2);
-  const seg = (a, b) => `M${f(a[0])} ${f(a[1])} L${f(b[0])} ${f(b[1])}`;
-  const centro = poly(CX, CY, RC, 5, -90);
-  const afuera = [];
+  const CX = 24, CY = 24, RB = 20.5;
+  const centro = poly(CX, CY, 6.6, 5, -90);
+  const bordes = [], costuras = [];
   for (let i = 0; i < 5; i++) {
     const ang = -90 + 72 * i, rad = ang * Math.PI / 180;
-    const c = [CX + D * Math.cos(rad), CY + D * Math.sin(rad)];
-    afuera.push({ c, v: poly(c[0], c[1], RO, 5, ang + 180) }); // v[0] mira al centro, v[1]/v[4] hombros, v[2]/v[3] lejos
-  }
-  const costuras = [];
-  const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
-  for (let i = 0; i < 5; i++) {
-    const p = afuera[i], q = afuera[(i + 1) % 5];
-    costuras.push(seg(centro[i], p.v[0]));
-    // hombro de este pentágono con el hombro más cercano del siguiente
-    let mejor = null;
-    for (const a of [p.v[1], p.v[4]]) for (const b of [q.v[1], q.v[4]]) if (!mejor || dist(a, b) < mejor.d) mejor = { a, b, d: dist(a, b) };
-    costuras.push(seg(mejor.a, mejor.b));
-    // de las dos puntas lejanas, hacia el borde
-    for (const v of [p.v[2], p.v[3]]) {
-      const k = RB / Math.hypot(v[0] - CX, v[1] - CY);
-      costuras.push(seg(v, [CX + (v[0] - CX) * k, CY + (v[1] - CY) * k]));
-    }
+    const px = CX + 20.5 * Math.cos(rad), py = CY + 20.5 * Math.sin(rad);
+    bordes.push(pts(poly(px, py, 7.4, 5, ang + 180)));
+    const [x1, y1] = centro[i];
+    const x2 = CX + 13.4 * Math.cos(rad), y2 = CY + 13.4 * Math.sin(rad);
+    costuras.push(`M${x1.toFixed(2)} ${y1.toFixed(2)} L${x2.toFixed(2)} ${y2.toFixed(2)}`);
+    // costuras entre dos gajos del borde: de un vértice lateral de este pentágono al del siguiente, pasando por un nudo
+    // que sale hacia el borde de la pelota
+    const pa = poly(px, py, 7.4, 5, ang + 180)[1];
+    const r3 = (ang + 72) * Math.PI / 180;
+    const pb = poly(CX + 20.5 * Math.cos(r3), CY + 20.5 * Math.sin(r3), 7.4, 5, ang + 72 + 180)[4];
+    const rad2 = (ang + 36) * Math.PI / 180;
+    const jx = CX + 16.4 * Math.cos(rad2), jy = CY + 16.4 * Math.sin(rad2);
+    const x4 = CX + 21 * Math.cos(rad2), y4 = CY + 21 * Math.sin(rad2);
+    const f = (n) => n.toFixed(2);
+    costuras.push(`M${f(pa[0])} ${f(pa[1])} L${f(jx)} ${f(jy)} L${f(pb[0])} ${f(pb[1])} M${f(jx)} ${f(jy)} L${f(x4)} ${f(y4)}`);
   }
   svg('futbol', [
     { ...C(CX, CY, RB, '#fff', { sw: 0.01 }), mono: 'skip' },
-    { ...L(costuras.join(' '), INK, 1.7), monoSinCorte: true },
-    ...afuera.map((p) => ({ ...P(pts(p.v), INK, { sw: 1.6 }), monoSinCorte: true })),
-    { ...P(pts(centro), INK, { sw: 1.6 }), monoSinCorte: true },
-    { ...C(CX, CY, RB, 'none', { sw: 3 }), monoSinCorte: true },
-  ]);
+    { t: 'g', a: { 'clip-path': 'url(#tct-pelota)' }, g: bordes.map((d) => ({ ...P(d, INK, { sw: 0.01 }), monoSinCorte: true })) },
+    { ...P(pts(centro), INK, { sw: 1.4 }), monoSinCorte: true },
+    { ...L(costuras.join(' '), INK, 2.3), monoSinCorte: true },
+    { ...C(CX, CY, RB, 'none', { sw: 3.2 }), monoSinCorte: true },
+  ], `<clipPath id="tct-pelota"><circle cx="${CX}" cy="${CY}" r="${RB}"/></clipPath>`);
 }
 
 // ---------- Tercer tiempo A (principal): el silbato del final y un chopp
