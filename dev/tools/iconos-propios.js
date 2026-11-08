@@ -146,9 +146,9 @@ const llama = [
   N(P('M24.6 11 C26.2 13.1 28.3 14.6 28.3 17.3 C28.3 19.7 26.4 21 24 21 C21.6 21 19.7 19.7 19.7 17.5 C19.7 16 20.5 15 21.4 14.3 C21.8 15.6 22.5 16.2 23.3 16.4 C23 14.3 23.5 12.4 24.6 11 Z', K.sol)),
 ];
 svg('asado', [
-  G('translate(24 23) scale(1.18) translate(-24 -21)', llama),
-  cubierto('tenedor', 'translate(24 28.5) rotate(-45)'),
-  cubierto('cuchillo', 'translate(24 28.5) rotate(45)'),
+  G('translate(24 12.5) scale(1.05) translate(-24 -12.5)', llama),
+  cubierto('tenedor', 'translate(24 31.5) rotate(-45) scale(.82)'),
+  cubierto('cuchillo', 'translate(24 31.5) rotate(45) scale(.82)'),
 ]);
 
 // ---------- After office: dos chopps con manija que chocan, con salpicadura (el chopp se reusa en el tercer tiempo)
@@ -262,58 +262,51 @@ svg('nav-perfil', [
   C(24, 24, 19, 'none'),
 ], `<clipPath id="tct-perfil-c"><circle cx="24" cy="24" r="19"/></clipPath>`);
 
-// ---------- Trekking (principal): caminante con mochila y bastón subiendo la ladera
-// Brazos y piernas: trazo de tinta de 7,5 con el color de 2,5 encima, así el contorno mide 2,5 como en todo el set
-const miembro = (d, color) => [L(d, INK, 7.5), L(d, color, 2.5, { halo: false })];
+// ---------- Figuras humanas (fútbol y trekking): pictograma tipo deportes olímpicos. Cabeza redonda suelta y cuerpo de trazos
+// gruesos con punta redonda; cada uno con un elemento que lo identifica de lejos (la pelota grande / la mochila, el bastón y la montaña).
+const T = 5.6; // grosor de tronco y miembros
+const M = (d, sw = T) => L(d, INK, sw);
+
+// Trekking: montaña nevada atrás, ladera adelante y el caminante subiendo con mochila grande, gorro y bastón
 svg('trekking', [
-  P('M2 44 V41 L38.5 27.5 Q40 27 41 28.2 L46 34 V44 Z', K.cesped),
-  P('M31.5 36.5 L33.5 31.5 L38.5 29.5 L43 33 L43.6 36.5 Z', K.metalClaro, { sw: 2 }),
-  L('M35 33.2 L37.6 31.8', '#fff', 1.4, { halo: false }),
-  G('rotate(-14 11.5 16)', [R(6.5, 7, 10, 18, 4, K.sol), L('M9 12 H14', '#fff', 1.6, { halo: false }), R(8, 18, 7, 5, 2, '#E3A400', { sw: 2 })]),
-  ...miembro('M17.5 24 L14.2 31 L11.2 37', K.azul),
-  L('M9.5 37.6 L13 37', INK, 6), L('M9.5 37.6 L13 37', K.madera, 2, { halo: false }),
-  P('M15.5 12.5 Q20.5 10.6 25 13.6 L23 24.5 Q18.5 25.6 14.5 23.5 Z', K.brasa),
-  ...miembro('M20.5 24 L27 26.5 L27.4 31.5', K.azul),
-  L('M26.6 32.4 L30.6 31.4', INK, 6), L('M26.6 32.4 L30.6 31.4', K.madera, 2, { halo: false }),
-  L('M31 10.5 L34.5 29.5', INK, 4.2), L('M31 10.5 L34.5 29.5', K.acero, 1.5, { halo: false }),
-  ...miembro('M23 15 L27 19.5 L31.2 15.6', K.brasa),
-  C(31.4, 15.4, 2.2, '#F2C29B', { sw: 2 }),
-  C(25.4, 7.4, 4.5, '#F2C29B'),
-  P('M20.7 7.2 C20.6 3.9 22.9 2.4 25.3 2.4 C27.8 2.4 30 3.9 30 6.6 Z', K.brasa, { sw: 2 }),
+  P('M23 33 L36 7 L48 30 V33 Z', K.montana, { sw: 2 }),
+  L('M31.2 15.6 L33.6 18 L36 15.4 L38.4 18 L40.8 15.8', INK, 2.2, { mono: 'cut' }),
+  P('M1 46 L1 40 L47 27 L47 46 Z', K.cesped, { sw: 2 }),
+  G('translate(-3 1.5)', [
+  G('rotate(-14 14 20)', [R(7.5, 11.5, 11, 16, 4.5, K.sol, { sw: 2 }), L('M10 17.5 H16', '#fff', 1.6, { halo: false })]),
+    M('M20.5 15.5 L18.5 27'),
+    M('M18.5 27 L14.5 33.5 L11 39.5'),
+    M('M18.5 27 L24.5 31 L25 35.8'),
+    M('M21 17.5 L26.5 22 L30.5 19'),
+    L('M30.5 11 L33.5 31.5', INK, 2.6),
+    C(23.2, 8.6, 4.4, '#F2C29B'),
+    P('M18.6 7.6 C18.6 4.2 21 2.6 23.4 2.6 C26 2.6 28.2 4.2 28.2 7 L30.4 7.4 L18.6 7.6 Z', K.brasa, { sw: 1.6 }),
+  ]),
 ]);
 
-// ---------- Fútbol (principal): jugador con la albiceleste pateando la pelota. Mismo canon que el caminante:
-// cabeza de radio 4,5 con gorro o pelo arriba, torso de 10x12, miembros de 7,5 con el contorno de 2,5
-const PIEL = '#F2C29B';
+// Fútbol: jugador en plena patada, brazos abiertos para el equilibrio, y la pelota grande con el pentágono calado
 {
-  let PASTO2 = 'M4 41.5';
-  for (let x = 4; x < 44; x += 5) PASTO2 += ` L${x + 2.5} 38.5 L${x + 5} 41.5`;
-  PASTO2 += ' V42.5 Q44 44.5 42 44.5 H6 Q4 44.5 4 42.5 Z';
-  const TORSO = 'M16.5 12.5 Q21.5 10.5 26 13 L24 24 Q19.5 25.2 15.5 23.2 Z';
+  const BX = 38.6, BY = 37.8, BR = 7.2;
+  const ip = poly(BX, BY, 2.9, 5, -90), ep = poly(BX, BY, BR, 5, -90);
   svg('futbol', [
-    P(PASTO2, K.cesped),
-    ...miembro('M18.5 14.5 L12.5 12.5 L8.8 8.2', PIEL),
-    ...miembro('M18 25 L15 32 L16.8 38', PIEL),
-    L('M15.6 38.6 L20.4 38.8', INK, 6), L('M15.6 38.6 L20.4 38.8', K.sol, 2, { halo: false }),
-    ...miembro('M21.5 25.5 L28.5 29.5 L33.5 35', PIEL),
-    L('M33.2 35.4 L36.8 37.4', INK, 6), L('M33.2 35.4 L36.8 37.4', K.sol, 2, { halo: false }),
-    P('M15.6 22.6 Q20 25 24.4 23.6 L25.4 28 Q20.4 29.6 15 27.6 Z', INK, { sw: 2 }),
-    P(TORSO, K.celeste),
-    { t: 'g', a: { 'clip-path': 'url(#tct-futbol-t)' }, g: [N(R(18, 9, 2.6, 18, 0, '#fff')), N(R(22.6, 9, 2.6, 18, 0, '#fff'))] },
-    { ...P(TORSO, 'none'), monoSinCorte: true },
-    ...miembro('M25 14.5 L30 17.5 L34.5 15.5', PIEL),
-    C(25.4, 7.4, 4.5, PIEL),
-    P('M20.7 7.2 C20.6 3.9 22.9 2.4 25.3 2.4 C27.8 2.4 30 3.9 30 6.6 Z', '#5A3522', { sw: 2 }),
-    C(40.5, 38.6, 4.6, '#fff'),
-    P(pts(poly(40.5, 38.6, 1.9, 5, -90)), INK, { sw: 1, mono: 'cut' }),
-    L(poly(40.5, 38.6, 1.9, 5, -90).map(([x, y], i) => { const [x2, y2] = poly(40.5, 38.6, 4.6, 5, -90)[i]; return `M${x.toFixed(2)} ${y.toFixed(2)} L${x2.toFixed(2)} ${y2.toFixed(2)}`; }).join(' '), INK, 1.3, { halo: false }),
-  ], `<clipPath id="tct-futbol-t"><path d="${TORSO}"/></clipPath>`);
+    C(17.5, 7.2, 4.6, '#F2C29B'),
+    M('M18 14.5 L21.5 26'),
+    M('M18.5 15.8 L11.5 20 L6.5 17.2'),
+    M('M19.5 16 L26.5 15.2 L30.5 10.6'),
+    M('M21.5 26 L16.5 33.5 L17.5 42.5'),
+    M('M17.5 42.5 L12.8 43', 4.6),
+    M('M21.5 26 L28.5 28.5 L31.8 33.8'),
+    C(BX, BY, BR, '#fff', { sw: 2.2 }),
+    P(pts(ip), INK, { sw: 1, mono: 'cut' }),
+    L(ip.map(([x, y], i) => `M${x.toFixed(2)} ${y.toFixed(2)} L${ep[i][0].toFixed(2)} ${ep[i][1].toFixed(2)}`).join(' '), INK, 1.5, { mono: 'cut' }),
+    L('M3 46 H28', INK, 2.4),
+  ]);
 }
 
 // ---------- Tercer tiempo A (principal): el silbato del final y un chopp
 svg('tercer-tiempo', [
-  chopp('translate(27 44.5) scale(1.45)'),
-  G('translate(1 15) scale(.78)', [P('M15.5 27 H30 Q32 27 32 29 V30 Q32 32 30 32 H22.2 A7 7 0 1 1 15.5 27 Z', K.acero),
+  chopp('translate(30 44.5) scale(1.3)'),
+  G('translate(-2.5 13) scale(.86)', [P('M15.5 27 H30 Q32 27 32 29 V30 Q32 32 30 32 H22.2 A7 7 0 1 1 15.5 27 Z', K.acero),
   N(C(15.5, 34, 3.2, K.metalClaro)),
   N(R(25, 28.6, 4.5, 1.6, .8, INK)),
   L('M10.5 31 C11.2 29.6 12.2 28.7 13.5 28.2', '#fff', 1.5, { halo: false }),
