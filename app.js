@@ -54,10 +54,30 @@
     if (location.hash === destino) mostrar(); else location.hash = destino;
   }
 
-  // Ícono del sprite de index.html (Phosphor, ver dev/tools/iconos-sprite.js). Sin etiqueta es decorativo (aria-hidden);
-  // con etiqueta lo anuncia el lector (role="img"). Toma el color del texto (currentColor).
+  // Íconos propios multicolor (img/iconos-propios, generados con dev/tools/iconos-propios.js): tipos de actividad, tercer
+  // tiempo, secciones del detalle, juegos y barra de abajo. Nombre en la app -> archivo.
+  const PROPIOS = {
+    futbol: 'futbol', padel: 'padel', trekking: 'trekking', asado: 'asado', after: 'after', otra: 'otra',
+    tercer: 'tercer-tiempo', chat: 'chat', cuentas: 'cuentas', album: 'album', trivia: 'trivia', impostor: 'impostor',
+    actividades: 'nav-actividades', juegos: 'nav-juegos', perfil: 'nav-perfil',
+  };
+  const rutaPropio = (nombre) => 'img/iconos-propios/' + PROPIOS[nombre] + '.svg';
+
+  // Ícono de la app. Los propios van como <img> (no toman currentColor); el resto sale del sprite de index.html (Phosphor fill,
+  // ver dev/tools/iconos-sprite.js) y toma el color del texto. Sin etiqueta es decorativo (alt vacío / aria-hidden);
+  // con etiqueta lo anuncia el lector (alt / role="img").
   const SVG = 'http://www.w3.org/2000/svg';
   function icono(nombre, etiqueta, clase) {
+    if (PROPIOS[nombre]) {
+      const im = document.createElement('img');
+      im.className = 'ico ico-propio' + (clase ? ' ' + clase : '');
+      im.src = rutaPropio(nombre);
+      im.alt = etiqueta || '';
+      im.draggable = false;
+      im.decoding = 'async';
+      if (!etiqueta) im.setAttribute('aria-hidden', 'true');
+      return im;
+    }
     const s = document.createElementNS(SVG, 'svg');
     s.setAttribute('class', 'ico' + (clase ? ' ' + clase : ''));
     s.setAttribute('focusable', 'false');
