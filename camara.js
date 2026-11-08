@@ -20,7 +20,7 @@
 #camara .ico { width: 22px; height: 22px; fill: currentColor; flex: none; vertical-align: 0 }
 /* vidrio esmerilado: desenfoque real, borde de medio pixel y sombra suave */
 #camara .chip, #camara .zooms, #camara .rec, #camara .panel, #camara .opc, #camara .aviso {
-  background: rgba(24,26,30,.42); backdrop-filter: blur(18px) saturate(1.7); -webkit-backdrop-filter: blur(18px) saturate(1.7);
+  background: rgba(22,24,28,.5); backdrop-filter: blur(18px) saturate(1.7); -webkit-backdrop-filter: blur(18px) saturate(1.7);
   box-shadow: inset 0 0 0 .5px rgba(255,255,255,.24), 0 6px 18px rgba(0,0,0,.25) }
 #camara .chip { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; position: relative; flex: none; transition: transform .15s ease, color .2s, background-color .2s }
 #camara .chip:active:not(:disabled) { transform: scale(.9) }
@@ -38,7 +38,7 @@
 #camara .rec.final { background: rgba(255,59,48,.8) }
 @keyframes titila { 50% { opacity: .25 } }
 /* panel de opciones de video */
-#camara .panel { position: absolute; left: 12px; right: 12px; top: calc(68px + env(safe-area-inset-top, 0px)); border-radius: 22px; padding: 14px 14px 12px; z-index: 2;
+#camara .panel { background: rgba(18,20,24,.66); position: absolute; left: 12px; right: 12px; top: calc(68px + env(safe-area-inset-top, 0px)); border-radius: 22px; padding: 14px 14px 12px; z-index: 2;
   transform-origin: top right; animation: abre .18s ease-out }
 @keyframes abre { from { opacity: 0; transform: scale(.96) translateY(-6px) } }
 #camara .panel h3 { margin: 0 0 6px 2px; font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,255,255,.62) }
@@ -498,8 +498,11 @@
       } catch (e) { console.error(e); toast('No se pudo empezar a grabar. Probá con otro formato.'); return; }
       const mini = await g.ChatMedios.aBlob(cm, 0.75).catch(() => null);
       grab = { rec, partes: [], bytes: 0, t0: performance.now(), acumulado: 0, pausado: false, mini, mime: C.mimeBase(rec.mimeType || formato.mime), ancho: vw, alto: vh, avisado: false };
-      rec.ondataavailable = (ev) => { if (ev.data && ev.data.size) { grab?.partes.push(ev.data); if (grab) grab.bytes += ev.data.size; } };
-      rec.onerror = (ev) => { console.error('MediaRecorder', ev.error || ev); };
+      const est = grab; // los últimos datos llegan después de parar, cuando grab ya es null
+      rec.ondataavailable = (ev) => { if (ev.data && ev.data.size) { est.partes.push(ev.data); est.bytes += ev.data.size; } };
+      // si el codificador no anda con ese formato (pasa en algunos Android aunque isTypeSupported diga que sí), se corta
+      // y se pasa al formato siguiente para el próximo intento
+      rec.onerror = (ev) => { console.error('MediaRecorder', ev.error || ev); est.fallo = formato.id; if (grab === est) detener(); };
       rec.start(1000);
       raiz.classList.add('grabando'); pulso();
       q('disparo').setAttribute('aria-label', 'Terminar el video');
@@ -531,16 +534,26 @@
       const dur = Math.max(1, Math.min(C.DURACION_MAX_MS + 2000, Math.round(transcurrido())));
       clearInterval(gr.intervalo);
       const alSacar = op.alSacar;
+      // la pantalla vuelve enseguida; el archivo se arma cuando el grabador termina de entregar los datos
+      grab = null;
+      raiz.classList.remove('grabando');
+      q('disparo').setAttribute('aria-label', 'Empezar a grabar');
+      q('ultima').hidden = false; q('pausar').hidden = true; $('.rec').hidden = true;
+      raiz.querySelectorAll('.modos button').forEach((x) => (x.disabled = false));
+      q('grilla').hidden = false; if (track) montarControles();
       return new Promise((listo) => {
-        gr.rec.onstop = async () => {
-          grab = null;
-          raiz.classList.remove('grabando');
-          q('disparo').setAttribute('aria-label', 'Empezar a grabar');
-          q('ultima').hidden = false; q('pausar').hidden = true; $('.rec').hidden = true;
-          raiz.querySelectorAll('.modos button').forEach((x) => (x.disabled = false));
-          q('grilla').hidden = false; if (track) montarControles();
+        let hecho = false, espera = 0;
+        const terminar = async () => {
+          if (hecho) return; hecho = true; clearTimeout(espera);
           try {
             const blob = new Blob(gr.partes, { type: gr.mime });
+            if (!blob.size && gr.fallo) {
+              const otro = soporte.formatos.find((f) => f.id !== gr.fallo);
+              soporte.formatos = soporte.formatos.filter((f) => f.id !== gr.fallo);
+              if (otro) { opc.formato = otro.id; guardarOpc(); if (track) montarControles(); }
+              toast(otro ? `Este teléfono no pudo grabar en ${gr.fallo === 'mp4' ? 'MP4' : 'ese formato'}. Pasamos a ${otro.nombre}: probá de nuevo.` : 'Este teléfono no pudo grabar el video.');
+              listo(); return;
+            }
             if (!blob.size) throw new Error('video vacío');
             const mini = gr.mini || await g.ChatMedios.aBlob(document.createElement('canvas'), 0.75);
             const id = crypto.randomUUID();
@@ -549,7 +562,10 @@
           } catch (e) { console.error(e); toast('No se pudo guardar el video. Probá de nuevo.'); }
           listo();
         };
-        try { gr.rec.stop(); } catch (e) { console.error(e); gr.rec.onstop(); }
+        gr.rec.onstop = terminar;
+        // algunos teléfonos no avisan el fin (o tardan mucho): a los 4 s se arma con lo que llegó
+        espera = setTimeout(() => { console.warn('MediaRecorder no avisó el fin: se usa lo grabado'); terminar(); }, 4000);
+        try { if (gr.rec.state !== 'inactive') gr.rec.stop(); else terminar(); } catch (e) { console.error(e); terminar(); }
       });
     }
 

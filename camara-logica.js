@@ -13,9 +13,10 @@
     { id: '4k', nombre: '4K', ancho: 3840, alto: 2160, bps: 35e6 },
   ];
   const FPS = [24, 30, 60];
-  // en orden de preferencia: MP4 (H.264) primero, porque se ve en todos los teléfonos; WebM si no hay otra
+  // en orden de preferencia: MP4 (H.264) primero, porque se ve en todos los teléfonos; WebM si no hay otra. El codec va sin perfil
+  // (avc1, no avc1.640028): con perfil High el codificador de algunos Android dice que sí y después falla al grabar.
   const FORMATOS = [
-    { id: 'mp4', nombre: 'MP4', detalle: 'H.264', mimes: ['video/mp4;codecs=avc1.640028,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4;codecs=avc1', 'video/mp4'] },
+    { id: 'mp4', nombre: 'MP4', detalle: 'H.264', mimes: ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4;codecs=avc1', 'video/mp4'] },
     { id: 'webm-vp9', nombre: 'WebM', detalle: 'VP9', mimes: ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp9'] },
     { id: 'webm-vp8', nombre: 'WebM', detalle: 'VP8', mimes: ['video/webm;codecs=vp8,opus', 'video/webm;codecs=vp8', 'video/webm'] },
   ];

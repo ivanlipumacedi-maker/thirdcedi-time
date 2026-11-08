@@ -34,6 +34,9 @@
     toast(t) { const el = document.getElementById('toast'); el.textContent = t; el.hidden = false; clearTimeout(el._t); el._t = setTimeout(() => (el.hidden = true), 3000); log('toast: ' + t); },
   };
   window.log = (t) => { document.getElementById('log').textContent += t + '\n'; };
+  // los errores y avisos de la consola quedan a la vista (en el teléfono no hay DevTools)
+  for (const k of ['error', 'warn']) { const o = console[k].bind(console); console[k] = (...a) => { o(...a); log(k + ': ' + a.map((x) => (x && x.message) || String(x)).join(' ')); }; }
+  addEventListener('error', (e) => log('error: ' + e.message));
   // el sprite de íconos vive en index.html
   fetch('../../index.html').then((r) => r.text()).then((t) => { const m = /<!-- iconos:inicio -->[\s\S]*?<!-- iconos:fin -->/.exec(t); document.getElementById('sprite').innerHTML = m ? m[0] : ''; });
 </script>
