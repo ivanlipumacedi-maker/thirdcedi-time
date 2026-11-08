@@ -34,7 +34,7 @@
     const leer = async () => { items = await op('readonly', (s) => s.getAll()); return items; };
     const pendientes = (actividad) => A.pendientesDe(items, actividad, yo());
     // Errores (AlbumLogica.clasificarError): los permanentes se descartan. Los dudosos (400/403/RLS) pueden ser una
-    // sesión vencida: se pregunta en_sala con la sesión de ahora. Si no contesta, se reintenta más tarde; si ya no
+    // sesión vencida: se pregunta en_album con la sesión de ahora. Si no contesta, se reintenta más tarde; si ya no
     // estás anotado, se descarta; si sí estás, se reintenta, y a los DUDOSOS_MAX intentos se descarta igual.
     const DUDOSOS_MAX = 3;
     const dudas = new Map(); // id → intentos dudosos (en memoria: al recargar se empieza de nuevo)
@@ -42,7 +42,7 @@
       const tipo = A.clasificarError(e);
       if (tipo === 'transitorio') return false;
       if (tipo === 'dudoso') {
-        const r = await sb.rpc('en_sala', { sala: 'act:' + it.actividad });
+        const r = await sb.rpc('en_album', { p_album: it.actividad }); // la actividad (anotado) o el álbum de todos (miembro)
         if (r.error) return false;
         const n = (dudas.get(it.id) || 0) + 1;
         if (r.data === true && n < DUDOSOS_MAX) { dudas.set(it.id, n); return false; }

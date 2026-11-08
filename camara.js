@@ -94,6 +94,10 @@
 #camara .zoomtxt { position: absolute; left: 50%; top: 42%; transform: translateX(-50%); padding: 6px 12px; border-radius: 999px; background: rgba(0,0,0,.45); font-weight: 800;
   font-variant-numeric: tabular-nums; pointer-events: none; opacity: 0; transition: opacity .3s }
 #camara .zoomtxt.si { opacity: 1; transition: none }
+/* a dónde va la foto (cámara de la barra de abajo): debajo de la fila de arriba, al centro */
+#camara .destino { position: absolute; left: 50%; transform: translateX(-50%); top: calc(64px + env(safe-area-inset-top, 0px)); max-width: calc(100% - 40px);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px }
+#camara .destino b { color: #FFD24A; font-weight: 800 }
 #camara .aviso { position: absolute; left: 50%; top: calc(62px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); padding: 8px 14px; border-radius: 999px; font-size: .85rem; font-weight: 700; white-space: nowrap }
 #camara .error { position: absolute; inset: 0; display: grid; place-items: center; padding: 30px; text-align: center; line-height: 1.5 }
 #camara .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
@@ -163,6 +167,7 @@
         b('flash', 'Flash: apagado', ico('flash-no'), { class: 'chip', hidden: true }),
         b('timer', 'Temporizador: apagado', [ico('temporizador'), h('span', { class: 'badge', hidden: true })], { class: 'chip', 'aria-pressed': 'false' }),
         b('grilla', 'Cuadrícula', ico('grilla'), { class: 'chip', 'aria-pressed': 'false' })),
+      b('destino', 'Cambiar a dónde va la foto', '', { class: 'opc destino', hidden: true }),
       h('div', { class: 'rec', hidden: true, role: 'timer', 'aria-label': 'Tiempo grabado' }, h('i'), h('span', null, '0:00')),
       h('div', { class: 'aviso', hidden: true }),
       h('div', { class: 'panel', id: 'camara-panel', hidden: true, role: 'group', 'aria-label': 'Opciones de la cámara' }),
@@ -504,6 +509,7 @@
       switch (bt.dataset.c) {
         case 'cerrar': return cerrar();
         case 'opc': return panel();
+        case 'destino': if (!grab) op.alTocarDestino?.(); return;
         case 'flash': {
           const ciclo = modo === 'video' ? ['no', 'linterna'] : caps.torch ? ['no', 'si', 'linterna'] : ['no', 'si'];
           const antes = flash; flash = ciclo[(ciclo.indexOf(flash) + 1) % ciclo.length];
@@ -684,8 +690,13 @@
     function avisar(t) { const a = $('.aviso'); a.textContent = t; a.hidden = false; clearTimeout(avisoT); avisoT = setTimeout(() => (a.hidden = true), 2600); }
     function pendientes(n) { nPend = n; const s = q('ultima').querySelector('span'); if (s) { s.hidden = !n; s.textContent = n ? '↑' + n : ''; } }
 
+    // 'Para: Todos' / 'Para: Asado del viernes' (solo si quien abre la cámara deja elegir)
+    function ponerDestino(texto) {
+      const d = q('destino'); d.hidden = !texto;
+      if (texto) { d.replaceChildren('Para: ', h('b', null, texto)); d.setAttribute('aria-label', 'La foto va a ' + texto + '. Tocá para cambiar'); }
+    }
     function abrir(o = {}) {
-      op = o; ultima = null; brillo = 0; q('ultima').replaceChildren(); q('ultima').setAttribute('aria-label', 'Ver la última en el álbum');
+      op = o; ultima = null; brillo = 0; ponerDestino(o.destino); q('ultima').replaceChildren(); q('ultima').setAttribute('aria-label', 'Ver la última en el álbum');
       raiz.hidden = false; panel(false);
       history.pushState({ ...(history.state || {}), cam: 1 }, '', location.hash || location.pathname + location.search);
       requestAnimationFrame(pintarPista);
@@ -708,7 +719,7 @@
       if (document.hidden) { if (grab) detener().then(soltar); else soltar(); } else encender();
     });
 
-    api = { abrir, cerrar, abierta: () => !raiz.hidden, pendientes, _track: () => track, _estado: () => ({ modo, zoom, digital, flash, opc, opcF, lente, frontal, L, brillo, soporte, grabando: !!grab, caps, fotoCaps, video: { w: video.videoWidth, h: video.videoHeight }, deviceId: track?.getSettings?.().deviceId }) };
+    api = { abrir, cerrar, abierta: () => !raiz.hidden, pendientes, destino: ponerDestino, _track: () => track, _estado: () => ({ modo, zoom, digital, flash, opc, opcF, lente, frontal, L, brillo, soporte, grabando: !!grab, caps, fotoCaps, video: { w: video.videoWidth, h: video.videoHeight }, deviceId: track?.getSettings?.().deviceId }) };
   }
 
   g.Camara = {
@@ -717,6 +728,7 @@
     cerrar: () => api?.cerrar(),
     abierta: () => !!api?.abierta(),
     pendientes: (n) => api?.pendientes(n),
+    destino: (t) => api?.destino(t),
     _estado: () => api?._estado(),
   };
 })(window);

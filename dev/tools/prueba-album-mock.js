@@ -50,6 +50,7 @@ function consulta(uid, s) {
   if (s.rpc) {
     if (s.rpc === 'album_uso') return { data: 123 * 1048576 };
     if (s.rpc === 'en_sala') return { data: enSala(uid, s.args && s.args.sala) };
+    if (s.rpc === 'en_album') return { data: enSala(uid, 'act:' + (s.args && s.args.p_album)) };
     return { error: { message: 'rpc desconocida ' + s.rpc } };
   }
   if (s.storage) {
@@ -360,7 +361,7 @@ const celdas = (p) => cuantos(p, '#album-act .album-cel');
       assert.equal(await pa.evaluate(() => !!document.querySelector('#album-act [aria-live] .barra')), false, 'la barra no va dentro del aria-live');
     });
 
-    await paso('un 403 con en_sala = sí (sesión que se renovó) no descarta la foto: se reintenta y sube', async () => {
+    await paso('un 403 con en_album = sí (sesión que se renovó) no descarta la foto: se reintenta y sube', async () => {
       const antes = db.fotos.length;
       fallarSubida = { uid: UA, status: '403', veces: 1 };
       const input = await pa.$('#album-act input[type=file]');

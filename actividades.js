@@ -5,7 +5,7 @@
   let asistencias = [];
   let perfiles = new Map();
   let filtro = null;              // tipo elegido en el filtro; null = todas
-  let vista = { tipo: 'lista' };  // { tipo:'lista' } | { tipo:'detalle', id } | { tipo:'form', id|null }
+  let vista = { tipo: 'lista' };  // { tipo:'lista' } | { tipo:'detalle', id } | { tipo:'form', id|null } | { tipo:'todos' } (fotos de todos)
   let canal = null;
   let tRefresco = null;
   let cargado = false;
@@ -146,6 +146,7 @@
       // abierta desde un aviso antes de la primera carga: se espera (la lista muestra "Cargando…") en vez de soltarla
       if (cargado) vista = { tipo: 'lista' };
     }
+    if (vista.tipo === 'todos' && g.Album) { cerrarChat(); cerrarCuentas(); r.append(...nodos(pantallaTodos())); return; }
     cerrarAnexos();
     if (vista.tipo === 'form') { vista.nuevoRender = false; r.append(formulario(vista.id ? actividades.find((x) => x.id === vista.id) : null)); return; }
     r.append(...nodos(lista()));
@@ -253,6 +254,8 @@
       h('div', { class: 'fila-titulo' }, h('h1', null, 'Actividades'),
         h('button', { type: 'button', id: 'btn-nueva-act', class: 'btn-primario btn-chico btn-con-ico', on: { click: () => irA({ tipo: 'form', id: null }) } }, ico('mas'), 'Nueva')),
       filtroTipos(),
+      g.Album ? h('button', { type: 'button', id: 'btn-fotos-todos', class: 'acceso-todos', on: { click: () => irA({ tipo: 'todos' }) } },
+        ico('album'), h('span', null, h('strong', null, 'Fotos de todos'), h('small', null, 'Lo que comparten con la cámara de abajo'))) : null,
     ];
     if (!cargado && estadoCarga === 'error') {
       out.push(h('div', { class: 'vacio', role: 'alert' }, h('p', null, 'No pudimos cargar las actividades.'),
@@ -484,9 +487,11 @@
   g.addEventListener('perfil', alCambiarPerfil);
 
   // ---------- Cámara de la barra de abajo ----------
-  // La foto va al álbum de una actividad a la que estás anotado. Si hay una sola en curso (de 12 h antes a 4 h después
-  // de su hora), abre directo su cámara; si no, pregunta a cuál, con las más cercanas a hoy primero.
+  // Se abre al toque. La foto va al álbum de la actividad en curso si estás anotado en una sola (de 12 h antes a 4 h
+  // después de su hora); si no, al álbum de todos (lo ven todos los miembros y va a Drive en "Fotos de todos").
+  // Arriba, "Para: …" deja cambiar el destino: todos o una de tus actividades (las más cercanas a hoy primero).
   const HORA = 3600e3;
+  const TODOS = () => (g.Album ? g.Album.TODOS : null);
   function misActividades() {
     const yo = g.App.yo()?.id; if (!yo) return [];
     const ahora = Date.now();
@@ -495,26 +500,36 @@
       .filter((a) => Math.abs(new Date(a.fecha).getTime() - ahora) < 30 * 24 * HORA)
       .sort((x, y) => Math.abs(new Date(x.fecha).getTime() - ahora) - Math.abs(new Date(y.fecha).getTime() - ahora));
   }
-  function camaraDe(id) {
+  let destinoCam = null; // { id, nombre }
+  function destinoInicial() {
+    const ahora = Date.now();
+    const enCurso = misActividades().filter((a) => { const d = new Date(a.fecha).getTime() - ahora; return d > -12 * HORA && d < 4 * HORA; });
+    return enCurso.length === 1 ? { id: enCurso[0].id, nombre: enCurso[0].titulo } : { id: TODOS(), nombre: 'Todos' };
+  }
+  function ponerDestino(d) {
+    destinoCam = d;
+    g.Camara.destino(d.nombre);
+    g.Camara.pendientes(g.Album.pendientes(d.id));
+  }
+  // el álbum: el de todos o el de la actividad (con su detalle)
+  function verAlbum(id) {
     if (location.hash.replace(/^#\/?/, '').split('/')[0] !== 'actividades') history.replaceState(null, '', '#/actividades');
     g.App.ir('actividades');
-    irA({ tipo: 'detalle', id });
-    // el detalle arma el álbum al pintarse; la cámara se abre en el cuadro siguiente
-    requestAnimationFrame(() => { if (albumAct === id && albumCerrar && albumCerrar.camara) albumCerrar.camara(); else g.App.toast('No se pudo abrir la cámara de esa actividad.'); });
+    irA(id === TODOS() ? { tipo: 'todos' } : { tipo: 'detalle', id });
+    requestAnimationFrame(() => document.getElementById(id === TODOS() ? 'album-todos' : 'album-act')?.scrollIntoView({ block: 'start' }));
   }
   let hoja = null;
   function cerrarHoja() { if (!hoja) return; const hj = hoja; hoja = null; hj.close(); hj.remove(); }
-  function elegirActividad(lista) {
+  function elegirDestino() {
     cerrarHoja();
-    const fila = (a) => {
-      const f = partes(a.fecha), t = tipoDe(a.tipo);
-      return h('li', null, h('button', { type: 'button', class: 'hoja-act', on: { click: () => { cerrarHoja(); camaraDe(a.id); } } },
-        h('span', { class: 'hoja-ico' }, ico(t.icono)),
-        h('span', { class: 'hoja-txt' }, h('strong', null, a.titulo), h('span', null, f.dia + ' ' + f.num + ' ' + f.mes + ', ' + f.hora))));
-    };
+    const opcion = (d, icono, detalle) => h('li', null, h('button', { type: 'button', class: 'hoja-act' + (destinoCam && destinoCam.id === d.id ? ' elegida' : ''),
+      'aria-current': destinoCam && destinoCam.id === d.id ? 'true' : null, on: { click: () => { cerrarHoja(); ponerDestino(d); } } },
+      h('span', { class: 'hoja-ico' }, ico(icono)),
+      h('span', { class: 'hoja-txt' }, h('strong', null, d.id === TODOS() ? 'Fotos de todos' : d.nombre), h('span', null, detalle))));
+    const fila = (a) => { const f = partes(a.fecha); return opcion({ id: a.id, nombre: a.titulo }, tipoDe(a.tipo).icono, f.dia + ' ' + f.num + ' ' + f.mes + ', ' + f.hora); };
     hoja = h('dialog', { class: 'hoja', 'aria-labelledby': 'hoja-camara-t' },
-      h('h2', { id: 'hoja-camara-t' }, '¿Para qué actividad es la foto?'),
-      h('ul', null, lista.slice(0, 8).map(fila)),
+      h('h2', { id: 'hoja-camara-t' }, '¿A dónde va la foto?'),
+      h('ul', null, opcion({ id: TODOS(), nombre: 'Todos' }, 'album', 'La ven todos y va al Drive'), misActividades().slice(0, 8).map(fila)),
       h('button', { type: 'button', class: 'btn-link hoja-cancelar', on: { click: cerrarHoja } }, 'Cancelar'));
     hoja.addEventListener('cancel', (e) => { e.preventDefault(); cerrarHoja(); });
     hoja.addEventListener('click', (e) => { if (e.target === hoja) cerrarHoja(); }); // tocar afuera la cierra
@@ -522,18 +537,32 @@
     hoja.showModal();
   }
   async function camaraRapida() {
-    if (!g.App.yo()) return;
-    if (!cargado) { await refrescar(); if (!cargado) return g.App.toast('No se pudieron cargar las actividades. Probá de nuevo.'); }
-    const lista = misActividades(), ahora = Date.now();
-    if (!lista.length) {
-      g.App.ir('actividades');
-      return g.App.toast('Anotate en una actividad para sacar fotos a su álbum.');
-    }
-    const enCurso = lista.filter((a) => { const d = new Date(a.fecha).getTime() - ahora; return d > -12 * HORA && d < 4 * HORA; });
-    if (enCurso.length === 1 || lista.length === 1) return camaraDe((enCurso[0] || lista[0]).id);
-    elegirActividad(lista);
+    if (!g.App.yo() || !g.Album || !g.Camara) return;
+    if (!cargado) await refrescar(); // sin actividades cargadas, igual se abre: va al álbum de todos
+    destinoCam = cargado ? destinoInicial() : { id: TODOS(), nombre: 'Todos' };
+    g.Camara.abrir({
+      destino: destinoCam.nombre,
+      alSacar: (p, extra) => g.Album.agregarA(destinoCam.id, p, extra),
+      alTocarDestino: elegirDestino,
+      alTocarUltima: () => { const id = destinoCam.id; g.Camara.cerrar(); setTimeout(() => verAlbum(id), 50); },
+    });
+    g.Camara.pendientes(g.Album.pendientes(destinoCam.id));
   }
 
+  // ---------- Fotos de todos ----------
+  function pantallaTodos() {
+    const id = TODOS();
+    if (albumAct !== id) {
+      cerrarAlbum();
+      albumEl = h('section', { class: 'album', id: 'album-todos' });
+      albumAct = id;
+      albumCerrar = g.Album.abrir(albumEl, id);
+    }
+    return [volverBtn(() => irA({ tipo: 'lista' })),
+      h('h1', { class: 'titulo-ico' }, ico('album'), 'Fotos de todos'),
+      h('p', { class: 'ayuda' }, 'Lo que cualquiera comparte con la cámara de abajo. Lo ven todos y se guarda en el Drive.'),
+      albumEl];
+  }
   // Abre el detalle de una actividad (lo usan los avisos: #/actividad/<id>).
   function abrir(id) { if (id) irA({ tipo: 'detalle', id }); }
 

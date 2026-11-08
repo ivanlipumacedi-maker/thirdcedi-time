@@ -599,3 +599,12 @@ h1.titulo-ico > .ico-propio { width: 2.7rem; height: 2.7rem; }
 #btn-perfil .ico-propio { width: 26px; height: 26px; margin: 0; vertical-align: 0; }
 #btn-perfil.activa { border-color: var(--accent); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 body.sin-sesion #btn-perfil { display: none; }
+
+/* Acceso a "Fotos de todos" en la lista de actividades */
+.acceso-todos { width: 100%; display: flex; align-items: center; gap: .8rem; margin: .9rem 0 .2rem; padding: .75rem .9rem; border: 1px solid var(--border);
+  border-radius: 14px; background: var(--bg-alt); color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.acceso-todos:hover { border-color: var(--accent); }
+.acceso-todos .ico-propio { width: 38px; height: 38px; color: var(--acento-tinta); flex: none; vertical-align: 0; }
+.acceso-todos span { display: flex; flex-direction: column; gap: 2px; }
+.acceso-todos small { color: var(--muted); font-size: .85rem; }
+.hoja-act.elegida { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }

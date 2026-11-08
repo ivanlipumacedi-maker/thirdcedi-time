@@ -382,40 +382,44 @@ const volver = (p) => p.evaluate(() => document.querySelector('#pantalla-activid
       A.desconectada = false;
     });
 
-    await paso('cámara de la barra de abajo: con una sola actividad anotada abre su detalle y la cámara del álbum', async () => {
-      // los pasos de arriba dejan la de Ana cancelada: vuelve a estar abierta para esta prueba
+    await paso('cámara de la barra de abajo: se abre al toque y, sin actividad en curso, la foto va a "Todos"', async () => {
+      // los pasos de arriba dejan la de Ana cancelada: vuelve a estar abierta (es de mañana: no está en curso)
       db.actividades.find((a) => a.id === ACT).estado = 'abierta';
       await pa.evaluate(() => Actividades.refrescar());
       await pa.evaluate(() => { location.hash = '#/juegos'; });
       await dormir(200);
       await clic(pa, '.pestana-camara');
-      await esperar(pa, () => location.hash === '#/actividades' && !!document.querySelector('#album-act') && window.Camara.abierta());
+      await esperar(pa, () => window.Camara.abierta() && /Para: Todos/.test(document.querySelector('#camara [data-c=destino]').textContent));
+      assert.equal(await pa.evaluate(() => location.hash), '#/juegos', 'no tiene que salir de donde estaba');
+    });
+
+    await paso('cámara de la barra de abajo: "Para:" deja elegir una actividad anotada y vuelve a "Todos"', async () => {
+      await clic(pa, '#camara [data-c=destino]');
+      await pa.waitForSelector('dialog.hoja[open]', { timeout: 3000 });
+      const opciones = await pa.$$eval('dialog.hoja .hoja-act strong', (xs) => xs.map((x) => x.textContent));
+      assert.equal(opciones[0], 'Fotos de todos');
+      const titulo = db.actividades.find((a) => a.id === ACT).titulo;
+      assert.ok(opciones.includes(titulo), 'falta la actividad anotada: ' + opciones.join(' / '));
+      await pa.evaluate((t) => [...document.querySelectorAll('dialog.hoja .hoja-act')].find((b) => b.textContent.includes(t)).click(), titulo);
+      await esperar(pa, (t) => !document.querySelector('dialog.hoja') && document.querySelector('#camara [data-c=destino]').textContent === 'Para: ' + t, titulo);
+      await clic(pa, '#camara [data-c=destino]');
+      await pa.waitForSelector('dialog.hoja[open]', { timeout: 3000 });
+      await pa.evaluate(() => document.querySelectorAll('dialog.hoja .hoja-act')[0].click());
+      await esperar(pa, () => document.querySelector('#camara [data-c=destino]').textContent === 'Para: Todos');
       await pa.evaluate(() => window.Camara.cerrar());
       await esperar(pa, () => !window.Camara.abierta());
     });
 
-    await paso('cámara de la barra de abajo: con varias actividades pregunta a cuál, y elegir abre esa', async () => {
-      // una con id propio (la de 'mientras no estabas' repite el id de ACT4)
-      const otra = db.actividades.find((a) => a.titulo === 'Asado commiteado durante la carga');
-      await pa.evaluate((id) => { window.__extra = id; }, otra.id);
-      db.asistencias.push({ actividad: otra.id, persona: UA, parte: 'actividad' });
-      await pa.evaluate(() => Actividades.refrescar());
-      // las dos lejos de "ahora" o las dos cerca: para que pregunte, se corre la de la prueba lejos en el tiempo si hace falta
-      await clic(pa, '.pestana-camara');
-      const pregunto = await pa.waitForSelector('dialog.hoja[open]', { timeout: 3000 }).then(() => true).catch(() => false);
-      if (pregunto) {
-        assert.ok(await cuantos(pa, 'dialog.hoja .hoja-act') >= 2);
-        // se elige la otra: abre el detalle de esa y su cámara
-        const elegida = otra.titulo;
-        await pa.evaluate((t) => [...document.querySelectorAll('dialog.hoja .hoja-act')].find((b) => b.textContent.includes(t)).click(), elegida);
-        await esperar(pa, () => !document.querySelector('dialog.hoja') && window.Camara.abierta());
-        assert.ok((await pantalla(pa)).includes(elegida), 'abrió otra actividad');
-      } else {
-        await esperar(pa, () => window.Camara.abierta()); // una de las dos está en curso: va directo a esa
-      }
-      await pa.evaluate(() => window.Camara.cerrar());
-      db.asistencias = db.asistencias.filter((x) => !(x.actividad === otra.id && x.persona === UA));
-      await pa.evaluate(() => Actividades.refrescar());
+    await paso('"Fotos de todos": se entra desde la lista y abre el álbum de todos', async () => {
+      await pa.evaluate(() => { location.hash = '#/actividades'; });
+      // los pasos de arriba pueden dejar abierto un detalle o el formulario: "Volver" hasta la lista
+      for (let i = 0; i < 3 && !(await pa.$('#btn-fotos-todos')); i++) { await pa.evaluate(() => document.querySelector('#pantalla-actividades .btn-volver')?.click()); await dormir(200); }
+      await pa.waitForSelector('#btn-fotos-todos', { timeout: 5000 });
+      await clic(pa, '#btn-fotos-todos');
+      await pa.waitForSelector('#album-todos');
+      assert.match(await pantalla(pa), /Fotos de todos/);
+      await volver(pa);
+      await pa.waitForSelector('#btn-fotos-todos');
     });
 
     await paso('punto 2: con la pantalla cerrada (sin sesión) ni un SUBSCRIBED tardío ni volver a la app leen actividades', async () => {

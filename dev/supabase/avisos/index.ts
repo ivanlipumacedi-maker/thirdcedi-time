@@ -245,6 +245,10 @@ type Foto = { id: string; actividad: string; autor: string; ruta: string; tomada
 // 35 MB no se mandan, quedan solo en la app (nunca se liberan) y se marcan para que drive_tomar no los vuelva a tomar.
 const MAX_DRIVE = 35 * 1024 * 1024;
 const MUY_GRANDE = 'muy grande para Drive';
+// Álbum de todos (22-album-de-todos.sql): no es una actividad; va a la carpeta fija "Fotos de todos" (el Apps Script la
+// busca por nombre adentro de "ThirdCEDI Time" y la crea si no está).
+const TODOS = '00000000-0000-4000-8000-000000000000';
+const CARPETA_TODOS = 'Fotos de todos';
 async function drive() {
   const url = Deno.env.get('DRIVE_FOTOS_URL'), secreto = Deno.env.get('DRIVE_FOTOS_SECRETO');
   if (!url || !secreto) return { subidas: 0, motivo: 'falta configurar DRIVE_FOTOS_URL / DRIVE_FOTOS_SECRETO', ...(await liberar()) };
@@ -258,6 +262,7 @@ async function drive() {
     const ra = await sb.from('actividades').select('id,titulo,fecha,drive_url').in('id', [...new Set(fotos.map((f) => f.actividad))]);
     if (ra.error) throw ra.error;
     for (const a of ra.data || []) acts.set(a.id, a);
+    if (fotos.some((f) => f.actividad === TODOS)) acts.set(TODOS, { id: TODOS, titulo: CARPETA_TODOS, fecha: '', drive_url: null });
     const rp = await sb.from('perfiles').select('id,nombre').in('id', [...new Set(fotos.map((f) => f.autor))]);
     for (const p of rp.data || []) nombres.set(p.id, p.nombre);
   }
@@ -280,14 +285,14 @@ async function drive() {
         continue;
       }
       const r = await aDrive(url, secreto, {
-        carpeta: carpetaDrive(a), carpetaId: idDeCarpeta(a.drive_url),
+        carpeta: a.id === TODOS ? CARPETA_TODOS : carpetaDrive(a), carpetaId: idDeCarpeta(a.drive_url),
         nombre: nombreDrive(f, nombres.get(f.autor) || 'Compañero'), base64: base64(new Uint8Array(await blob.arrayBuffer())),
         mime: video ? (f.mime === 'video/webm' ? 'video/webm' : 'video/mp4') : 'image/jpeg',
       });
       const ok = await sb.from('fotos').update({ drive_id: r.id, drive_error: null }).eq('id', f.id);
       // si la base no responde se corta: seguir subiría fotos que después no quedan marcadas
       if (ok.error) { errores.push('no se pudo marcar la foto como subida: ' + ok.error.message); break; }
-      if (r.carpetaUrl && r.carpetaUrl !== a.drive_url && /^https:\/\/drive\.google\.com\//.test(r.carpetaUrl)) {
+      if (a.id !== TODOS && r.carpetaUrl && r.carpetaUrl !== a.drive_url && /^https:\/\/drive\.google\.com\//.test(r.carpetaUrl)) {
         const u = await sb.from('actividades').update({ drive_url: r.carpetaUrl }).eq('id', a.id);
         if (u.error) console.error('drive_url', u.error.message); else a.drive_url = r.carpetaUrl;
       }
