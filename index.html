@@ -108,7 +108,10 @@
     <img class="logo logo-oscuro" src="img/logo-cedi-light.png" alt="CEDI">
     <span class="titulo-app">ThirdCEDI Time</span>
   </div>
-  <button id="btn-tema" class="btn-icono" type="button" aria-label="Cambiar entre tema claro y oscuro"><svg class="ico" id="ico-tema" aria-hidden="true" focusable="false"><use href="#i-luna"></use></svg></button>
+  <div class="acciones-sup">
+    <button id="btn-tema" class="btn-icono" type="button" aria-label="Cambiar entre tema claro y oscuro"><svg class="ico" id="ico-tema" aria-hidden="true" focusable="false"><use href="#i-luna"></use></svg></button>
+    <a id="btn-perfil" class="btn-icono" href="#/perfil" data-ruta="perfil" aria-label="Perfil"><svg class="ico ico-propio" aria-hidden="true" focusable="false"><use href="#p-nav-perfil"></use></svg></a>
+  </div>
 </header>
 
 <section id="acceso" class="acceso" hidden>
@@ -172,9 +175,8 @@
 
 <nav class="pestanas" aria-label="Secciones">
   <a href="#/actividades" data-ruta="actividades"><svg class="ico ico-propio" aria-hidden="true" focusable="false"><use href="#p-nav-actividades"></use></svg><span>Actividades</span></a>
-  <a href="#/juegos" data-ruta="juegos"><svg class="ico ico-propio" aria-hidden="true" focusable="false"><use href="#p-nav-juegos"></use></svg><span>Juegos</span></a>
   <button type="button" class="pestana-camara" aria-label="Cámara: sacar fotos para una actividad"><span class="pc-boton"><svg class="ico ico-propio" aria-hidden="true" focusable="false"><use href="#p-album"></use></svg></span><span>Cámara</span></button>
-  <a href="#/perfil" data-ruta="perfil"><svg class="ico ico-propio" aria-hidden="true" focusable="false"><use href="#p-nav-perfil"></use></svg><span>Perfil</span></a>
+  <a href="#/juegos" data-ruta="juegos"><svg class="ico ico-propio" aria-hidden="true" focusable="false"><use href="#p-nav-juegos"></use></svg><span>Juegos</span></a>
 </nav>
 
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>

@@ -41,7 +41,7 @@
     const cruda = (location.hash || '').replace(/^#\/?/, '').split('/')[0];
     if (location.hash && RUTAS.indexOf(cruda) < 0 && !ALIAS[cruda]) history.replaceState(null, '', '#/' + ruta);
     document.querySelectorAll('.pantalla').forEach((p) => { p.hidden = p.dataset.ruta !== ruta; });
-    document.querySelectorAll('.pestanas a').forEach((a) => {
+    document.querySelectorAll('.pestanas a, #btn-perfil').forEach((a) => {
       const activa = a.dataset.ruta === ruta;
       a.classList.toggle('activa', activa);
       if (activa) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
