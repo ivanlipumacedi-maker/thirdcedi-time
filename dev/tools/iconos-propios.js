@@ -119,11 +119,18 @@ function paleta(cara, grip, transform) {
     L('M-8 -23.5 C-8 -27.5 -5.5 -30.5 -2.5 -31', '#fff', 1.5, { halo: false }),
   ]);
 }
+// la de atrás, solo el contorno (como img/referencias/padel.png): marco de la cabeza, cuello y mango lleno
+function paletaContorno(transform) {
+  return G(transform, [
+    L('M0 -33 C8 -33 11 -27 11 -21 C11 -13 6 -8 0 -8 C-6 -8 -11 -13 -11 -21 C-11 -27 -8 -33 0 -33 Z', INK, 2.4),
+    L('M-3.6 -8.6 L-2.4 -4 M3.6 -8.6 L2.4 -4', INK, 2.2),
+    R(-2.6, -4, 5.2, 12, 2.2, INK, { sw: 1 }),
+  ]);
+}
 svg('padel', [
-  paleta(K.rosa, K.azul, 'translate(24 37) rotate(-34) scale(.88)'),
+  paletaContorno('translate(24 37) rotate(-34) scale(.88)'),
   paleta(K.celeste, K.lavanda, 'translate(24 37) rotate(34) scale(.88)'),
-  C(24, 7.5, 5, K.lima),
-  L('M20 5.2 C22.5 6.3 22.8 9.2 21 11.2 M28 9.8 C25.5 8.7 25.2 5.8 27 3.8', '#fff', 1.4, { halo: false }),
+  C(24, 5, 4.2, K.lima),
 ]);
 
 /// ---------- Asado (como img/referencias/asado.png): tenedor de dos dientes y cuchillo de asado cruzados, en silueta, y una
@@ -268,20 +275,20 @@ svg('nav-perfil', [
 const T = 5.6; // grosor de tronco y miembros
 const M = (d, sw = T) => L(d, INK, sw);
 
-// Trekking: montaña nevada atrás, ladera adelante y el caminante subiendo con mochila grande, gorro y bastón
+/// Trekking (como img/referencias/trekking.png): el caminante en silueta subiendo una ladera, con la mochila grande atrás
+// y el bastón adelante. Sin gorro ni montaña nevada: cabeza redonda, tronco inclinado y piernas en plena subida.
 svg('trekking', [
-  P('M23 33 L36 7 L48 30 V33 Z', K.montana, { sw: 2 }),
-  L('M31.2 15.6 L33.6 18 L36 15.4 L38.4 18 L40.8 15.8', INK, 2.2, { mono: 'cut' }),
-  P('M1 46 L1 40 L47 27 L47 46 Z', K.cesped, { sw: 2 }),
-  G('translate(-3 1.5)', [
-  G('rotate(-14 14 20)', [R(7.5, 11.5, 11, 16, 4.5, K.sol, { sw: 2 }), L('M10 17.5 H16', '#fff', 1.6, { halo: false })]),
-    M('M20.5 15.5 L18.5 27'),
-    M('M18.5 27 L14.5 33.5 L11 39.5'),
-    M('M18.5 27 L24.5 31 L25 35.8'),
-    M('M21 17.5 L26.5 22 L30.5 19'),
-    L('M30.5 11 L33.5 31.5', INK, 2.6),
-    C(23.2, 8.6, 4.4, '#F2C29B'),
-    P('M18.6 7.6 C18.6 4.2 21 2.6 23.4 2.6 C26 2.6 28.2 4.2 28.2 7 L30.4 7.4 L18.6 7.6 Z', K.brasa, { sw: 1.6 }),
+  // la ladera: sube desde abajo a la izquierda hasta la cima, a la derecha; los pies y el bastón apoyan en ella
+  P('M3 45.5 L16 38.6 L21 38.2 L33.5 29.4 L36 30.2 L45.5 45.5 Z', INK, { sw: 1.4 }),
+  G('translate(-1 3.4)', [
+    // mochila grande, un poco inclinada, detrás del tronco
+    G('translate(13.4 13.4) rotate(20)', [R(-3.8, -8.8, 7.6, 17.6, 3.8, INK, { sw: 1 })]),
+    M('M21 11.5 L17.5 22.5', 5.8),
+    M('M17.5 22.5 L14.6 29.6 L12.6 36.4', 5.2),
+    M('M17.5 22.5 L24.2 24.2 L24.6 30.4', 5.2),
+    M('M20.6 13.6 L24.4 19.8 L29.6 12.6', 3.6),
+    L('M30.6 10.4 L28.4 28.2', INK, 1.9),
+    C(23.4, 5.4, 4.2, INK),
   ]),
 ]);
 
