@@ -3,6 +3,8 @@
 // Se usa un solo peso para toda la app: fill (relleno; antes regular). La app no carga nada de node_modules ni de un CDN: el sprite queda
 // versionado en index.html y se usa con <svg class="ico"><use href="#i-<nombre>"></use></svg> (App.icono en app.js).
 // Uso: `npm ci` en dev/tools y después `node dev/tools/iconos-sprite.js`. Para sumar un ícono, agregalo a ICONOS.
+// Excepción al peso único: los íconos que son solo un trazo (cruz, tilde, recortar, rotar, deshacer) en fill vienen dentro de un
+// cuadrado y sobre una foto se ven pesados; esos van como [nombre, 'bold'].
 const fs = require('fs');
 const path = require('path');
 
@@ -18,22 +20,24 @@ const ICONOS = {
   // interfaz
   luna: 'moon', sol: 'sun', volver: 'caret-left', cerrar: 'x', mas: 'plus', opciones: 'dots-three', enviar: 'paper-plane-right',
   campana: 'bell', 'campana-off': 'bell-slash', check: 'check', lugar: 'map-pin', reloj: 'clock', personas: 'users',
-  // cámara y editor
-  linterna: 'flashlight', exposicion: 'sun-dim', grilla: 'grid-nine', temporizador: 'timer', 'cambiar-camara': 'camera-rotate',
-  varita: 'magic-wand', ajustes: 'sliders-horizontal',
+  // cámara y editor de fotos (van sobre la foto, en botones de vidrio)
+  linterna: 'flashlight', flash: 'lightning', 'flash-no': 'lightning-slash', grilla: 'grid-nine', temporizador: 'timer', 'cambiar-camara': 'camera-rotate',
+  filtros: 'circles-three', intensidad: 'circle-half',
+  cruz: ['x', 'bold'], tilde: ['check', 'bold'], recortar: ['crop', 'bold'], rotar: ['arrow-clockwise', 'bold'], deshacer: ['arrow-u-up-left', 'bold'],
 };
 
 const raiz = path.join(__dirname, '..', '..');
-const dir = path.join(__dirname, 'node_modules', '@phosphor-icons', 'core', 'assets', PESO);
-const simbolos = Object.entries(ICONOS).map(([id, ph]) => {
+const assets = path.join(__dirname, 'node_modules', '@phosphor-icons', 'core', 'assets');
+const simbolos = Object.entries(ICONOS).map(([id, v]) => {
+  const [ph, peso] = Array.isArray(v) ? v : [v, PESO];
   // los archivos de los pesos que no son regular llevan el sufijo: assets/fill/<nombre>-fill.svg
-  const svg = fs.readFileSync(path.join(dir, ph + (PESO === 'regular' ? '' : '-' + PESO) + '.svg'), 'utf8');
+  const svg = fs.readFileSync(path.join(assets, peso, ph + (peso === 'regular' ? '' : '-' + peso) + '.svg'), 'utf8');
   const vb = /viewBox="([^"]+)"/.exec(svg)[1];
   const cuerpo = svg.replace(/^[\s\S]*?<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '').trim();
   return `<symbol id="i-${id}" viewBox="${vb}">${cuerpo}</symbol>`;
 });
 const sprite = '<!-- iconos:inicio -->\n'
-  + `<!-- Íconos: Phosphor Icons ${PESO} (https://phosphoricons.com), licencia MIT, Copyright (c) 2023 Phosphor Icons. Generado con dev/tools/iconos-sprite.js: no editar a mano. -->\n`
+  + `<!-- Íconos: Phosphor Icons ${PESO} (los de trazo en bold) (https://phosphoricons.com), licencia MIT, Copyright (c) 2023 Phosphor Icons. Generado con dev/tools/iconos-sprite.js: no editar a mano. -->\n`
   + '<svg xmlns="http://www.w3.org/2000/svg" class="sprite" aria-hidden="true" focusable="false" style="position:absolute;width:0;height:0;overflow:hidden">\n'
   + simbolos.join('\n') + '\n</svg>\n<!-- iconos:fin -->';
 

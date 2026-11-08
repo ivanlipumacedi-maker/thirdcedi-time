@@ -368,6 +368,55 @@ const celdas = (p) => cuantos(p, '#album-act .album-cel');
       fallarSubida = null;
     });
 
+    await paso('editor: filtro, intensidad, recorte 1:1, giro y "Guardar copia" suma una foto nueva al álbum', async () => {
+      const antes = db.fotos.length, id = await pa.$eval('#album-act .album-cel', (e) => e.dataset.id);
+      await pa.click(`#album-act .album-cel[data-id="${id}"]`);
+      await pa.waitForSelector('.album-visor');
+      const titulo = await texto(pa, '.album-visor .cab');
+      await pa.click('.album-editar');
+      await pa.waitForSelector('#editorFoto:not([hidden]) .fl[data-f="pelicula"]');
+      await esperar(pa, () => document.querySelector('#editorFoto canvas.vista').width > 0);
+      assert.equal(await pa.$eval('#editorGuardar', (b) => b.disabled), true, 'sin cambios no se guarda');
+      assert.equal(await pa.$$eval('#editorFoto .fl', (xs) => xs.length), 8);
+      await pa.click('#editorFoto .fl[data-f="pelicula"]');
+      assert.equal(await pa.$eval('#editorFoto .fl[data-f="pelicula"]', (b) => b.getAttribute('aria-pressed')), 'true');
+      await pa.$eval('#editorIntensidad', (r) => { r.value = '60'; r.dispatchEvent(new Event('input', { bubbles: true })); r.dispatchEvent(new Event('change', { bubbles: true })); });
+      assert.equal(await texto(pa, '#editorFoto .int output'), '60 %');
+      await pa.screenshot({ path: path.join(shots, 'album-editor-filtros-claro.png') });
+      await pa.click('#editorFoto [data-modo="recorte"]');
+      await pa.waitForSelector('#editorFoto .caja:not([hidden])');
+      await pa.click('#editorFoto [data-r="1:1"]');
+      // arrastrar la esquina de abajo a la derecha hacia adentro (con la proporción fija)
+      const m = await pa.$eval('#editorFoto .m[data-m="se"]', (e) => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+      await pa.mouse.move(m.x, m.y); await pa.mouse.down(); await pa.mouse.move(m.x - 30, m.y - 30, { steps: 4 }); await pa.mouse.up();
+      await pa.screenshot({ path: path.join(shots, 'album-editor-recorte-claro.png') });
+      await pa.click('#editorFoto [data-e="rotar"]');
+      // con el editor abierto, las flechas y el Escape no llegan al visor: Escape pide confirmar y un segundo Escape vuelve
+      await pa.keyboard.press('ArrowRight'); await pa.keyboard.press('ArrowLeft');
+      await pa.click('#editorFoto [data-modo="filtros"]');
+      await pa.keyboard.press('Escape');
+      await pa.waitForSelector('#editorDescartar:not([hidden])');
+      await pa.keyboard.press('Escape');
+      await esperar(pa, () => document.getElementById('editorDescartar').hidden);
+      assert.ok(await pa.$('.album-visor'), 'el visor se cerró con el editor abierto');
+      assert.equal(await texto(pa, '.album-visor .cab'), titulo, 'las flechas pasaron de foto debajo del editor');
+      // deshacer el giro y volver a girar
+      await pa.click('#editorFoto [data-e="deshacer"]');
+      await pa.click('#editorFoto [data-e="rotar"]');
+      await pa.click('#editorGuardar');
+      await esperar(pa, () => document.getElementById('editorFoto').hidden);
+      for (let i = 0; i < 40 && db.fotos.length === antes; i++) await new Promise((r) => setTimeout(r, 200));
+      assert.equal(db.fotos.length, antes + 1, 'no se subió la copia');
+      const nueva = db.fotos[db.fotos.length - 1];
+      assert.equal(nueva.editada_de, id);
+      assert.equal(nueva.ancho, nueva.alto, `el recorte 1:1 no quedó cuadrado: ${nueva.ancho}x${nueva.alto}`);
+      assert.ok(nueva.ancho < 300 && nueva.ancho > 200, 'el arrastre de la esquina no achicó el recorte: ' + nueva.ancho);
+      assert.ok(db.fotos.some((f) => f.id === id), 'la original sigue');
+      await esperar(pa, (n) => document.querySelectorAll('#album-act .album-cel').length === n, db.fotos.filter((f) => f.actividad === ACT).length);
+      await pa.keyboard.press('Escape');
+      await esperar(pa, () => !document.querySelector('.album-visor'));
+    });
+
     await paso('visor: Tab no se escapa del visor; con el editor abierto, Escape y las flechas no lo tocan', async () => {
       const id = await pa.$eval('#album-act .album-cel', (e) => e.dataset.id);
       await pa.click(`#album-act .album-cel[data-id="${id}"]`);
