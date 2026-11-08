@@ -3,6 +3,7 @@
 // Hay una sola cola para todas las actividades: lo que quedó pendiente de otra actividad se sube igual.
 // window.AlbumCola.crear({ sb, yo }) → { agregar(item), procesar(), pendientes(actividad), escuchar({ alSubir, alEstado }) }
 // item = { id, actividad, autor, foto, mini, media, ancho, alto, tomada, editada_de }
+//   o un video: { id, actividad, autor, tipo: 'video', video, mime, mini, duracion_ms, ancho, alto, tomada }
 (function () {
   const BD = 'thirdcedi-album', ALMACEN = 'pendientes';
   let bdP = null;
@@ -49,11 +50,12 @@
       dudas.delete(it.id);
       return true;
     }
-    const pesa = (it) => it.foto.size + it.mini.size + (it.media?.size || 0);
+    const pesa = (it) => (it.video || it.foto).size + it.mini.size + (it.media?.size || 0);
 
     async function subirUna(it) {
-      const ruta = A.rutaFoto(it.actividad, it.id), mini = A.rutaMini(ruta);
-      let r = await sb.storage.from(BUCKET).upload(ruta, it.foto, { contentType: 'image/jpeg', upsert: true });
+      const video = it.tipo === 'video', mime = video ? (it.mime === 'video/webm' ? 'video/webm' : 'video/mp4') : 'image/jpeg';
+      const ruta = A.rutaFoto(it.actividad, it.id, video ? (mime === 'video/webm' ? 'webm' : 'mp4') : 'jpg'), mini = A.rutaMini(ruta);
+      let r = await sb.storage.from(BUCKET).upload(ruta, video ? it.video : it.foto, { contentType: mime, upsert: true });
       if (r.error) throw r.error;
       r = await sb.storage.from(BUCKET).upload(mini, it.mini, { contentType: it.mini.type || 'image/webp', upsert: true });
       if (r.error) throw r.error;
@@ -61,6 +63,7 @@
       if (media) { r = await sb.storage.from(BUCKET).upload(media, it.media, { contentType: 'image/jpeg', upsert: true }); if (r.error) throw r.error; }
       // autor sale de auth.uid() (default de la columna): el cliente no lo manda
       const fila = { id: it.id, actividad: it.actividad, ruta, mini, media, ancho: it.ancho, alto: it.alto, bytes: pesa(it), tomada: it.tomada, editada_de: it.editada_de || null };
+      if (video) Object.assign(fila, { tipo: 'video', duracion_ms: Math.max(1, Math.round(it.duracion_ms || 1)), mime });
       const ins = await sb.from('fotos').insert(fila).select('*').single();
       if (ins.error && ins.error.code !== '23505') throw ins.error; // 23505: ya estaba, la subida anterior llegó
       return ins.data || { ...fila, autor: it.autor, liberada: false, drive_id: null };
@@ -87,12 +90,12 @@
             catch (e) {
               if (!(await descartar(e, it).catch(() => false))) throw e;
               console.error('álbum: foto descartada', e);
-              const ruta = A.rutaFoto(it.actividad, it.id);
-              sb.storage.from(BUCKET).remove([ruta, A.rutaMini(ruta), A.rutaMedia(ruta)]).catch(() => {});
+              const ruta = A.rutaFoto(it.actividad, it.id, it.tipo === 'video' ? (it.mime === 'video/webm' ? 'webm' : 'mp4') : 'jpg');
+              sb.storage.from(BUCKET).remove([ruta, A.rutaMini(ruta), A.rutaMedia(ruta)].filter((x, i, xs) => xs.indexOf(x) === i)).catch(() => {});
               await op('readwrite', (s) => s.delete(it.id)); await leer();
               avisar('descartada');
               // el aviso sale aunque el álbum no esté abierto (la cola sube en segundo plano)
-              window.App?.toast?.('Una foto no se pudo subir (formato no válido o ya no estás anotado) y se descartó.');
+              window.App?.toast?.(it.tipo === 'video' ? 'Un video no se pudo subir (formato no válido o ya no estás anotado) y se descartó.' : 'Una foto no se pudo subir (formato no válido o ya no estás anotado) y se descartó.');
               continue;
             }
             usado += pesa(it); dudas.delete(it.id);

@@ -1,4 +1,4 @@
-// ThirdCEDI Time: copia de las fotos del álbum en Google Drive.
+// ThirdCEDI Time: copia de las fotos y videos del álbum en Google Drive.
 // Lo publica Ivan como Web App en su cuenta (Ejecutar como: yo; Quién tiene acceso: cualquier persona).
 // Lo llama solo la Edge Function "avisos" con un secreto compartido.
 //
@@ -9,11 +9,13 @@
 // Recibe (POST, cuerpo JSON): { secreto, carpeta, carpetaId?, nombre, base64, mime }
 //   carpeta:   nombre de la subcarpeta de la actividad ("<fecha> <título>")
 //   carpetaId: si ya se creó antes, su id (así un cambio de título no crea otra carpeta)
+//   mime:      image/jpeg, video/mp4 o video/webm (los videos llegan solo hasta 35 MB: más grandes no entran en un POST)
 // Devuelve: { id, carpetaId, carpetaUrl, ya? }  o  { error }
 // Todo queda dentro de la carpeta raíz "ThirdCEDI Time" de Mi unidad (se crea si no existe).
 // Si ya hay un archivo con ese nombre en la subcarpeta, devuelve ese (un reintento no duplica).
 
 var RAIZ = 'ThirdCEDI Time';
+var MIMES = { 'image/jpeg': true, 'video/mp4': true, 'video/webm': true };
 
 function responder(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
@@ -59,7 +61,8 @@ function doPost(e) {
     var base = { carpetaId: carpeta.getId(), carpetaUrl: carpeta.getUrl() };
     var ya = carpeta.getFilesByName(d.nombre);
     if (ya.hasNext()) { var f0 = ya.next(); return responder({ id: f0.getId(), carpetaId: base.carpetaId, carpetaUrl: base.carpetaUrl, ya: true }); }
-    var blob = Utilities.newBlob(Utilities.base64Decode(d.base64), d.mime || 'image/jpeg', d.nombre);
+    var mime = MIMES[d.mime] ? d.mime : 'image/jpeg';
+    var blob = Utilities.newBlob(Utilities.base64Decode(d.base64), mime, d.nombre);
     var f = carpeta.createFile(blob);
     return responder({ id: f.getId(), carpetaId: base.carpetaId, carpetaUrl: base.carpetaUrl });
   } catch (err) {

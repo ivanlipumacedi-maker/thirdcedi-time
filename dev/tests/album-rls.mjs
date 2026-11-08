@@ -162,6 +162,29 @@ try {
     assert.ok((await anon.rpc('album_uso')).status >= 400, 'album_uso para anon');
   });
 
+  await paso('21 videos: A sube un .mp4 y un .webm con miniatura y los inserta con tipo, duración y mime; B los ve', async () => {
+    for (const [ext, mime] of [['mp4', 'video/mp4'], ['webm', 'video/webm']]) {
+      const vid = crypto.randomUUID(), ruta = AL.rutaFoto(actId, vid, ext), mv = AL.rutaMini(ruta);
+      let x = await A.subir(ruta, mime, new Uint8Array([0, 0, 0, 24, 102, 116, 121, 112]));
+      assert.equal(x.status, 200, ruta + ': ' + (await x.text())); archivosA.push(ruta);
+      x = await A.subir(mv, 'image/webp'); assert.equal(x.status, 200); archivosA.push(mv);
+      const f = await A.api('POST', 'fotos', { id: vid, actividad: actId, ruta, mini: mv, ancho: 1920, alto: 1080, bytes: 8, tomada: new Date().toISOString(), tipo: 'video', duracion_ms: 4200, mime });
+      assert.equal(f.status, 201, JSON.stringify(f.data)); filasA.push(vid);
+      assert.equal(f.data[0].tipo, 'video');
+    }
+    assert.equal((await B.api('GET', `fotos?actividad=eq.${actId}&tipo=eq.video`)).data.length, 2);
+  });
+
+  await paso('21 videos: Storage no acepta .mov ni un video con mime de imagen; fotos rechaza video sin duración o con media', async () => {
+    const mov = `${actId}/${crypto.randomUUID()}.mov`, x = await A.subir(mov, 'video/quicktime');
+    if (x.status === 200) await A.borrar([mov]);
+    assert.ok(x.status >= 400, 'subió un .mov');
+    const otro = crypto.randomUUID(), r = AL.rutaFoto(actId, otro, 'mp4');
+    assert.ok((await A.api('POST', 'fotos', { id: otro, actividad: actId, ruta: r, mini: AL.rutaMini(r), tipo: 'video', mime: 'video/mp4' })).status >= 400, 'video sin duración');
+    assert.ok((await A.api('POST', 'fotos', { id: otro, actividad: actId, ruta: r, mini: AL.rutaMini(r), media: `${actId}/${otro}.m.jpg`, tipo: 'video', duracion_ms: 1000, mime: 'video/mp4' })).status >= 400, 'video con media');
+    assert.ok((await A.api('POST', 'fotos', { id: otro, actividad: actId, ruta: r, mini: AL.rutaMini(r), tipo: 'video', duracion_ms: 1000, mime: 'video/webm' })).status >= 400, 'mime que no coincide con la ruta');
+  });
+
   await paso('drive_url: ni el creador la puede escribir', async () => {
     const x = await A.api('PATCH', `actividades?id=eq.${actId}`, { drive_url: 'https://drive.google.com/drive/folders/x' });
     assert.ok(x.status >= 400, 'el creador escribió drive_url');

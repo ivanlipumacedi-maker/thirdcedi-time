@@ -22,7 +22,7 @@ const ICONOS = {
   campana: 'bell', 'campana-off': 'bell-slash', check: 'check', lugar: 'map-pin', reloj: 'clock', personas: 'users',
   // cámara y editor de fotos (van sobre la foto, en botones de vidrio)
   linterna: 'flashlight', flash: 'lightning', 'flash-no': 'lightning-slash', grilla: 'grid-nine', temporizador: 'timer', 'cambiar-camara': 'camera-rotate',
-  filtros: 'circles-three', intensidad: 'circle-half',
+  filtros: 'circles-three', intensidad: 'circle-half', play: 'play', pausa: 'pause', microfono: 'microphone', 'microfono-no': 'microphone-slash',
   cruz: ['x', 'bold'], tilde: ['check', 'bold'], recortar: ['crop', 'bold'], rotar: ['arrow-clockwise', 'bold'], deshacer: ['arrow-u-up-left', 'bold'],
 };
 

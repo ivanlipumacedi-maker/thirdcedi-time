@@ -7,7 +7,7 @@
 //                        mensajes agrupados por sala y autor con SILENCIO_MS, avisos de prueba)
 //   { tipo: 'diario' }   12:00 ART: recordatorio a los anotados de cada actividad confirmada que todavía no pasó
 //   { tipo: 'prueba', persona }  aviso de prueba a los teléfonos de esa persona
-//   { tipo: 'drive' }    sube a Drive las fotos del álbum que falten (trigger after insert + cron cada 5 min) y después libera
+//   { tipo: 'drive' }    sube a Drive las fotos y videos (hasta 35 MB) del álbum que falten (trigger after insert + cron cada 5 min) y después libera
 //   { tipo: 'liberar' }  pasado el 70 % del espacio, borra de la app originales que ya están en Drive y tienen versión media, hasta el 60 %
 // Copiado de Rumbo al Sur y adaptado: destinatarios por persona (push_subs.persona), subcarpeta de Drive por actividad.
 // Secretos de la función (los carga Ivan en Dashboard → Edge Functions → Secrets):
@@ -219,9 +219,9 @@ const fmtDia = new Intl.DateTimeFormat('en-CA', { timeZone: ZONA, year: 'numeric
 const fmtHora = new Intl.DateTimeFormat('en-GB', { timeZone: ZONA, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 const limpio = (s: unknown) => String(s || '').replace(/[\\/]/g, '-').replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim();
 const carpetaDrive = (a: { fecha: string; titulo: string }) => `${fmtDia.format(new Date(a.fecha))} ${limpio(a.titulo)}`;
-const nombreDrive = (f: { id: string; tomada: string; editada_de: string | null }, autor: string) => {
-  const d = new Date(f.tomada);
-  return `${fmtDia.format(d)} ${fmtHora.format(d).replace(':', '.')} ${limpio(autor)}${f.editada_de ? ' editada' : ''} (${String(f.id).slice(0, 8)}).jpg`;
+const nombreDrive = (f: { id: string; tomada: string; editada_de: string | null; ruta?: string }, autor: string) => {
+  const d = new Date(f.tomada), ext = /\.(mp4|webm)$/.exec(f.ruta || '')?.[1] || 'jpg';
+  return `${fmtDia.format(d)} ${fmtHora.format(d).replace(':', '.')} ${limpio(autor)}${f.editada_de ? ' editada' : ''} (${String(f.id).slice(0, 8)}).${ext}`;
 };
 const idDeCarpeta = (url: string | null) => (url && /\/folders\/([A-Za-z0-9_-]+)/.exec(url)?.[1]) || null;
 
@@ -240,7 +240,11 @@ async function aDrive(url: string, secreto: string, datos: Record<string, unknow
   return j;
 }
 
-type Foto = { id: string; actividad: string; autor: string; ruta: string; tomada: string; editada_de: string | null };
+type Foto = { id: string; actividad: string; autor: string; ruta: string; tomada: string; editada_de: string | null; tipo?: string; mime?: string | null; bytes?: number };
+// El Apps Script recibe el archivo entero en base64 dentro de un JSON y tiene un límite de tamaño: los videos de más de
+// 35 MB no se mandan, quedan solo en la app (nunca se liberan) y se marcan para que drive_tomar no los vuelva a tomar.
+const MAX_DRIVE = 35 * 1024 * 1024;
+const MUY_GRANDE = 'muy grande para Drive';
 async function drive() {
   const url = Deno.env.get('DRIVE_FOTOS_URL'), secreto = Deno.env.get('DRIVE_FOTOS_SECRETO');
   if (!url || !secreto) return { subidas: 0, motivo: 'falta configurar DRIVE_FOTOS_URL / DRIVE_FOTOS_SECRETO', ...(await liberar()) };
@@ -262,11 +266,23 @@ async function drive() {
     try {
       const a = acts.get(f.actividad);
       if (!a) throw new Error('la actividad no existe');
+      const video = f.tipo === 'video';
+      if (video && (f.bytes || 0) > MAX_DRIVE) {
+        const u = await sb.from('fotos').update({ drive_error: MUY_GRANDE }).eq('id', f.id);
+        if (u.error) { errores.push('no se pudo marcar el video: ' + u.error.message); break; }
+        continue;
+      }
       const { data: blob, error: e1 } = await sb.storage.from('album').download(f.ruta);
-      if (e1 || !blob) throw new Error('no se pudo leer la foto: ' + (e1?.message || 'vacía'));
+      if (e1 || !blob) throw new Error('no se pudo leer ' + (video ? 'el video' : 'la foto') + ': ' + (e1?.message || 'vacía'));
+      if (video && blob.size > MAX_DRIVE) {
+        const u = await sb.from('fotos').update({ drive_error: MUY_GRANDE }).eq('id', f.id);
+        if (u.error) { errores.push('no se pudo marcar el video: ' + u.error.message); break; }
+        continue;
+      }
       const r = await aDrive(url, secreto, {
         carpeta: carpetaDrive(a), carpetaId: idDeCarpeta(a.drive_url),
-        nombre: nombreDrive(f, nombres.get(f.autor) || 'Compañero'), base64: base64(new Uint8Array(await blob.arrayBuffer())), mime: 'image/jpeg',
+        nombre: nombreDrive(f, nombres.get(f.autor) || 'Compañero'), base64: base64(new Uint8Array(await blob.arrayBuffer())),
+        mime: video ? (f.mime === 'video/webm' ? 'video/webm' : 'video/mp4') : 'image/jpeg',
       });
       const ok = await sb.from('fotos').update({ drive_id: r.id, drive_error: null }).eq('id', f.id);
       // si la base no responde se corta: seguir subiría fotos que después no quedan marcadas
@@ -288,6 +304,7 @@ async function drive() {
 
 // Espacio de la app (plan gratis: 1 GB por proyecto). Pasado el 70 %, se borran de la app las originales
 // más viejas que ya están en Drive y tienen versión de 1600 px, hasta bajar al 60 %. La media y la miniatura quedan.
+// Los videos no se liberan nunca (no tienen media; liberables pide tipo = 'foto').
 const LIMITE = 1024 * 1024 * 1024;
 async function liberar(alto = 0.7, bajo = 0.6, maximo = 500) {
   const usado = async () => { const { data, error } = await sb.rpc('espacio_proyecto'); if (error) throw error; return Number(data) || 0; };
