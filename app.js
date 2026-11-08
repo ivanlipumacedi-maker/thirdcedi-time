@@ -57,7 +57,8 @@
   // Íconos propios (dibujo propio, un color; generados con dev/tools/iconos-propios.js en el sprite de index.html, ids p-*):
   // tipos de actividad, tercer tiempo, secciones del detalle, juegos y barra de abajo. Nombre en la app -> símbolo.
   const PROPIOS = {
-    futbol: 'futbol', padel: 'padel', trekking: 'trekking', asado: 'asado', after: 'after', otra: 'otra',
+    // fútbol: la pelota de Phosphor de la primera versión (la eligió Ivan)
+    futbol: 'i:futbol', padel: 'padel', trekking: 'trekking', asado: 'asado', after: 'after', otra: 'otra',
     tercer: 'tercer-tiempo', chat: 'chat', cuentas: 'cuentas', album: 'album', trivia: 'trivia', impostor: 'impostor',
     actividades: 'nav-actividades', juegos: 'nav-juegos', perfil: 'nav-perfil',
   };
@@ -72,7 +73,7 @@
     s.setAttribute('focusable', 'false');
     if (etiqueta) { s.setAttribute('role', 'img'); s.setAttribute('aria-label', etiqueta); } else s.setAttribute('aria-hidden', 'true');
     const u = document.createElementNS(SVG, 'use');
-    u.setAttribute('href', propio ? '#p-' + propio : '#i-' + nombre);
+    u.setAttribute('href', propio ? (propio.startsWith('i:') ? '#i-' + propio.slice(2) : '#p-' + propio) : '#i-' + nombre);
     s.appendChild(u);
     return s;
   }
