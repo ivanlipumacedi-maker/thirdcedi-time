@@ -1,7 +1,7 @@
 // Lógica pura de actividades (sin DOM): tipos, validación, cupo, participantes y vigencia.
 (function (g) {
   const TIPOS = [
-    // icono: id del sprite de index.html; corto: el nombre en el filtro de la lista
+    // icono: nombre para App.icono (ícono propio en img/iconos-propios); corto: el nombre en el filtro de la lista
     { id: 'futbol', nombre: 'Fútbol', corto: 'Fútbol', icono: 'futbol' },
     { id: 'padel', nombre: 'Pádel', corto: 'Pádel', icono: 'padel' },
     { id: 'trekking', nombre: 'Trekking', corto: 'Trekking', icono: 'trekking' },

@@ -536,3 +536,25 @@ h1.titulo-ico > .ico { width: 1.9rem; height: 1.9rem; }
 }
 .perfil-avisos .btn-primario + .ayuda { margin-top: .6rem; }
 .tarjeta-tipo .ico { color: var(--acento-tinta); }
+
+/* Íconos propios (img/iconos-propios): figuritas multicolor con borde blanco, van como <img> y no toman currentColor.
+   Son un poco más grandes que los de Phosphor porque el borde blanco se come parte del lienzo. */
+.ico-propio { fill: none; object-fit: contain; user-select: none; -webkit-user-drag: none; vertical-align: -.35em; }
+.titulo-ico > .ico-propio { width: 1.7rem; height: 1.7rem; }
+h1.titulo-ico > .ico-propio { width: 2.4rem; height: 2.4rem; }
+.tarjeta-tipo .ico-propio { width: 1.55rem; height: 1.55rem; }
+.det-tipo .ico-propio { width: 1.75rem; height: 1.75rem; }
+.seg .ico-propio { width: 26px; height: 26px; }
+.talon-mini .ico-propio { width: 1.6rem; height: 1.6rem; }
+.talon-titulo .talon-ico.ico-propio { width: 2.1rem; height: 2.1rem; }
+.talon-form .check .ico-propio { width: 1.7rem; height: 1.7rem; }
+.f-tipo-ico .ico-propio { width: 34px; height: 34px; }
+.tarjeta-pict .ico-propio { width: 36px; height: 36px; }
+.vacio-act .vacio-ico.ico-propio { width: 3rem; height: 3rem; }
+/* Barra de abajo: la pestaña activa a color, las otras en gris */
+.pestanas .ico-propio { width: 28px; height: 28px; margin-top: -2px; transition: filter .15s ease; }
+.pestanas a:not(.activa) .ico-propio { filter: grayscale(1) opacity(.55); }
+[data-tema="oscuro"] .pestanas a:not(.activa) .ico-propio { filter: grayscale(1) brightness(.85) opacity(.5); }
+@media (max-height: 500px) and (orientation: landscape) {
+  .pestanas .ico-propio { width: 22px; height: 22px; margin-top: 0; }
+}
