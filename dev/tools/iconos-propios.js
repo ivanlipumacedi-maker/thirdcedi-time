@@ -126,29 +126,30 @@ svg('padel', [
   L('M20 5.2 C22.5 6.3 22.8 9.2 21 11.2 M28 9.8 C25.5 8.7 25.2 5.8 27 3.8', '#fff', 1.4, { halo: false }),
 ]);
 
-// ---------- Asado (principal): tenedor de asador y cuchillo cruzados, llama de brasa arriba
-function cubierto(tipo, transform) {
-  const mango = [
-    R(-3.2, 8, 6.4, 15, 3.2, K.madera),
-    N(C(0, 12.5, 1, K.maderaClara)), N(C(0, 18.5, 1, K.maderaClara)),
-    R(-3.9, 5.2, 7.8, 3.2, 1.2, K.metalClaro, { sw: 2 }),
-  ];
-  const punta = tipo === 'cuchillo'
-    ? [P('M-2.8 5.2 V-17 Q-2.8 -21.8 1.6 -24.5 Q4.4 -16 4.4 -4 V5.2 Z', K.acero),
-       L('M1.4 2.5 V-4 Q1.4 -13 0.4 -19', '#fff', 1.5, { halo: false })]
-    : [R(-1.4, -7, 2.8, 12.5, 1, K.acero, { sw: 2 }),
-       L('M-5 -21 V-11 Q-5 -6.5 0 -6.5 Q5 -6.5 5 -11 V-21', INK, 5.2),
-       L('M-5 -21 V-11 Q-5 -6.5 0 -6.5 Q5 -6.5 5 -11 V-21', K.acero, 1.9, { halo: false })];
-  return G(transform, [...punta, ...mango]);
-}
-const llama = [
-  P('M24 2.5 C26.4 6.8 31.5 9.4 31.5 15.6 C31.5 19.8 28.2 22.5 24 22.5 C19.8 22.5 16.5 19.8 16.5 15.6 C16.5 12.6 18.1 10.5 19.6 9.4 C19.9 11.4 20.7 12.6 22 13 C21.4 9.3 22.2 5.4 24 2.5 Z', K.brasa),
-  N(P('M24.6 11 C26.2 13.1 28.3 14.6 28.3 17.3 C28.3 19.7 26.4 21 24 21 C21.6 21 19.7 19.7 19.7 17.5 C19.7 16 20.5 15 21.4 14.3 C21.8 15.6 22.5 16.2 23.3 16.4 C23 14.3 23.5 12.4 24.6 11 Z', K.sol)),
+/// ---------- Asado (como img/referencias/asado.png): tenedor de dos dientes y cuchillo de asado cruzados, en silueta, y una
+// llama arriba. Cada pieza se dibuja acostada (mango a un lado, punta al otro) y se gira; el cuchillo va encima del tenedor.
+// tenedor: dientes a la izquierda (x -21), mango redondeado a la derecha
+const TENEDOR = [
+  L('M-22 -3.3 H-12.3 Q-9.2 -3.3 -9.2 0 Q-9.2 3.3 -12.3 3.3 H-22', INK, 2.9),
+  L('M-9.2 0 H8.5', INK, 3.1),
+  P('M8 -2.9 H18.2 A2.9 2.9 0 0 1 18.2 2.9 H8 Z', INK, { sw: 1 }),
+];
+// cuchillo: punta a la derecha (lomo recto, filo que sube a la punta), mango a la izquierda con un pequeño tope
+const CUCHILLO = [
+  P('M-6.4 -3.4 H14 C17.5 -3.4 20.5 -2.8 22.6 -1.6 C18.4 1.9 11.6 3.9 3.2 3.9 H-6.4 Z', INK, { sw: 1 }),
+  P('M-8.6 -3.9 H-6.6 V3.9 H-8.6 Z', INK, { sw: 1 }),
+  P('M-10.6 -2.9 H-18.6 A2.9 2.9 0 0 0 -18.6 2.9 H-10.6 Z', INK, { sw: 1 }),
+  N(C(-14.6, 0, 0.9, '#fff')),
+];
+const LLAMA = [
+  P('M24 2 C26.2 6.2 30.6 8.6 30.6 14 C30.6 17.9 27.6 20.4 24 20.4 C20.4 20.4 17.4 17.9 17.4 14 C17.4 11.4 18.7 9.5 20.1 8.4 C20.3 10.2 21 11.4 22.2 11.8 C21.7 8.4 22.4 4.8 24 2 Z', INK, { sw: 1 }),
+  // la lengua de adentro, calada: así se lee como fuego y no como una gota
+  N(P('M24.5 11.2 C26 13 27.3 14.4 27.3 16.4 C27.3 18.2 25.8 19.2 24 19.2 C22.2 19.2 20.7 18.2 20.7 16.6 C20.7 15.4 21.3 14.6 22 14 C22.3 15 22.8 15.5 23.4 15.6 C23.2 13.9 23.6 12.4 24.5 11.2 Z', '#fff')),
 ];
 svg('asado', [
-  G('translate(24 12.5) scale(1.05) translate(-24 -12.5)', llama),
-  cubierto('tenedor', 'translate(24 31.5) rotate(-45) scale(.82)'),
-  cubierto('cuchillo', 'translate(24 31.5) rotate(45) scale(.82)'),
+  ...LLAMA,
+  G('translate(24 31) rotate(34)', TENEDOR),
+  G('translate(24 31) rotate(-34)', CUCHILLO),
 ]);
 
 // ---------- After office: dos chopps con manija que chocan, con salpicadura (el chopp se reusa en el tercer tiempo)
