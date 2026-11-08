@@ -89,12 +89,12 @@ test('megapíxeles y chip de foto: tope 4096 y lo que da el sensor', () => {
   assert.equal(C.megapixeles('alta', '4:3', { ancho: 4000, alto: 3000 }), 12);
   assert.equal(C.megapixeles('alta', '1:1', { ancho: 4000, alto: 3000 }), 9);
   assert.equal(C.megapixeles('liviana', '4:3'), 1.9);
-  assert.equal(C.chipFoto(C.normalizarFoto(), { ancho: 4000, alto: 3000 }), '4:3 · 12 MP');
+  assert.equal(C.chipFoto(C.normalizarFoto(), { ancho: 4080, alto: 3060 }), '16:9 · 9,4 MP');
 });
-test('normalizarFoto: 4:3 y alta por defecto; lo guardado si es válido', () => {
-  assert.deepEqual(C.normalizarFoto(), { prop: '4:3', res: 'alta' });
+test('normalizarFoto: 16:9 y alta por defecto; lo guardado si es válido', () => {
+  assert.deepEqual(C.normalizarFoto(), { prop: '16:9', res: 'alta' });
   assert.deepEqual(C.normalizarFoto({ prop: '1:1', res: 'media' }), { prop: '1:1', res: 'media' });
-  assert.deepEqual(C.normalizarFoto({ prop: '3:2', res: 'x' }), { prop: '4:3', res: 'alta' });
+  assert.deepEqual(C.normalizarFoto({ prop: '3:2', res: 'x' }), { prop: '16:9', res: 'alta' });
 });
 test('restriccionesFoto: vista previa moderada con takePhoto; la más grande sin takePhoto (iPhone)', () => {
   const a = C.restriccionesFoto({ prop: '4:3' }, { deviceId: { exact: 'b0' } });

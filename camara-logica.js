@@ -133,15 +133,15 @@
     const alto = o && o.prop === '16:9' ? Math.round(ancho * 9 / 16) : Math.round(ancho * 3 / 4);
     return { ...(base || {}), width: { ideal: ancho }, height: { ideal: alto }, aspectRatio: { ideal: ancho / alto }, frameRate: { ideal: 30 } };
   }
-  /** opciones de foto guardadas → válidas (4:3 y alta por defecto, como la cámara del teléfono) */
+  /** opciones de foto guardadas → válidas (16:9 y alta por defecto: es lo que se usa para Instagram y el estado) */
   function normalizarFoto(g) {
     const o = g || {};
     return {
-      prop: PROPORCIONES.some((x) => x.id === o.prop) ? o.prop : '4:3',
+      prop: PROPORCIONES.some((x) => x.id === o.prop) ? o.prop : '16:9',
       res: RES_FOTO.some((x) => x.id === o.res) ? o.res : 'alta',
     };
   }
-  /** el chip de arriba en modo foto: "4:3 · 12 MP" */
+  /** el chip de arriba en modo foto: "16:9 · 9,4 MP" */
   const chipFoto = (o, sensor) => `${o.prop} · ${String(megapixeles(o.res, o.prop, sensor)).replace('.', ',')} MP`;
   /** el tamaño a pedirle a takePhoto: el más grande que da el sensor (después se achica: así sale más nítida) */
   function tamanoTakePhoto(pc) {

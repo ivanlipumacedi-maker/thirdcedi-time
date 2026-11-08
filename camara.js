@@ -191,10 +191,10 @@
     let opc = { res: '1080p', fps: 30, formato: null, audio: true };
     try { opc = { ...opc, ...JSON.parse(localStorage.getItem('camVideo') || '{}') }; } catch {}
     let opcF = C.normalizarFoto();
-    try { opcF = C.normalizarFoto(JSON.parse(localStorage.getItem('camFoto') || '{}')); } catch {}
+    try { opcF = C.normalizarFoto(JSON.parse(localStorage.getItem('camFoto2') || '{}')); } catch {}
     let brillo = 0; // compensación de exposición elegida (vuelve a 0 al abrir la cámara)
     try { if (localStorage.getItem('camGrilla') === '1') { $('.grilla').hidden = false; q('grilla').setAttribute('aria-pressed', 'true'); } } catch {}
-    const guardarOpc = () => { try { localStorage.setItem('camVideo', JSON.stringify(opc)); localStorage.setItem('camFoto', JSON.stringify(opcF)); } catch {} };
+    const guardarOpc = () => { try { localStorage.setItem('camVideo', JSON.stringify(opc)); localStorage.setItem('camFoto2', JSON.stringify(opcF)); } catch {} };
     const esSoportado = (m) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m);
 
     const soltar = () => { turno++; stream?.getTracks().forEach((t) => t.stop()); stream = null; track = null; video.srcObject = null; };
