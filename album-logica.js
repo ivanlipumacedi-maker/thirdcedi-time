@@ -74,10 +74,12 @@
 
   // El álbum trae como mucho las LIMITE_FOTOS más recientes de una actividad (limit de la consulta).
   const LIMITE_FOTOS = 1000;
-  /** la línea de estado del álbum: cuántas fotos, qué falta subir y el espacio */
-  function textoEstado({ n, pend, est, espacio: e, truncado }) {
+  /** la línea de estado del álbum: cuántas fotos (y videos, si hay), qué falta subir y el espacio. n es el total, videos cuántos son video */
+  function textoEstado({ n, videos = 0, pend, est, espacio: e, truncado }) {
     if (e.estado === 'lleno' || est === 'lleno') return `Se llenó el espacio de la app (${e.pct} %). Borren fotos que no quieran para seguir subiendo.` + (pend ? ` Hay ${pend} esperando.` : '');
-    let t = n === 1 ? '1 foto' : n + ' fotos';
+    const nf = n - videos;
+    const tv = videos === 1 ? '1 video' : videos + ' videos';
+    let t = !videos ? (nf === 1 ? '1 foto' : nf + ' fotos') : !nf ? tv : (nf === 1 ? '1 foto' : nf + ' fotos') + ' y ' + tv;
     if (truncado) t += ` · se ven las ${LIMITE_FOTOS} más recientes`;
     if (pend) t += est === 'sin-senal' ? ` · ${pend} esperando señal` : ` · subiendo ${pend}`;
     if (e.estado === 'aviso') t += ' · queda poco espacio en la app';

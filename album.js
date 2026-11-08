@@ -108,7 +108,7 @@
     function pintarEstado() {
       const e = A.espacio(uso, A.LIMITE_BYTES), pend = q.pendientes(act), est = q.estado();
       elEstado.className = 'album-estado ' + e.estado;
-      const t = A.textoEstado({ n: fotos.length, pend, est, espacio: e, truncado });
+      const t = A.textoEstado({ n: fotos.length, videos: fotos.filter(A.esVideo).length, pend, est, espacio: e, truncado });
       // el lector de pantalla lo anuncia solo si cambió (no en cada repintado)
       if (elEstadoTxt.textContent !== t) elEstadoTxt.textContent = t;
       elBarra.hidden = e.estado === 'ok';

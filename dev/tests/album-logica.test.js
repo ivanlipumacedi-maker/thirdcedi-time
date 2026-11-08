@@ -120,6 +120,12 @@ test('textoEstado: cantidad, pendientes, poco espacio y lleno (como antes)', () 
   assert.match(A.textoEstado({ n: 3, pend: 1, est: 'lleno', espacio: { estado: 'ok', pct: 99 } }), /^Se llenó el espacio de la app \(99 %\).*Hay 1 esperando\.$/);
 });
 
+test('textoEstado: con videos dice cuántas fotos y cuántos videos', () => {
+  const ok = { estado: 'ok', pct: 10 };
+  assert.equal(A.textoEstado({ n: 4, videos: 1, pend: 0, est: 'listo', espacio: ok }), '3 fotos y 1 video');
+  assert.equal(A.textoEstado({ n: 3, videos: 2, pend: 1, est: 'subiendo', espacio: ok }), '1 foto y 2 videos · subiendo 1');
+  assert.equal(A.textoEstado({ n: 2, videos: 2, pend: 0, est: 'listo', espacio: ok }), '2 videos');
+});
 test('textoEstado: si la lista llegó al tope (LIMITE_FOTOS) lo dice', () => {
   assert.equal(A.LIMITE_FOTOS, 1000);
   assert.equal(A.textoEstado({ n: 1000, pend: 0, est: 'listo', espacio: { estado: 'ok', pct: 1 }, truncado: true }), '1000 fotos · se ven las 1000 más recientes');
