@@ -77,3 +77,53 @@ test('extensión y mime base', () => {
   assert.equal(C.extension('video/webm;codecs=vp9'), 'webm');
   assert.equal(C.mimeBase('video/webm;codecs=vp9,opus'), 'video/webm');
 });
+
+// ---------- Fotos y lentes ----------
+test('recorte: centrado, la proporción va sobre el lado largo (horizontal y vertical)', () => {
+  assert.deepEqual(C.recorte(4000, 3000, '4:3'), { x: 0, y: 0, ancho: 4000, alto: 3000 });
+  assert.deepEqual(C.recorte(4000, 3000, '1:1'), { x: 500, y: 0, ancho: 3000, alto: 3000 });
+  assert.deepEqual(C.recorte(4000, 3000, '16:9'), { x: 0, y: 375, ancho: 4000, alto: 2250 });
+  assert.deepEqual(C.recorte(3000, 4000, '16:9'), { x: 375, y: 0, ancho: 2250, alto: 4000 });
+});
+test('megapíxeles y chip de foto: tope 4096 y lo que da el sensor', () => {
+  assert.equal(C.megapixeles('alta', '4:3', { ancho: 4000, alto: 3000 }), 12);
+  assert.equal(C.megapixeles('alta', '1:1', { ancho: 4000, alto: 3000 }), 9);
+  assert.equal(C.megapixeles('liviana', '4:3'), 1.9);
+  assert.equal(C.chipFoto(C.normalizarFoto(), { ancho: 4000, alto: 3000 }), '4:3 · 12 MP');
+});
+test('normalizarFoto: 4:3 y alta por defecto; lo guardado si es válido', () => {
+  assert.deepEqual(C.normalizarFoto(), { prop: '4:3', res: 'alta' });
+  assert.deepEqual(C.normalizarFoto({ prop: '1:1', res: 'media' }), { prop: '1:1', res: 'media' });
+  assert.deepEqual(C.normalizarFoto({ prop: '3:2', res: 'x' }), { prop: '4:3', res: 'alta' });
+});
+test('restriccionesFoto: vista previa moderada con takePhoto; la más grande sin takePhoto (iPhone)', () => {
+  const a = C.restriccionesFoto({ prop: '4:3' }, { deviceId: { exact: 'b0' } });
+  assert.equal(a.width.ideal, 1920); assert.equal(a.height.ideal, 1440); assert.deepEqual(a.deviceId, { exact: 'b0' });
+  const i = C.restriccionesFoto({ prop: '4:3' }, {}, true);
+  assert.equal(i.width.ideal, 4032); assert.equal(i.height.ideal, 3024);
+  assert.equal(C.restriccionesFoto({ prop: '16:9' }, {}, true).height.ideal, 2160);
+});
+test('tamanoTakePhoto: el máximo del sensor, o nada si no se sabe', () => {
+  assert.deepEqual(C.tamanoTakePhoto({ imageWidth: { max: 4000 }, imageHeight: { max: 3000 } }), { imageWidth: 4000, imageHeight: 3000 });
+  assert.deepEqual(C.tamanoTakePhoto(null), {});
+});
+test('lentes Android (S24): la principal es la de número más bajo aunque Chrome la liste después', () => {
+  const S24 = [
+    { deviceId: 'f1', kind: 'videoinput', label: 'camera 1, facing front' }, { deviceId: 'f3', kind: 'videoinput', label: 'camera 3, facing front' },
+    { deviceId: 'b2', kind: 'videoinput', label: 'camera 2, facing back' }, { deviceId: 'b0', kind: 'videoinput', label: 'camera 0, facing back' },
+  ];
+  assert.deepEqual(C.lentes(S24), { principal: 'b0', gran: 'b2', tele: null, otras: [], frontal: 'f1', sinEtiquetas: false });
+  const tres = [...S24, { deviceId: 'b4', kind: 'videoinput', label: 'camera2 4, facing back' }];
+  const l = C.lentes(tres); assert.equal(l.principal, 'b0'); assert.equal(l.gran, null); assert.deepEqual(l.otras, ['b2', 'b4']);
+});
+test('lentes iPhone: la gran angular común es la principal (no la virtual), ultra = 0,5 y tele; también en español', () => {
+  const en = [{ deviceId: 'f', label: 'Front Camera' }, { deviceId: 't', label: 'Back Triple Camera' }, { deviceId: 'd', label: 'Back Dual Wide Camera' },
+    { deviceId: 'u', label: 'Back Ultra Wide Camera' }, { deviceId: 'w', label: 'Back Camera' }, { deviceId: 'te', label: 'Back Telephoto Camera' }];
+  assert.deepEqual(C.lentes(en), { principal: 'w', gran: 'u', tele: 'te', otras: [], frontal: 'f', sinEtiquetas: false });
+  const es = [{ deviceId: 'f', label: 'Cámara frontal' }, { deviceId: 'u', label: 'Cámara ultra gran angular trasera' }, { deviceId: 'w', label: 'Cámara trasera' }];
+  assert.deepEqual(C.lentes(es), { principal: 'w', gran: 'u', tele: null, otras: [], frontal: 'f', sinEtiquetas: false });
+});
+test('lentes sin etiquetas (antes del permiso) o en una computadora', () => {
+  assert.equal(C.lentes([{ deviceId: 'x', label: '' }]).sinEtiquetas, true);
+  assert.equal(C.lentes([{ deviceId: 'w', label: 'HD Webcam' }]).principal, null);
+});
