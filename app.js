@@ -54,36 +54,25 @@
     if (location.hash === destino) mostrar(); else location.hash = destino;
   }
 
-  // Íconos propios multicolor (img/iconos-propios, generados con dev/tools/iconos-propios.js): tipos de actividad, tercer
-  // tiempo, secciones del detalle, juegos y barra de abajo. Nombre en la app -> archivo.
+  // Íconos propios (dibujo propio, un color; generados con dev/tools/iconos-propios.js en el sprite de index.html, ids p-*):
+  // tipos de actividad, tercer tiempo, secciones del detalle, juegos y barra de abajo. Nombre en la app -> símbolo.
   const PROPIOS = {
     futbol: 'futbol', padel: 'padel', trekking: 'trekking', asado: 'asado', after: 'after', otra: 'otra',
     tercer: 'tercer-tiempo', chat: 'chat', cuentas: 'cuentas', album: 'album', trivia: 'trivia', impostor: 'impostor',
     actividades: 'nav-actividades', juegos: 'nav-juegos', perfil: 'nav-perfil',
   };
-  const rutaPropio = (nombre) => 'img/iconos-propios/' + PROPIOS[nombre] + '.svg';
 
-  // Ícono de la app. Los propios van como <img> (no toman currentColor); el resto sale del sprite de index.html (Phosphor fill,
-  // ver dev/tools/iconos-sprite.js) y toma el color del texto. Sin etiqueta es decorativo (alt vacío / aria-hidden);
-  // con etiqueta lo anuncia el lector (alt / role="img").
+  // Ícono de la app, del sprite de index.html: los propios (#p-*) y el resto de Phosphor fill (#i-*, ver dev/tools/iconos-sprite.js).
+  // Toman el color del texto. Sin etiqueta es decorativo (aria-hidden); con etiqueta lo anuncia el lector (role="img").
   const SVG = 'http://www.w3.org/2000/svg';
   function icono(nombre, etiqueta, clase) {
-    if (PROPIOS[nombre]) {
-      const im = document.createElement('img');
-      im.className = 'ico ico-propio' + (clase ? ' ' + clase : '');
-      im.src = rutaPropio(nombre);
-      im.alt = etiqueta || '';
-      im.draggable = false;
-      im.decoding = 'async';
-      if (!etiqueta) im.setAttribute('aria-hidden', 'true');
-      return im;
-    }
+    const propio = PROPIOS[nombre];
     const s = document.createElementNS(SVG, 'svg');
-    s.setAttribute('class', 'ico' + (clase ? ' ' + clase : ''));
+    s.setAttribute('class', 'ico' + (propio ? ' ico-propio' : '') + (clase ? ' ' + clase : ''));
     s.setAttribute('focusable', 'false');
     if (etiqueta) { s.setAttribute('role', 'img'); s.setAttribute('aria-label', etiqueta); } else s.setAttribute('aria-hidden', 'true');
     const u = document.createElementNS(SVG, 'use');
-    u.setAttribute('href', '#i-' + nombre);
+    u.setAttribute('href', propio ? '#p-' + propio : '#i-' + nombre);
     s.appendChild(u);
     return s;
   }

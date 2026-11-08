@@ -1,11 +1,11 @@
-// Generador de los íconos propios de ThirdCEDI Time (estilo "figurita": relleno plano, trazo de tinta y borde blanco troquelado).
-// Escribe los SVG en img/iconos-propios/ (ver el README de esa carpeta). La app los usa con <img> desde App.icono (app.js).
+// Generador de los íconos propios de ThirdCEDI Time. Los dibujos se describen como piezas con relleno y contorno (el set v1 de
+// "figuritas"), pero la app los usa de un color: cada uno sale como <symbol id="p-<nombre>"> con máscara (ver renderMono) y se
+// escribe en index.html; App.icono los pinta con currentColor, igual que los de Phosphor.
 // Uso: node dev/tools/iconos-propios.js
 // Los ids internos (clipPath) llevan el prefijo tct- para no chocar con nada si algún día se ponen inline.
 const fs = require('fs');
 const path = require('path');
-const OUT = path.join(__dirname, '..', '..', 'img', 'iconos-propios');
-fs.mkdirSync(OUT, { recursive: true });
+const INDEX = path.join(__dirname, '..', '..', 'index.html');
 
 const INK = '#13294B';
 const K = {
@@ -47,13 +47,52 @@ function render(e, pass) {
   return `<${e.t} ${attrs(a)}/>`;
 }
 
+// Versión de un color (la que usa la app): el mismo dibujo, pero en una máscara. Cada pieza va en blanco (se ve, toma currentColor)
+// precedida por un trazo negro más ancho que la separa de lo que tiene abajo; los detalles (agujeros, brillos, líneas finas,
+// rellenos sin trazo) van en negro y quedan calados. Así queda como los íconos de relleno de Phosphor: silueta sólida con cortes.
+// Ajustes por pieza: mono: 'skip' (no va), 'cut' (calada), 'solid' (pieza sólida aunque no tenga trazo); monoSw: ancho del corte.
+const GAP = 2;
+function renderMono(e, prev) {
+  if (e.t === 'g') {
+    let p = null;
+    const inner = e.g.map((c) => { const r = renderMono(c, p); p = c; return r; }).join('');
+    return inner ? `<g ${attrs(e.a)}>${inner}</g>` : '';
+  }
+  if (e.mono === 'skip') return '';
+  const sw = e.sw ?? 2.5;
+  const st = e.st ?? INK;
+  const a = { ...e.a };
+  delete a['stroke-dasharray'];
+  const lineaSola = a.fill === 'none';
+  const halo = e.halo ?? (st === INK);
+  // el color de relleno de una varilla (línea fina encima de una de tinta con el mismo trazo) no va: la varilla queda sólida
+  if (lineaSola && !halo && prev && prev.t === e.t && prev.a && prev.a.d === a.d && e.mono !== 'cut') return '';
+  const corte = e.mono === 'cut' || (e.mono !== 'solid' && (e.ns || (lineaSola && !halo)));
+  if (corte) {
+    if (lineaSola) { a.stroke = '#000'; a['stroke-width'] = e.monoSw ?? sw; if (e.dash) a['stroke-dasharray'] = e.dash; }
+    else { a.fill = '#000'; a.stroke = e.ns ? 'none' : '#000'; if (!e.ns) a['stroke-width'] = e.monoSw ?? sw; }
+    return `<${e.t} ${attrs(a)}/>`;
+  }
+  // pieza sólida: primero el corte que la separa de lo de abajo, después la pieza en blanco
+  const g = { ...a, stroke: '#000', 'stroke-width': sw + GAP * 2 };
+  if (g.fill !== 'none') g.fill = '#000';
+  const w = { ...a, stroke: '#fff', 'stroke-width': e.ns ? 0 : sw };
+  if (w.fill !== 'none') w.fill = '#fff';
+  if (e.ns) w.stroke = 'none';
+  const gap = e.monoSinCorte ? '' : `<${e.t} ${attrs(g)}/>`;
+  return gap + `<${e.t} ${attrs(w)}/>`;
+}
+
+const SIMBOLOS = [];
 function svg(name, els, extraDefs = '') {
-  const halo = els.map((e) => render(e, 'halo')).join('');
-  const main = els.map((e) => render(e, 'main')).join('');
-  const s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" stroke-linejoin="round" stroke-linecap="round">` +
-    (extraDefs ? `<defs>${extraDefs}</defs>` : '') +
-    `<g class="halo">${halo}</g><g class="tinta">${main}</g></svg>\n`;
-  fs.writeFileSync(path.join(OUT, name + '.svg'), s);
+  let p = null;
+  const mono = els.map((e) => { const r = renderMono(e, p); p = e; return r; }).join('');
+  const defs = extraDefs.replace(/id="tct-/g, 'id="tct-m-');
+  const cuerpo = mono.replace(/url\(#tct-/g, 'url(#tct-m-');
+  SIMBOLOS.push(`<symbol id="p-${name}" viewBox="0 0 48 48">` +
+    `<mask id="tct-mk-${name}" maskUnits="userSpaceOnUse" x="-4" y="-4" width="56" height="56" stroke-linejoin="round" stroke-linecap="round">` +
+    (defs ? `<defs>${defs}</defs>` : '') + cuerpo + `</mask>` +
+    `<rect x="-4" y="-4" width="56" height="56" fill="currentColor" mask="url(#tct-mk-${name})"/></symbol>`);
 }
 
 const pts = (arr) => 'M' + arr.map((p) => p.map((n) => +n.toFixed(2)).join(' ')).join(' L') + ' Z';
@@ -134,8 +173,8 @@ svg('after', [
   svg('otra', [
     G('translate(24 24.5) rotate(-12) scale(.92)', [
       P(TICKET, K.sol),
-      { t: 'g', a: { 'clip-path': 'url(#tct-otra-t)' }, g: [N(R(-21, -15, 13, 30, 0, K.rosa))] },
-      P(TICKET, 'none'),
+      { t: 'g', a: { 'clip-path': 'url(#tct-otra-t)' }, g: [N(R(-21, -15, 13, 30, 0, K.rosa))], mono: 'skip' },
+      { ...P(TICKET, 'none'), monoSinCorte: true },
       L('M-8 -11 V11', INK, 1.6, { halo: false, dash: '1.8 2.4' }),
       N(P(star(-12.6, 0.3, 3.7, 1.6, -90), '#fff')),
       L('M-2.5 -2.5 H12 M-2.5 3 H7.5', K.solOsc, 2.4, { halo: false }),
@@ -162,7 +201,7 @@ svg('cuentas', [
   P('M30.5 24 H44 V35 H30.5 A5.5 5.5 0 0 1 30.5 24 Z', K.celeste),
   C(32, 29.5, 2, K.sol, { sw: 1.8 }),
   C(12, 37, 7, K.sol),
-  N(C(12, 37, 4.6, '#FFDA75')),
+  { ...N(C(12, 37, 4.6, '#FFDA75')), mono: 'skip' },
   L('M14 34.6 C13.3 33.6 9.9 33.6 9.9 35.6 C9.9 37.6 14.1 36.6 14.1 38.7 C14.1 40.6 10.6 40.5 9.8 39.6 M12 32.8 V41.2', INK, 1.5, { halo: false }),
 ]);
 
@@ -183,9 +222,9 @@ svg('album', [
 svg('trivia', [
   G('rotate(-7 24 24)', [
     R(8, 4.5, 32, 39, 7, K.lavanda),
-    L('M17.5 17.5 C17.5 11.5 30.5 10.5 30.5 17.5 C30.5 22 24 22.5 24 28', INK, 8.4, { halo: false }),
+    L('M17.5 17.5 C17.5 11.5 30.5 10.5 30.5 17.5 C30.5 22 24 22.5 24 28', INK, 8.4, { halo: false, monoSw: 4.6 }),
     L('M17.5 17.5 C17.5 11.5 30.5 10.5 30.5 17.5 C30.5 22 24 22.5 24 28', K.sol, 4, { halo: false }),
-    C(24, 35, 3.2, K.sol, { sw: 2.2 }),
+    C(24, 35, 3.2, K.sol, { sw: 2.2, mono: 'cut', monoSw: 1 }),
   ]),
 ]);
 
@@ -194,8 +233,8 @@ svg('impostor', [
   L('M11 30 L6.5 44', INK, 5.4),
   L('M11 30 L6.5 44', K.sol, 2, { halo: false }),
   P('M4 21 C4 16 9 14 15 15.5 C19 16.5 21 18 24 18 C27 18 29 16.5 33 15.5 C39 14 44 16 44 21 C44 28 39.5 33 33.5 33 C28.5 33 27 29 24 29 C21 29 19.5 33 14.5 33 C8.5 33 4 28 4 21 Z', K.rosa),
-  P('M9 22.5 C11 19.5 16.5 19.5 19 22.5 C16.5 25.5 11 25.5 9 22.5 Z', INK, { sw: 1.5 }),
-  P('M29 22.5 C31.5 19.5 37 19.5 39 22.5 C37 25.5 31.5 25.5 29 22.5 Z', INK, { sw: 1.5 }),
+  P('M9 22.5 C11 19.5 16.5 19.5 19 22.5 C16.5 25.5 11 25.5 9 22.5 Z', INK, { sw: 1.5, mono: 'cut', monoSw: .5 }),
+  P('M29 22.5 C31.5 19.5 37 19.5 39 22.5 C37 25.5 31.5 25.5 29 22.5 Z', INK, { sw: 1.5, mono: 'cut', monoSw: .5 }),
   L('M8 18.5 C9.5 17 11.5 16.6 13.5 16.9', '#fff', 1.6, { halo: false }),
   P('M38 2.5 L39.4 7.1 L44 8.5 L39.4 9.9 L38 14.5 L36.6 9.9 L32 8.5 L36.6 7.1 Z', K.sol, { sw: 1.8 }),
 ]);
@@ -203,7 +242,7 @@ svg('impostor', [
 // ---------- Barra: actividades (calendario), juegos (dado), perfil
 svg('nav-actividades', [
   R(6, 9, 36, 33, 6, '#fff'),
-  N(P('M12 9 H36 A6 6 0 0 1 42 15 V19 H6 V15 A6 6 0 0 1 12 9 Z', K.celeste)),
+  { ...N(P('M12 9 H36 A6 6 0 0 1 42 15 V19 H6 V15 A6 6 0 0 1 12 9 Z', K.celeste)), mono: 'skip' },
   L('M6 19 H42', INK, 2),
   R(6, 9, 36, 33, 6, 'none'),
   R(13, 5, 4.4, 8, 2.2, K.azul, { sw: 2 }), R(30.6, 5, 4.4, 8, 2.2, K.azul, { sw: 2 }),
@@ -261,23 +300,37 @@ const PIEL = '#F2C29B';
     P('M15.6 22.6 Q20 25 24.4 23.6 L25.4 28 Q20.4 29.6 15 27.6 Z', INK, { sw: 2 }),
     P(TORSO, K.celeste),
     { t: 'g', a: { 'clip-path': 'url(#tct-futbol-t)' }, g: [N(R(18, 9, 2.6, 18, 0, '#fff')), N(R(22.6, 9, 2.6, 18, 0, '#fff'))] },
-    P(TORSO, 'none'),
+    { ...P(TORSO, 'none'), monoSinCorte: true },
     ...miembro('M25 14.5 L30 17.5 L34.5 15.5', PIEL),
     C(25.4, 7.4, 4.5, PIEL),
     P('M20.7 7.2 C20.6 3.9 22.9 2.4 25.3 2.4 C27.8 2.4 30 3.9 30 6.6 Z', '#5A3522', { sw: 2 }),
     C(40.5, 38.6, 4.6, '#fff'),
-    P(pts(poly(40.5, 38.6, 1.9, 5, -90)), INK, { sw: 1 }),
+    P(pts(poly(40.5, 38.6, 1.9, 5, -90)), INK, { sw: 1, mono: 'cut' }),
     L(poly(40.5, 38.6, 1.9, 5, -90).map(([x, y], i) => { const [x2, y2] = poly(40.5, 38.6, 4.6, 5, -90)[i]; return `M${x.toFixed(2)} ${y.toFixed(2)} L${x2.toFixed(2)} ${y2.toFixed(2)}`; }).join(' '), INK, 1.3, { halo: false }),
   ], `<clipPath id="tct-futbol-t"><path d="${TORSO}"/></clipPath>`);
 }
 
 // ---------- Tercer tiempo A (principal): el silbato del final y un chopp
 svg('tercer-tiempo', [
-  chopp('translate(32 42) scale(1.08)'),
-  P('M15.5 27 H30 Q32 27 32 29 V30 Q32 32 30 32 H22.2 A7 7 0 1 1 15.5 27 Z', K.acero),
+  chopp('translate(27 44.5) scale(1.45)'),
+  G('translate(1 15) scale(.78)', [P('M15.5 27 H30 Q32 27 32 29 V30 Q32 32 30 32 H22.2 A7 7 0 1 1 15.5 27 Z', K.acero),
   N(C(15.5, 34, 3.2, K.metalClaro)),
   N(R(25, 28.6, 4.5, 1.6, .8, INK)),
   L('M10.5 31 C11.2 29.6 12.2 28.7 13.5 28.2', '#fff', 1.5, { halo: false }),
-  C(9.6, 29.5, 1.9, K.acero, { sw: 1.8 }),
+  C(9.6, 29.5, 1.9, K.acero, { sw: 1.8 })]),
 ]);
 
+
+// Escribe los símbolos en index.html, entre <!-- propios:inicio --> y <!-- propios:fin -->
+{
+  const html = fs.readFileSync(INDEX, 'utf8');
+  const ini = '<!-- propios:inicio -->', fin = '<!-- propios:fin -->';
+  const NL = '\n';
+  const bloque = ini + NL + '<!-- Íconos propios de un color (dibujo propio). Generado con dev/tools/iconos-propios.js: no editar a mano. -->' + NL +
+    '<svg xmlns="http://www.w3.org/2000/svg" class="sprite" aria-hidden="true" focusable="false" style="position:absolute;width:0;height:0;overflow:hidden">' + NL +
+    SIMBOLOS.join(NL) + NL + '</svg>' + NL + fin;
+  const i = html.indexOf(ini), j = html.indexOf(fin);
+  if (i < 0 || j < 0) throw new Error('faltan las marcas propios:inicio / propios:fin en index.html');
+  fs.writeFileSync(INDEX, html.slice(0, i) + bloque + html.slice(j + fin.length));
+  console.log(SIMBOLOS.length + ' íconos propios escritos en index.html');
+}

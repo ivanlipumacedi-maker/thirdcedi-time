@@ -535,22 +535,20 @@ h1.titulo-ico > .ico { width: 1.9rem; height: 1.9rem; }
 
 /* Íconos propios (img/iconos-propios): figuritas multicolor con borde blanco, van como <img> y no toman currentColor.
    Son un poco más grandes que los de Phosphor porque el borde blanco se come parte del lienzo. */
-.ico-propio { fill: none; object-fit: contain; user-select: none; -webkit-user-drag: none; vertical-align: -.35em; }
-.titulo-ico > .ico-propio { width: 1.7rem; height: 1.7rem; }
-h1.titulo-ico > .ico-propio { width: 2.4rem; height: 2.4rem; }
-.tarjeta-tipo .ico-propio { width: 1.55rem; height: 1.55rem; }
-.det-tipo .ico-propio { width: 1.75rem; height: 1.75rem; }
-.seg .ico-propio { width: 26px; height: 26px; }
-.talon-mini .ico-propio { width: 1.6rem; height: 1.6rem; }
-.talon-titulo .talon-ico.ico-propio { width: 2.1rem; height: 2.1rem; }
-.talon-form .check .ico-propio { width: 1.7rem; height: 1.7rem; }
-.f-tipo-ico .ico-propio { width: 34px; height: 34px; }
-.tarjeta-pict .ico-propio { width: 36px; height: 36px; }
-.vacio-act .vacio-ico.ico-propio { width: 3rem; height: 3rem; }
-/* Barra de abajo: la pestaña activa a color, las otras en gris */
-.pestanas .ico-propio { width: 28px; height: 28px; margin-top: -2px; transition: filter .15s ease; }
-.pestanas a:not(.activa) .ico-propio { filter: grayscale(1) opacity(.55); }
-[data-tema="oscuro"] .pestanas a:not(.activa) .ico-propio { filter: grayscale(1) brightness(.85) opacity(.5); }
+.ico-propio { user-select: none; vertical-align: -.4em; }
+.titulo-ico > .ico-propio { width: 2rem; height: 2rem; }
+h1.titulo-ico > .ico-propio { width: 2.7rem; height: 2.7rem; }
+.tarjeta-tipo .ico-propio { width: 1.9rem; height: 1.9rem; }
+.det-tipo .ico-propio { width: 2.1rem; height: 2.1rem; }
+.seg .ico-propio { width: 28px; height: 28px; }
+.talon-mini .ico-propio { width: 1.9rem; height: 1.9rem; }
+.talon-titulo .talon-ico.ico-propio { width: 2.5rem; height: 2.5rem; }
+.talon-form .check .ico-propio { width: 2rem; height: 2rem; }
+.f-tipo-ico .ico-propio { width: 38px; height: 38px; }
+.tarjeta-pict .ico-propio { width: 44px; height: 44px; }
+.vacio-act .vacio-ico.ico-propio { width: 3.6rem; height: 3.6rem; }
+/* Barra de abajo: toman el color de la pestaña (activa con el acento, las otras apagadas), como el resto de los íconos */
+.pestanas .ico-propio { width: 30px; height: 30px; margin-top: -3px; }
 @media (max-height: 500px) and (orientation: landscape) {
-  .pestanas .ico-propio { width: 22px; height: 22px; margin-top: 0; }
+  .pestanas .ico-propio { width: 24px; height: 24px; margin-top: 0; }
 }
