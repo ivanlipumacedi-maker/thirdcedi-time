@@ -125,12 +125,15 @@
     const w = horizontal ? l : c, h = horizontal ? c : l;
     return { x: Math.round((ancho - w) / 2), y: Math.round((alto - h) / 2), ancho: w, alto: h };
   }
-  /** restricciones de la vista previa para fotos: 16:9 pide un stream 16:9; 4:3 y 1:1 uno 4:3 (el 1:1 se marca encima).
+  /** restricciones de la vista previa para fotos.
+   *  Android (takePhoto): siempre el sensor entero en 4:3 (4080×3060 ideal; el navegador elige el más parecido). En
+   *  Samsung, con 1080p o 1920×1440 la cámara entrega un recorte del centro (la principal se ve como 2× y la gran angular
+   *  como 1×); solo con el tamaño completo del sensor se ve todo lo que entra. La proporción se recorta al sacar.
    *  sinTakePhoto (iPhone/Safari, que no tiene ImageCapture): la foto sale de un cuadro del video, así que se pide el
-   *  stream más grande que dé la cámara (4032×3024 en 4:3, 3840×2160 en 16:9). */
+   *  stream más grande que dé la cámara (4032×3024 en 4:3 y 1:1, 3840×2160 en 16:9). */
   function restriccionesFoto(o, base, sinTakePhoto) {
-    const ancho = sinTakePhoto ? (o && o.prop === '16:9' ? 3840 : 4032) : 1920;
-    const alto = o && o.prop === '16:9' ? Math.round(ancho * 9 / 16) : Math.round(ancho * 3 / 4);
+    const ancho = sinTakePhoto ? (o && o.prop === '16:9' ? 3840 : 4032) : 4080;
+    const alto = sinTakePhoto && o && o.prop === '16:9' ? Math.round(ancho * 9 / 16) : Math.round(ancho * 3 / 4);
     return { ...(base || {}), width: { ideal: ancho }, height: { ideal: alto }, aspectRatio: { ideal: ancho / alto }, frameRate: { ideal: 30 } };
   }
   /** opciones de foto guardadas → válidas (16:9 y alta por defecto: es lo que se usa para Instagram y el estado) */

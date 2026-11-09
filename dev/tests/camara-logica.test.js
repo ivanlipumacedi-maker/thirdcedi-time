@@ -96,9 +96,11 @@ test('normalizarFoto: 16:9 y alta por defecto; lo guardado si es válido', () =>
   assert.deepEqual(C.normalizarFoto({ prop: '1:1', res: 'media' }), { prop: '1:1', res: 'media' });
   assert.deepEqual(C.normalizarFoto({ prop: '3:2', res: 'x' }), { prop: '16:9', res: 'alta' });
 });
-test('restriccionesFoto: vista previa moderada con takePhoto; la más grande sin takePhoto (iPhone)', () => {
+test('restriccionesFoto: con takePhoto el sensor entero en 4:3 (también para 16:9); la más grande sin takePhoto (iPhone)', () => {
   const a = C.restriccionesFoto({ prop: '4:3' }, { deviceId: { exact: 'b0' } });
-  assert.equal(a.width.ideal, 1920); assert.equal(a.height.ideal, 1440); assert.deepEqual(a.deviceId, { exact: 'b0' });
+  assert.equal(a.width.ideal, 4080); assert.equal(a.height.ideal, 3060); assert.deepEqual(a.deviceId, { exact: 'b0' });
+  const a169 = C.restriccionesFoto({ prop: '16:9' }, {});
+  assert.equal(a169.width.ideal, 4080); assert.equal(a169.height.ideal, 3060); // en Samsung, 16:9 o 1080p da un recorte del centro
   const i = C.restriccionesFoto({ prop: '4:3' }, {}, true);
   assert.equal(i.width.ideal, 4032); assert.equal(i.height.ideal, 3024);
   assert.equal(C.restriccionesFoto({ prop: '16:9' }, {}, true).height.ideal, 2160);

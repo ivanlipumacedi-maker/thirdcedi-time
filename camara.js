@@ -1,5 +1,7 @@
 // Cámara a pantalla completa del álbum: FOTO y VIDEO. Abre la lente principal por deviceId; zoom (pellizco y 0,5× / 1× / 2× / 3×), flash y linterna, cambiar de
-// cámara, temporizador, cuadrícula, tocar para enfocar y la última foto en miniatura. En VIDEO: resolución, cuadros por
+// cámara (la frontal con 1 y 0,8 para que entre más gente), temporizador, cuadrícula, tocar para enfocar y la última foto en miniatura.
+// En FOTO la vista previa es el sensor entero (en Samsung, con 1080p la cámara da un recorte del centro) y se agranda
+// hasta que lo que sale en la foto llena la pantalla. En VIDEO: resolución, cuadros por
 // segundo, formato y sonido (solo lo que el teléfono da), pausa si el navegador la tiene y un tope de 60 s y 100 MB. En FOTO: proporción
 // (4:3, 16:9, 1:1) y resolución; brillo en los dos si la cámara lo deja. Android saca con takePhoto; iPhone, del cuadro del video.
 // La lógica (qué ofrecer, bitrate, límites) vive en camara-logica.js. Una sola cámara para toda la app.
@@ -276,20 +278,23 @@
       montarControles();
     }
 
-    // el área de la imagen dentro del video (sin las bandas negras) y, adentro, lo que va a salir en la foto
+    // el área de la imagen en pantalla y, adentro, lo que va a salir en la foto. En fotos la vista previa es el sensor
+    // entero (4:3) y la foto se recorta: la vista se agranda hasta que lo que sale en la foto llena el ancho o el alto de
+    // la pantalla (como la cámara del teléfono en 16:9). ampliar: cuánto se agranda el video (va en su transform).
+    let ampliar = 1;
     function areaFoto() {
-      const r = video.getBoundingClientRect(), vw = video.videoWidth, vh = video.videoHeight;
+      const r = raiz.getBoundingClientRect(), vw = video.videoWidth, vh = video.videoHeight;
       if (!vw || !vh || !r.width) return null;
-      const k = Math.min(r.width / vw, r.height / vh), w = vw * k, hh = vh * k;
-      const img = { x: r.left + (r.width - w) / 2, y: r.top + (r.height - hh) / 2, w, h: hh };
-      if (modo !== 'foto') return { img, foto: img };
-      const rc = C.recorte(vw, vh, opcF.prop);
-      return { img, foto: { x: img.x + rc.x * k, y: img.y + rc.y * k, w: rc.ancho * k, h: rc.alto * k } };
+      const rc = modo === 'foto' ? C.recorte(vw, vh, opcF.prop) : { x: 0, y: 0, ancho: vw, alto: vh };
+      const k0 = Math.min(r.width / vw, r.height / vh), k = Math.min(r.width / rc.ancho, r.height / rc.alto);
+      const img = { x: r.left + (r.width - vw * k) / 2, y: r.top + (r.height - vh * k) / 2, w: vw * k, h: vh * k };
+      return { img, ampliar: k / k0, foto: { x: img.x + rc.x * k, y: img.y + rc.y * k, w: rc.ancho * k, h: rc.alto * k } };
     }
     // la cuadrícula y el marco van sobre lo que sale en la foto, no sobre las bandas negras de los costados
     function ajustarGrilla() {
       const a = areaFoto(), gr = $('.grilla'), mc = $('.marco');
       if (!a) return;
+      if (Math.abs(a.ampliar - ampliar) > 0.001) { ampliar = a.ampliar; aplicarDigital(); }
       const pos = (el, f) => Object.assign(el.style, { inset: 'auto', left: f.x + 'px', top: f.y + 'px', width: f.w + 'px', height: f.h + 'px' });
       pos(gr, a.foto); pos(mc, a.foto);
       mc.hidden = Math.abs(a.foto.w - a.img.w) < 2 && Math.abs(a.foto.h - a.img.h) < 2;
@@ -309,22 +314,32 @@
     // pasos de zoom: 0,5 (gran angular), 1 y 2 (la principal, con el zoom de la cámara o digital al sacar) y 3 (teleobjetivo).
     // Cada lente es una cámara aparte: tocar 0,5 o 3 la cambia.
     const FACTOR = { gran: 0.5, principal: 1, tele: 3, otra: 1 };
-    let zoomObjetivo = null;
+    // frontal con zoom de la cámara: el "1" es zoom 1,25 del sensor entero y "0,8" es el sensor entero (abre la toma
+    // para que entre más gente, como el botón de grupo de la cámara del teléfono). zoom guarda el valor que se ve.
+    const BASE_FRONTAL = 1.25;
+    const escala = () => (frontal && !digital ? BASE_FRONTAL : 1);
+    let zoomObjetivo = null, zoomFrontal = 1;
     const zoomVisible = () => (frontal ? zoom : lente === 'principal' || lente === 'otra' ? zoom : FACTOR[lente]);
     function pasosZoom() {
       const z = caps.zoom, p = [];
       const enPrincipal = frontal || lente === 'principal' || lente === 'otra';
       digital = enPrincipal && !(z && z.max > z.min) && modo === 'foto'; // sin zoom de la cámara: zoom digital (recorta al sacar), solo en fotos
-      if (!frontal && L?.gran) p.push({ v: 0.5, lente: 'gran' });
+      if (frontal) {
+        // sin zoom de la cámara la frontal queda en 1 (no hay cómo abrir más la toma)
+        if (!digital && z && z.min <= 1 && z.max >= BASE_FRONTAL) p.push({ v: 0.8 }, { v: 1 });
+        return p;
+      }
+      if (L?.gran) p.push({ v: 0.5, lente: 'gran' });
       else if (enPrincipal && z && z.min < 0.95) p.push({ v: Math.max(z.min, 0.5) });
-      p.push({ v: 1, lente: frontal ? null : 'principal' });
-      if (!enPrincipal || digital || (z && z.max >= 2)) p.push({ v: 2, lente: frontal ? null : 'principal' });
+      p.push({ v: 1, lente: 'principal' });
+      if (!enPrincipal || digital || (z && z.max >= 2)) p.push({ v: 2, lente: 'principal' });
       if (!frontal && L?.tele) p.push({ v: 3, lente: 'tele' });
       return p;
     }
     function montarControles() {
       const zs = $('.zooms'), pasos = pasosZoom();
-      zoom = digital ? Math.max(1, zoom) : track?.getSettings?.().zoom || 1;
+      zoom = digital ? Math.max(1, zoom) : (track?.getSettings?.().zoom || 1) / escala();
+      if (frontal && !digital && pasos.length > 1 && !zoomObjetivo) zoomObjetivo = zoomFrontal; // vuelve a como estaba
       zs.replaceChildren(...pasos.map((p) => { const bt = h('button', { type: 'button', 'aria-label': 'Zoom ' + coma(p.v) + '×' }); bt.dataset.z = p.v; if (p.lente) bt.dataset.lente = p.lente; return bt; }));
       zs.hidden = pasos.length < 2;
       marcarZoom(); aplicarDigital();
@@ -367,7 +382,7 @@
       }
     }
     function aplicarDigital() {
-      const s = digital ? zoom : 1, espejo = frontal ? ' scaleX(-1)' : '';
+      const s = (digital ? zoom : 1) * ampliar, espejo = frontal ? ' scaleX(-1)' : '';
       video.style.transform = `scale(${s})${espejo}`;
     }
     function cambiarLente(nueva, z) {
@@ -383,12 +398,12 @@
       if (!frontal && lente === 'tele' && v < 2.5 && !caps.zoom) return cambiarLente('principal', 2);
       if (!frontal && lente !== 'principal' && lente !== 'otra') return;
       if (digital) zoom = Math.min(4, Math.max(1, v));
-      else { const z = caps.zoom; if (!z || !track) return; zoom = Math.min(z.max, Math.max(z.min, v)); }
+      else { const z = caps.zoom, e = escala(); if (!z || !track) return; zoom = Math.min(z.max / e, Math.max(z.min / e, v)); if (frontal) zoomFrontal = zoom; }
       marcarZoom();
       if (mostrarTxt) { const t = $('.zoomtxt'); t.textContent = coma(zoom) + '×'; t.classList.add('si'); clearTimeout(zTxt); zTxt = setTimeout(() => t.classList.remove('si'), 600); }
       if (digital) return aplicarDigital();
       if (zPend) return; // un cambio por cuadro
-      zPend = requestAnimationFrame(() => { zPend = null; track?.applyConstraints({ advanced: [{ zoom }] }).catch(() => {}); });
+      zPend = requestAnimationFrame(() => { zPend = null; track?.applyConstraints({ advanced: [{ zoom: zoom * escala() }] }).catch(() => {}); });
     }
 
     // ---------- Panel de opciones (foto o video) ----------
