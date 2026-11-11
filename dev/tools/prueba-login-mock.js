@@ -1,7 +1,7 @@
 // Prueba del acceso con captcha (Cloudflare Turnstile) y de la cuenta dada de baja, con un Supabase falso (no hace
 // falta ninguna contraseña ni mandar mails).
 // Verifica:
-// - sin site key (TURNSTILE_SITE_KEY vacía, como hoy): no se pide nada a challenges.cloudflare.com, no hay widget y
+// - sin site key (TURNSTILE_SITE_KEY vacía; la prueba reescribe app.js con la clave que toque en cada caso): no se pide nada a challenges.cloudflare.com, no hay widget y
 //   signInWithOtp va sin captchaToken (igual que antes);
 // - con la site key de prueba de Cloudflare que siempre pasa (1x00000000000000000000AA, se mete reescribiendo app.js):
 //   se carga el script de Turnstile, el widget se pinta con el tema de la app (y se vuelve a pintar al cambiarlo) y el
@@ -59,7 +59,7 @@ const STUB = `
 })();`;
 
 const navegadores = [];
-// opciones: clave (site key a meter en app.js), bloquearTurnstile (función que dice si se corta el script), sesion, perfil
+// opciones: clave (site key a meter en app.js; sin clave, vacía), bloquearTurnstile (función que dice si se corta el script), sesion, perfil
 async function abrir(op = {}) {
   const browser = await puppeteer.launch({ executablePath: process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
   navegadores.push(browser);
@@ -82,11 +82,12 @@ async function abrir(op = {}) {
     }
     if (u.endsWith('/vendor/supabase.js')) return rq.respond({ status: 200, contentType: 'application/javascript', body: STUB });
     if (/fonts\.(googleapis|gstatic)\.com/.test(u)) return rq.respond({ status: 200, contentType: 'text/css', body: '' });
-    if (op.clave && /\/app\.js(\?|$)/.test(u)) {
+    if (/\/app\.js(\?|$)/.test(u)) {
       const r = await fetch(u);
       const js = await r.text();
-      assert.ok(js.includes("const TURNSTILE_SITE_KEY = '';"), 'app.js no tiene la constante vacía');
-      return rq.respond({ status: 200, contentType: 'application/javascript', body: js.replace("const TURNSTILE_SITE_KEY = '';", "const TURNSTILE_SITE_KEY = '" + op.clave + "';") });
+      const re = /const TURNSTILE_SITE_KEY = '[^']*';/;
+      assert.ok(re.test(js), 'app.js no tiene la constante TURNSTILE_SITE_KEY');
+      return rq.respond({ status: 200, contentType: 'application/javascript', body: js.replace(re, "const TURNSTILE_SITE_KEY = '" + (op.clave || '') + "';") });
     }
     return rq.continue();
   });

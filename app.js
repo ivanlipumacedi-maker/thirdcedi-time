@@ -8,7 +8,7 @@
   const GIPHY_KEY = 'QQUF5JNRUQQCBSdrG2WXHkBGBlZs20dg';
   // Site key de Cloudflare Turnstile (captcha del acceso; es pública por diseño). Vacía = sin captcha: el acceso anda
   // como siempre. Con la clave puesta, además hay que prender el captcha en Supabase (pasos en CLAUDE.md).
-  const TURNSTILE_SITE_KEY = '';
+  const TURNSTILE_SITE_KEY = '0x4AAAAAAF8_D7NJyQ3wpHKR';
 
   const RUTAS = ['actividades', 'juegos', 'perfil'];
   const RUTA_INICIAL = 'actividades';
