@@ -13,7 +13,7 @@
 // Uso: servir la raíz con `npx --yes http-server -p 8080 -c-1` y correr `node dev/tools/prueba-login-mock.js`
 const assert = require('assert/strict');
 const path = require('path');
-const puppeteer = require('puppeteer-core');
+const puppeteer = require('./navegador'); // puppeteer-core, o WebKit con NAVEGADOR=webkit
 const URL_APP = process.env.URL_APP || 'http://127.0.0.1:8080';
 const CLAVE_PRUEBA = '1x00000000000000000000AA';
 const TOKEN_PRUEBA = 'XXXX.DUMMY.TOKEN.XXXX';

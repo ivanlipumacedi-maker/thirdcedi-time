@@ -16,6 +16,7 @@
   "devDependencies": {
     "@phosphor-icons/core": "^2.1.1",
     "@tabler/icons": "^3.50.0",
-    "lucide-static": "^1.70.0"
+    "lucide-static": "^1.70.0",
+    "playwright-core": "^1.65.0"
   }
 }

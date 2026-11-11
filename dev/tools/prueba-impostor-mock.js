@@ -18,7 +18,7 @@
 const assert = require('assert/strict');
 const fs = require('fs');
 const path = require('path');
-const puppeteer = require('puppeteer-core');
+const puppeteer = require('./navegador'); // puppeteer-core, o WebKit con NAVEGADOR=webkit
 const I = require('../../impostor-logica.js');
 const Palabras = require('../../contenido/palabras.js');
 const URL_APP = process.env.URL_APP || 'http://127.0.0.1:8080';

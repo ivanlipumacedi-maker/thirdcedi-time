@@ -69,11 +69,15 @@
   // al entrar (perfil cargado) se crea la cola: lo que quedó pendiente se sube sin tener que abrir el álbum
   g.addEventListener('perfil', (e) => { if (e.detail && g.App && g.App.sb && g.AlbumCola) laCola(); });
   // suma una foto o un video a la cola de un álbum (una actividad o el de todos), esté abierto o no
-  function agregarA(act, p, extra) {
+  let avisoMemoria = false;
+  async function agregarA(act, p, extra) {
     const q = laCola(), autor = g.App.yo() ? g.App.yo().id : null;
-    return p.video
+    const r = await (p.video
       ? q.agregar({ id: extra.id || crypto.randomUUID(), actividad: act, autor, tipo: 'video', video: p.video, mime: p.mime, mini: p.mini, duracion_ms: p.duracion_ms, ancho: p.ancho, alto: p.alto, tomada: extra.tomada })
-      : q.agregar({ id: extra.id || crypto.randomUUID(), actividad: act, autor, foto: p.foto, mini: p.mini, media: p.media, ancho: p.ancho, alto: p.alto, tomada: extra.tomada, editada_de: extra.editada_de || null });
+      : q.agregar({ id: extra.id || crypto.randomUUID(), actividad: act, autor, foto: p.foto, mini: p.mini, media: p.media, ancho: p.ancho, alto: p.alto, tomada: extra.tomada, editada_de: extra.editada_de || null }));
+    // Safari en modo privado no deja guardar las fotos en el teléfono: suben igual, pero solo con la app abierta
+    if (q.enMemoria() && !avisoMemoria) { avisoMemoria = true; g.App.toast('No cierres la app hasta que terminen de subir las fotos.'); }
+    return r;
   }
   // el álbum de todos (22-album-de-todos.sql): lo ven y lo usan todos los miembros activos
   const TODOS = '00000000-0000-4000-8000-000000000000';

@@ -8,7 +8,7 @@
 // resincronización al reconectar y que con la sección cerrada no se lee nada.
 // Uso: servir la raíz con `npx --yes http-server -p 8080 -c-1` y correr `node dev/tools/prueba-cuentas-mock.js`
 const assert = require('assert/strict');
-const puppeteer = require('puppeteer-core');
+const puppeteer = require('./navegador'); // puppeteer-core, o WebKit con NAVEGADOR=webkit
 const URL_APP = process.env.URL_APP || 'http://127.0.0.1:8080';
 
 // ---------- "Servidor" en memoria ----------

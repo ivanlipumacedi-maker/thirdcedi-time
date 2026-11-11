@@ -10,7 +10,8 @@ const assert = require('assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const puppeteer = require('puppeteer-core');
+const SAFARI = /^webkit/.test(process.env.NAVEGADOR || ''); // WebKit no tiene la cámara falsa de Chrome
+const puppeteer = require('./navegador'); // puppeteer-core, o WebKit con NAVEGADOR=webkit
 const URL_APP = process.env.URL_APP || 'http://127.0.0.1:8080';
 const CHROME = process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const shots = path.join(__dirname, '..', 'shots');
@@ -255,7 +256,13 @@ const celdas = (p) => cuantos(p, '#album-act .album-cel');
       assert.equal(db.fotos.length, 2);
     });
 
-    await paso('cámara: abre, saca una foto y sube', async () => {
+    // WebKit no tiene la cámara falsa de Chrome: en Safari la cámara se prueba en el teléfono
+    if (SAFARI) await paso('(WebKit) en lugar de la cámara, otra foto de la galería', async () => {
+      await (await pa.$('#album-act input[type=file]')).uploadFile(fixture);
+      await esperar(pa, () => document.querySelectorAll('#album-act .album-cel').length === 3);
+      await esperar(pb, () => document.querySelectorAll('#album-act .album-cel').length === 3);
+    });
+    else await paso('cámara: abre, saca una foto y sube', async () => {
       await pa.click('#album-camara');
       await pa.waitForSelector('#camara:not([hidden]) video');
       await esperar(pa, () => { const v = document.querySelector('#camara video'); return v.videoWidth > 0; });
@@ -453,7 +460,8 @@ const celdas = (p) => cuantos(p, '#album-act .album-cel');
       assert.equal(await pa.evaluate(() => !!(history.state && history.state.cam)), false, 'quedó la entrada de la cámara');
     });
 
-    await paso('video: graba con la cámara, aparece en la grilla con play y duración, se reproduce, se manda al chat (sube el video) y se borra', async () => {
+    if (SAFARI) console.log('(se saltea el video con la cámara: necesita la cámara falsa de Chrome)');
+    else await paso('video: graba con la cámara, aparece en la grilla con play y duración, se reproduce, se manda al chat (sube el video) y se borra', async () => {
       const antes = db.fotos.length, msjs = db.mensajes.length;
       await pa.click('#album-camara');
       await pa.waitForSelector('#camara:not([hidden]) video');
@@ -548,7 +556,8 @@ const celdas = (p) => cuantos(p, '#album-act .album-cel');
       fallarSubida = null;
     });
 
-    await paso('la cola arranca al entrar: lo pendiente de antes sube sin abrir el álbum', async () => {
+    if (process.env.NAVEGADOR === 'webkit-privado') console.log('(se saltea "la cola arranca al entrar": en privado no se guarda nada en el teléfono)');
+    else await paso('la cola arranca al entrar: lo pendiente de antes sube sin abrir el álbum', async () => {
       const id = 'dddddddd-0000-4000-8000-000000000001';
       const B2 = await abrir(UB, 'light', (page) => page.evaluate((id, act, autor) => new Promise((ok, mal) => {
         const c = document.createElement('canvas'); c.width = 8; c.height = 8;

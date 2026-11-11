@@ -11,7 +11,7 @@
 const assert = require('assert/strict');
 const fs = require('fs');
 const path = require('path');
-const puppeteer = require('puppeteer-core');
+const puppeteer = require('./navegador'); // puppeteer-core, o WebKit con NAVEGADOR=webkit
 const URL_APP = process.env.URL_APP || 'http://127.0.0.1:8080';
 const raiz = path.join(__dirname, '..', '..');
 const shots = path.join(__dirname, '..', 'shots');
@@ -219,11 +219,16 @@ const STUB = `
 })();`;
 
 // Micrófono y grabadora de audio falsos (el de video sigue siendo el real: lo usa la prueba para armar un video de galería)
+// Con NAVEGADOR=webkit (motor de Safari) el micrófono falso se porta como el del iPhone: MediaRecorder solo graba audio/mp4.
+const SAFARI = /^webkit/.test(process.env.NAVEGADOR || '');
+const MIME_AUDIO = SAFARI ? 'audio/mp4' : 'audio/webm';
+const EXT_AUDIO = SAFARI ? 'm4a' : 'webm';
 const MIC_FALSO = `
 (function () {
   const Real = window.MediaRecorder;
   window.__microfono = 0;
-  const md = navigator.mediaDevices || {};
+  if (!navigator.mediaDevices) Object.defineProperty(navigator, 'mediaDevices', { value: {}, configurable: true });
+  const md = navigator.mediaDevices;
   const gum = md.getUserMedia ? md.getUserMedia.bind(md) : null;
   md.getUserMedia = async (c) => {
     if (c && c.audio && !c.video) { window.__microfono++; return { __falso: true, getTracks: () => [{ stop() {} }] }; }
@@ -232,12 +237,12 @@ const MIC_FALSO = `
   };
   function Falso(stream, op) {
     if (!stream || !stream.__falso) return new Real(stream, op);
-    const r = { state: 'inactive', mimeType: 'audio/webm;codecs=opus', ondataavailable: null, onstop: null,
+    const r = { state: 'inactive', mimeType: '${SAFARI ? 'audio/mp4' : 'audio/webm;codecs=opus'}', ondataavailable: null, onstop: null,
       start() { r.state = 'recording'; },
-      stop() { r.state = 'inactive'; setTimeout(() => { if (r.ondataavailable) r.ondataavailable({ data: new Blob(['audio de prueba'], { type: 'audio/webm' }) }); if (r.onstop) r.onstop(); }, 20); } };
+      stop() { r.state = 'inactive'; setTimeout(() => { if (r.ondataavailable) r.ondataavailable({ data: new Blob(['audio de prueba'], { type: '${MIME_AUDIO}' }) }); if (r.onstop) r.onstop(); }, 20); } };
     return r;
   }
-  Falso.isTypeSupported = (t) => /^audio\\/webm/.test(t) || (Real ? Real.isTypeSupported(t) : false);
+  Falso.isTypeSupported = ${SAFARI ? "(t) => t === 'audio/mp4'" : '(t) => /^audio\\/webm/.test(t) || (Real ? Real.isTypeSupported(t) : false)'};
   window.MediaRecorder = Falso;
 })();`;
 
@@ -648,9 +653,9 @@ const centro = (p, sel) => p.$eval(sel, (e) => { e.scrollIntoView({ block: 'cent
       await esperar(pb, () => !!document.querySelector('#chat-act .chat-msg.otro .chat-audio'));
       const m = ultimo();
       assert.equal(m.tipo, 'audio');
-      assert.match(m.archivo, new RegExp(`^${SALA}/audios/[0-9a-f-]{36}\\.webm$`));
+      assert.match(m.archivo, new RegExp(`^${SALA}/audios/[0-9a-f-]{36}\\.${EXT_AUDIO}$`));
       assert.ok(m.duracion_ms >= 1000 && m.duracion_ms < 3000, 'duración ' + m.duracion_ms);
-      assert.equal(archivos.get(m.archivo).tipo, 'audio/webm');
+      assert.equal(archivos.get(m.archivo).tipo, MIME_AUDIO);
       assert.match(await pb.$eval(`#chat-act .chat-msg[data-id="${m.id}"] .chat-audio-dur`, (e) => e.textContent), /^0:0[12]$/);
       assert.equal(await pb.$eval(`#chat-act .chat-msg[data-id="${m.id}"] .chat-audio-play`, (e) => e.getAttribute('aria-label')), 'Escuchar el audio');
       assert.equal(await pa.$eval('#chat-act .chat-grabando', (e) => e.hidden), true);
@@ -687,7 +692,9 @@ const centro = (p, sel) => p.$eval(sel, (e) => { e.scrollIntoView({ block: 'cent
     });
 
     // ---------- video ----------
-    await paso('video de la galería: sube el video y su miniatura, B ve la miniatura con play; tocar abre el visor con <video>', async () => {
+    // WebKit no tiene la cámara falsa de Chrome que graba el video de prueba: en Safari el video se prueba en el teléfono
+    if (SAFARI) console.log('(se saltean los 2 pasos de video: necesitan la cámara falsa de Chrome)');
+    if (!SAFARI) await paso('video de la galería: sube el video y su miniatura, B ve la miniatura con play; tocar abre el visor con <video>', async () => {
       await sinToast(pa);
       // un video de verdad (WebM de ~2,5 s de la cámara falsa de Chrome, sin duración en la cabecera, como los que graba
       // un navegador), elegido en el input de la galería
@@ -724,7 +731,7 @@ const centro = (p, sel) => p.$eval(sel, (e) => { e.scrollIntoView({ block: 'cent
       await sinCapas(pa);
     });
 
-    await paso('video: al eliminarlo se borran el video y su miniatura', async () => {
+    if (!SAFARI) await paso('video: al eliminarlo se borran el video y su miniatura', async () => {
       const m = db.mensajes.filter((x) => x.tipo === 'video').pop();
       const archivo = m.archivo;
       await menu(pa, m.id);

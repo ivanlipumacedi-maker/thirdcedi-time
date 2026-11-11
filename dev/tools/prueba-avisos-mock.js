@@ -8,7 +8,7 @@
 // Uso: servir la raíz con `npx --yes http-server -p 8080 -c-1` y correr `node dev/tools/prueba-avisos-mock.js`
 // (URL_APP=http://127.0.0.1:8080 por defecto).
 const assert = require('assert/strict');
-const puppeteer = require('puppeteer-core');
+const puppeteer = require('./navegador'); // puppeteer-core, o WebKit con NAVEGADOR=webkit
 const URL_APP = process.env.URL_APP || 'http://127.0.0.1:8080';
 const VAPID_PUBLICA = 'BPJl0VBLTFJaw7kbYXsCc2SV4Ljx_9SUQnasklcWQCbAgbvChhtUqxMiDxfEJcRCNPLiMtKWUrHP9TBahw61sW8';
 

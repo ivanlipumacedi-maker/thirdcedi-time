@@ -15,13 +15,32 @@
     });
     return bdP;
   }
-  async function op(modo, fn) {
+  async function opBD(modo, fn) {
     const d = await bd();
     return new Promise((res, rej) => {
       const t = d.transaction(ALMACEN, modo), req = fn(t.objectStore(ALMACEN));
       t.oncomplete = () => res(req?.result); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error);
     });
   }
+  // Si el teléfono no deja guardar las fotos (Safari en modo privado no guarda archivos en IndexedDB), la cola pasa a
+  // vivir en memoria: se sube igual mientras la app esté abierta, pero si se cierra antes, lo pendiente se pierde.
+  let memoria = null;
+  const almacenMemoria = () => ({
+    getAll: () => ({ result: [...memoria.values()] }),
+    put: (x) => { memoria.set(x.id, x); return { result: x.id }; },
+    delete: (id) => { memoria.delete(id); return {}; },
+  });
+  async function op(modo, fn) {
+    if (!memoria) {
+      try { return await opBD(modo, fn); } catch (e) {
+        console.warn('álbum: no se puede guardar en el teléfono, la cola queda en memoria', e && e.message);
+        memoria = new Map();
+        try { for (const x of await opBD('readonly', (s) => s.getAll())) memoria.set(x.id, x); } catch { /* sin nada guardado */ }
+      }
+    }
+    return fn(almacenMemoria()).result;
+  }
+  const enMemoria = () => !!memoria;
 
   function crear({ sb, yo }) {
     const A = window.AlbumLogica, BUCKET = 'album';
@@ -122,7 +141,7 @@
     addEventListener('online', () => { intento = 0; procesar(); });
     document.addEventListener('visibilitychange', () => { if (!document.hidden) { intento = 0; procesar(); } });
     leer().then(() => procesar()).catch(console.error);
-    return { agregar, procesar, pendientes, escuchar, estado: () => ultimo };
+    return { agregar, procesar, pendientes, escuchar, estado: () => ultimo, enMemoria };
   }
 
   window.AlbumCola = { crear };

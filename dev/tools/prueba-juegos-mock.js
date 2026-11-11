@@ -17,7 +17,7 @@
 const assert = require('assert/strict');
 const fs = require('fs');
 const path = require('path');
-const puppeteer = require('puppeteer-core');
+const puppeteer = require('./navegador'); // puppeteer-core, o WebKit con NAVEGADOR=webkit
 const T = require('../../trivia-logica.js');
 const Preguntas = require('../../contenido/preguntas.js');
 const URL_APP = process.env.URL_APP || 'http://127.0.0.1:8080';
