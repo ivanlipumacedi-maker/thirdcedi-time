@@ -1,7 +1,6 @@
-// Íconos de la app (instalada) de CEDI CLUB. Parte del logo original de CEDI (dev/tools/iconos-app/base-512.png: rombo a la
-// izquierda, "CEDI" y "TECHCONSULTING" a la derecha), toma el rombo y la palabra "CEDI" tal cual, y arma un ícono apilado y
-// centrado: rombo arriba, "CEDI" y abajo "CLUB" (Montserrat 700, del ancho de "CEDI"), sobre el mismo azul.
-// Va apilado porque Android recorta el ícono (círculo o cuadrado redondeado): el logo horizontal quedaba cortado.
+// Íconos de la app (instalada) de CEDI CLUB: el rombo del logo original de CEDI (dev/tools/iconos-app/base-512.png) arriba y
+// abajo "CEDI" y "CLUB" con la misma letra (Montserrat 700), el mismo tamaño y la misma separación, centradas, sobre el mismo azul.
+// Va apilado porque Android recorta el ícono (círculo o cuadrado redondeado) y lo usa también en la pantalla de arranque.
 // Todo entra en la zona segura (el círculo del 80 % del centro); el maskable va un poco más chico.
 // Uso: NODE_PATH=dev/tools/node_modules node dev/tools/iconos-app.js
 //      (escribe icon-192.png, icon-512.png e icon-maskable-512.png en la raíz). Necesita Chrome e internet (Montserrat).
@@ -49,37 +48,29 @@ async function armar(b64, lado, fraccion) {
   const cx = cv.getContext('2d');
   cx.fillStyle = fondo; cx.fillRect(0, 0, lado, lado);
   cx.imageSmoothingQuality = 'high';
-  // escala: "CEDI" ocupa `fraccion` del lado
-  const anchoCedi = lado * fraccion;
-  const s = anchoCedi / (x1 - x0 + 1);
-  const altoCedi = (cedi[1] - cedi[0] + 1) * s;
-  const altoRombo = altoCedi * 1.55;
+  // "CEDI" y "CLUB" con la misma letra (Montserrat 700), el mismo tamaño y la misma separación, centradas:
+  // la palabra más ancha ocupa `fraccion` del lado
+  const SEP = 0.12; // separación entre letras, en em
+  const ancho = (t, tam) => { cx.font = `700 ${tam}px Montserrat`; let w = 0; for (const l of t) { const m = cx.measureText(l); w += m.actualBoundingBoxLeft + m.actualBoundingBoxRight; } return w + SEP * tam * (t.length - 1); };
+  const tam = (lado * fraccion) / Math.max(ancho('CEDI', 100), ancho('CLUB', 100)) * 100;
+  cx.font = `700 ${tam}px Montserrat`;
+  const alto = cx.measureText('E').actualBoundingBoxAscent;
+  const altoRombo = alto * 1.7;
   const sr = altoRombo / (rombo[1] - rombo[0] + 1);
   const anchoRombo = (r1 - r0 + 1) * sr;
-  // "CLUB": Montserrat 700 con letras separadas, del ancho de "CEDI"
-  cx.fillStyle = '#ffffff';
-  let tam, sep;
-  for (tam = altoCedi * 1.4; tam > 4; tam -= 0.25) {
-    cx.font = `700 ${tam}px Montserrat`;
-    sep = (anchoCedi - cx.measureText('CLUB').width) / 3;
-    if (sep >= tam * 0.3) break;
-  }
-  cx.font = `700 ${tam}px Montserrat`;
-  const altoClub = cx.measureText('C').actualBoundingBoxAscent;
-  const g1 = altoCedi * 0.42, g2 = altoCedi * 0.34;
-  const total = altoRombo + g1 + altoCedi + g2 + altoClub;
+  const g1 = alto * 0.55, g2 = alto * 0.42;
+  const total = altoRombo + g1 + alto + g2 + alto;
   let y = (lado - total) / 2;
   cx.drawImage(src, r0, rombo[0], r1 - r0 + 1, rombo[1] - rombo[0] + 1, (lado - anchoRombo) / 2, y, anchoRombo, altoRombo);
-  y += altoRombo + g1;
-  const xc = (lado - anchoCedi) / 2;
-  cx.drawImage(src, x0, cedi[0], x1 - x0 + 1, cedi[1] - cedi[0] + 1, xc, y, anchoCedi, altoCedi);
-  y += altoCedi + g2 + altoClub;
-  let x = xc;
-  for (const letra of 'CLUB') {
-    const m = cx.measureText(letra);
-    cx.fillText(letra, x - m.actualBoundingBoxLeft, y);
-    x += m.actualBoundingBoxLeft + m.actualBoundingBoxRight + sep;
-  }
+  y += altoRombo + g1 + alto;
+  cx.fillStyle = '#ffffff';
+  const escribir = (t, base) => {
+    let x = (lado - ancho(t, tam)) / 2;
+    cx.font = `700 ${tam}px Montserrat`;
+    for (const l of t) { const m = cx.measureText(l); cx.fillText(l, x + m.actualBoundingBoxLeft, base); x += m.actualBoundingBoxLeft + m.actualBoundingBoxRight + SEP * tam; }
+  };
+  escribir('CEDI', y);
+  escribir('CLUB', y + g2 + alto);
   return cv.toDataURL('image/png').split(',')[1];
 }
 
