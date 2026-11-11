@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ThirdCEDI Time</title>
+<script>
+  // GitHub Pages muestra esta página para cualquier dirección que no existe. Desde la mudanza a
+  // thirdcedi.univylabs.com, los favoritos y la app instalada pueden pedir el camino viejo /thirdcedi-time/...:
+  // se lo saca y se va a lo mismo en la raíz (con la búsqueda y el #/ruta); cualquier otra cosa va al inicio.
+  (function () {
+    var p = location.pathname;
+    var resto = p.indexOf('/thirdcedi-time') === 0 ? p.slice('/thirdcedi-time'.length) : '/';
+    if (resto.charAt(0) !== '/') resto = '/' + resto;
+    location.replace(resto + location.search + location.hash);
+  })();
+</script>
+</head>
+<body style="background:#0b1a2e;color:#e8eef6;font-family:system-ui,sans-serif;padding:2rem">
+  <p>Te llevamos a <a href="/" style="color:#3cc4f0">ThirdCEDI Time</a>…</p>
+</body>
+</html>
