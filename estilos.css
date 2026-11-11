@@ -300,7 +300,13 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
 .btn-compartir { display: inline-flex; align-items: center; gap: .4rem; margin: 0 0 .25rem; }
 .ayuda-link { margin: .1rem 0 0; font-size: .82rem; }
 .talon .btn-maps { margin: -.4rem 0 .9rem; color: var(--talon-texto); background: transparent; border-color: rgba(255, 255, 255, .45); }
-.campo input + input { margin-top: .1rem; }
+/* un campo por lugar: abajo, si hay link de Maps, "Link de Maps cargado" y "Quitar" */
+.link-estado { display: flex; align-items: center; gap: .35rem; margin: .1rem 0 0; font-size: .85rem; font-weight: 600; color: var(--acento-tinta); }
+.link-estado[hidden] { display: none; }
+.link-estado .ico { width: 1rem; height: 1rem; }
+.link-estado .link-quitar { margin-left: auto; padding: .2rem .4rem; font-size: .85rem; color: var(--muted); }
+.talon .link-estado { color: var(--talon-acento); }
+.talon .link-estado .link-quitar { color: var(--talon-suave); }
 .sub { font-family: var(--fuente-titulos); font-size: 1.15rem; letter-spacing: -.01em; margin: 1.5rem 0 .6rem; }
 .sub .cuenta { color: var(--muted); font-weight: 500; }
 .dato { margin: .25rem 0; }

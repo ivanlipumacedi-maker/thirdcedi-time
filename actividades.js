@@ -62,14 +62,18 @@
 
   // ---------- Datos ----------
   async function cargar(mia) {
-    const [a, s, p] = await Promise.all([
+    const [a, s, p, lk] = await Promise.all([
       sb().from('actividades').select('*').order('fecha', { ascending: true }),
       sb().from('asistencias').select('actividad, persona, parte'),
       sb().from('perfiles').select('id, nombre, foto, empresa'),
+      // los links de Maps (la RLS devuelve solo los de mis actividades y donde estoy anotado); sin ellos la app anda igual
+      Promise.resolve(sb().from('actividades_links').select('actividad, lugar_link, destino_link, tercer_link')).catch(() => ({ data: null })),
     ]);
     if (a.error || s.error || p.error) throw (a.error || s.error || p.error);
     if (mia !== sesion) return; // la pantalla se cerró mientras tanto
-    actividades = a.data; asistencias = s.data;
+    const links = new Map(((lk && !lk.error && lk.data) || []).map((x) => [x.actividad, x]));
+    actividades = a.data.map((x) => { const l = links.get(x.id); return l ? { ...x, lugar_link: l.lugar_link, destino_link: l.destino_link, tercer_link: l.tercer_link } : x; });
+    asistencias = s.data;
     perfiles = new Map(p.data.map((x) => [x.id, x]));
     await g.Perfiles.prepararAvatares(p.data, sb()).catch(() => {});
     if (mia !== sesion) return;
@@ -107,7 +111,8 @@
     // topic único por suscripción: channel() reutiliza un canal con el mismo topic mientras el anterior se está yendo
     const c = sb().channel('actividades-vivo-' + crypto.randomUUID())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'actividades' }, programarRefresco)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'asistencias' }, programarRefresco);
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'asistencias' }, programarRefresco)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'actividades_links' }, programarRefresco);
     canal = c;
     // al (re)conectar se pone al día: lo que cambió con el socket caído no llegó en vivo
     c.subscribe((st) => { if (st === 'SUBSCRIBED' && canal === c) refrescar(); });
@@ -417,44 +422,57 @@
     const inTitulo = h('input', { id: 'f-titulo', type: 'text', maxLength: 80, value: v.titulo || '', placeholder: 'Ej.: Pádel del jueves' });
     const inFecha = h('input', { id: 'f-fecha', type: 'datetime-local', value: L.aInputArg(v.fecha) });
     const inLugar = h('input', { id: 'f-lugar', type: 'text', maxLength: 120, value: v.lugar || '' });
-    // el link de Maps de un lugar: se puede pegar el texto entero que copia Maps al compartir (si el nombre está
-    // vacío, se completa con el de Maps) y al salir del campo queda solo el link
-    const inLink = (id, valor, inNombre, etiqueta) => {
-      const el = h('input', { id, type: 'text', inputMode: 'url', autocomplete: 'off', spellcheck: false, maxLength: 2000, value: valor || '',
-        placeholder: 'Pegá el link de Maps (opcional)', 'aria-label': etiqueta });
-      // el mismo lugar de otra actividad que ya tenía link: se completa solo (la cancha de siempre)
-      inNombre.addEventListener('change', () => {
-        if (el.value.trim()) return;
-        const l = L.linkDeLugarConocido(inNombre.value, actividades);
-        if (l) el.value = l;
-      });
+    // Un campo por lugar: se escribe el nombre o se pega lo que copia Maps al compartir. El link queda aparte (abajo:
+    // "Link de Maps cargado" con "Quitar") y en el campo queda el nombre. Un lugar ya usado con link lo trae solo.
+    const campoLugar = (inNombre, link, queLink) => {
+      let enlace = link && L.linkMaps(link) === link ? link : null;
+      const id = inNombre.id;
+      const txt = h('span', { class: 'link-estado-txt' });
+      const quitar = h('button', { type: 'button', class: 'btn-link link-quitar', id: id + '-quitar', 'aria-label': 'Quitar el link de Maps ' + queLink }, 'Quitar');
+      const estado = h('p', { class: 'link-estado', id: id + '-link', 'aria-live': 'polite' }, ico('lugar'), txt, quitar);
+      const mostrar = (deAntes) => { estado.hidden = !enlace; txt.textContent = deAntes ? 'Link de Maps de la última vez' : 'Link de Maps cargado'; };
       // al pegar se lee el portapapeles: un campo de una línea saca los saltos y se perdería qué renglón es el nombre
-      el.addEventListener('paste', (e) => {
+      inNombre.addEventListener('paste', (e) => {
         const crudo = e.clipboardData && e.clipboardData.getData('text');
         const l = crudo && L.linkMaps(crudo);
         if (!l) return;
         e.preventDefault();
-        el.value = l;
+        enlace = l;
         const n = L.nombreCompartido(crudo);
         if (n && !inNombre.value.trim()) inNombre.value = n;
+        mostrar();
       });
-      el.addEventListener('change', () => { const l = L.linkMaps(el.value); if (l) el.value = l; });
-      return el;
+      // si el link entró de otra forma (teclados que no mandan el paste, arrastrar): se saca del texto
+      inNombre.addEventListener('input', () => {
+        const l = L.linkMaps(inNombre.value);
+        if (!l) return;
+        enlace = l;
+        inNombre.value = inNombre.value.replace(/\bhttps?:\/\/\S*/gi, '').replace(/\s+/g, ' ').trim();
+        mostrar();
+      });
+      inNombre.addEventListener('change', () => {
+        if (enlace) return;
+        enlace = L.linkDeLugarConocido(inNombre.value, actividades);
+        mostrar(true);
+      });
+      quitar.addEventListener('click', () => { enlace = null; mostrar(); inNombre.focus(); });
+      mostrar();
+      return { estado, link: () => enlace };
     };
     const lblLugar = h('label', { for: 'f-lugar' });
-    const inLugarLink = inLink('f-lugar-link', v.lugar_link, inLugar, 'Link de Google Maps del lugar');
-    const ayudaLink = h('p', { class: 'ayuda ayuda-link' }, 'En Maps tocá Compartir y Copiar, y pegalo acá: así llegan con un toque.');
+    const clLugar = campoLugar(inLugar, v.lugar_link, 'del lugar');
+    const ayudaLink = h('p', { class: 'ayuda ayuda-link' }, 'Escribí el nombre o pegá lo que copiás en Maps con Compartir. El link lo ven solo los anotados.');
     const inDestino = h('input', { id: 'f-destino', type: 'text', maxLength: 120, value: v.destino || '' });
     const lblDestino = h('label', { for: 'f-destino' });
-    const inDestinoLink = inLink('f-destino-link', v.destino_link, inDestino, 'Link de Google Maps del destino');
-    const bloqueDestino = h('div', { class: 'campo' }, lblDestino, inDestino, inDestinoLink);
+    const clDestino = campoLugar(inDestino, v.destino_link, 'del destino');
+    const bloqueDestino = h('div', { class: 'campo' }, lblDestino, inDestino, clDestino.estado);
     const inCupo = h('input', { id: 'f-cupo', type: 'number', min: '1', step: '1', inputMode: 'numeric', value: v.cupo != null ? String(v.cupo) : '', placeholder: 'Sin límite' });
     const inDesc = h('textarea', { id: 'f-desc', maxLength: 500, rows: 3, value: v.descripcion || '' });
     const chkTer = h('input', { id: 'f-tercer', type: 'checkbox', checked: !!v.tiene_tercer });
     const inTerLugar = h('input', { id: 'f-ter-lugar', type: 'text', maxLength: 120, value: v.tercer_lugar || '', placeholder: 'Ej.: Parrilla de la esquina' });
     const inTerFecha = h('input', { id: 'f-ter-fecha', type: 'datetime-local', value: L.aInputArg(v.tercer_fecha) });
-    const inTerLink = inLink('f-ter-link', v.tercer_link, inTerLugar, 'Link de Google Maps del tercer tiempo');
-    const bloqueTer = h('div', { class: 'bloque-tercer' }, campo('f-ter-lugar', 'Lugar del tercer tiempo', [inTerLugar, inTerLink]), campo('f-ter-fecha', 'Cuándo es el tercer tiempo', inTerFecha));
+    const clTer = campoLugar(inTerLugar, v.tercer_link, 'del tercer tiempo');
+    const bloqueTer = h('div', { class: 'bloque-tercer' }, campo('f-ter-lugar', 'Lugar del tercer tiempo', [inTerLugar, clTer.estado]), campo('f-ter-fecha', 'Cuándo es el tercer tiempo', inTerFecha));
     const bloqueOtro = campo('f-otro', 'Qué actividad es', inOtro);
     const err = h('p', { class: 'error', role: 'alert', hidden: true });
     // Apagar el tercer tiempo quita a sus anotados (lo hace la base): se avisa en la página cuántos antes de guardar.
@@ -483,7 +501,7 @@
       campo('f-tipo', 'Tipo', h('div', { class: 'f-tipo' }, icoTipo, selTipo)), bloqueOtro,
       campo('f-titulo', 'Título', inTitulo),
       campo('f-fecha', 'Día y hora (hora de Argentina)', inFecha),
-      h('div', { class: 'campo' }, lblLugar, inLugar, inLugarLink, ayudaLink),
+      h('div', { class: 'campo' }, lblLugar, inLugar, clLugar.estado, ayudaLink),
       bloqueDestino,
       campo('f-cupo', 'Cupo (opcional)', inCupo),
       campo('f-desc', 'Descripción (opcional)', inDesc),
@@ -498,22 +516,22 @@
       const actual = editando ? actividades.find((x) => x.id === a.id) || a : null;
       if (editando && !L.editable(actual)) { err.textContent = MSG_CANCELADA; err.hidden = false; aviso.hidden = true; return; }
       const tercer = chkTer.checked;
-      const conDestino = !!L.lugares(selTipo.value).destino && !!(inDestino.value.trim() || inDestinoLink.value.trim());
+      const conDestino = !!L.lugares(selTipo.value).destino && !!(inDestino.value.trim() || clDestino.link());
       const datos = {
         tipo: selTipo.value,
         tipo_otro: selTipo.value === 'otra' ? inOtro.value.trim() : null,
         titulo: inTitulo.value.trim(),
         fecha: L.desdeInputArg(inFecha.value),
         lugar: inLugar.value.trim(),
-        lugar_link: L.leerLink(inLugarLink.value),
+        lugar_link: clLugar.link(),
         destino: conDestino ? inDestino.value.trim() || null : null,
-        destino_link: conDestino ? L.leerLink(inDestinoLink.value) : null,
+        destino_link: conDestino ? clDestino.link() : null,
         cupo: inCupo.value.trim() === '' ? null : Number(inCupo.value),
         descripcion: inDesc.value.trim(),
         tiene_tercer: tercer,
         tercer_lugar: tercer ? inTerLugar.value.trim() : null,
         tercer_fecha: tercer ? L.desdeInputArg(inTerFecha.value) : null,
-        tercer_link: tercer ? L.leerLink(inTerLink.value) : null,
+        tercer_link: tercer ? clTer.link() : null,
       };
       const msg = L.validar(datos);
       err.hidden = !msg; err.textContent = msg || '';
@@ -527,7 +545,9 @@
       }
       aviso.hidden = true;
       guardando = true;
-      const q = editando ? sb().from('actividades').update(datos).eq('id', a.id).select().single() : sb().from('actividades').insert(datos).select().single();
+      // los links de Maps van en actividades_links (los ven solo los anotados): se guardan después de la actividad
+      const { lugar_link, destino_link, tercer_link, ...fila } = datos;
+      const q = editando ? sb().from('actividades').update(fila).eq('id', a.id).select().single() : sb().from('actividades').insert(fila).select().single();
       let res;
       try { res = await q; } catch (e) { res = { data: null, error: e }; }
       const { data, error } = res;
@@ -543,7 +563,14 @@
         err.textContent = /cancelada/.test(m) ? MSG_CANCELADA : 'No pudimos guardar la actividad. Revisá los datos y probá de nuevo.';
         err.hidden = false; return;
       }
-      g.App.toast(editando ? 'Cambios guardados' : 'Actividad creada');
+      const tenia = editando && actual && (actual.lugar_link || actual.destino_link || actual.tercer_link);
+      let linkMal = false;
+      if (tenia || lugar_link || destino_link || tercer_link) {
+        let r;
+        try { r = await sb().from('actividades_links').upsert({ actividad: data.id, lugar_link, destino_link, tercer_link }); } catch (e) { r = { error: e }; }
+        linkMal = !!(r && r.error);
+      }
+      g.App.toast(linkMal ? 'La actividad se guardó, pero el link de Maps no. Probá de nuevo desde Editar.' : (editando ? 'Cambios guardados' : 'Actividad creada'));
       await refrescar();
       irA({ tipo: 'detalle', id: data.id });
     }

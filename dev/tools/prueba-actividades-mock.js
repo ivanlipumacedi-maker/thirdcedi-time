@@ -30,6 +30,7 @@ const db = {
   ],
   asistencias: [{ actividad: ACT, persona: UA, parte: 'actividad' }, { actividad: ACT, persona: UB, parte: 'tercer' }],
   mensajes: [],
+  actividades_links: [],
 };
 const paginas = []; // { page, uid, desconectada }
 const cuenta = {}; // lecturas/escrituras por usuario: 'A:actividades:select', etc.
@@ -93,8 +94,19 @@ function consulta(uid, s) {
     fuera.forEach((f) => emitir('asistencias', 'DELETE', f));
     return { data: fuera };
   }
+  if (s.table === 'actividades_links' && s.action === 'upsert') {
+    // RLS de la 25: solo el creador de una actividad no cancelada
+    const a = db.actividades.find((x) => x.id === s.values.actividad);
+    if (!a || a.creador !== uid || a.estado === 'cancelada') return { error: { code: '42501', message: 'new row violates row-level security policy' } };
+    const f = { lugar_link: null, destino_link: null, tercer_link: null, ...s.values };
+    db.actividades_links = db.actividades_links.filter((x) => x.actividad !== f.actividad).concat(f);
+    emitir('actividades_links', 'UPDATE', f);
+    return { data: null };
+  }
   let filas = db[s.table] || [];
   if (s.table === 'mensajes') filas = filas.filter((m) => enSala(uid, m.sala));
+  // RLS de la 25: los links los ven el creador y los anotados
+  if (s.table === 'actividades_links') filas = filas.filter((l) => db.actividades.some((a) => a.id === l.actividad && a.creador === uid) || enSala(uid, 'act:' + l.actividad));
   let r = filas.filter((f) => cumple(f, s.filtros));
   if (s.ordenes.length) r = [...r].sort((a, b) => { for (const o of s.ordenes) { if (a[o.col] !== b[o.col]) return (a[o.col] < b[o.col] ? -1 : 1) * (o.asc ? 1 : -1); } return 0; });
   if (s.limite) r = r.slice(0, s.limite);
@@ -110,6 +122,7 @@ const STUB = `
     const b = {
       select() { return b; },
       insert(v) { s.action = 'insert'; s.values = v; return b; },
+      upsert(v) { s.action = 'upsert'; s.values = v; return b; },
       update(v) { s.action = 'update'; s.values = v; return b; },
       delete() { s.action = 'delete'; return b; },
       eq(c, v) { s.filtros.push(['eq', c, v]); return b; },
@@ -304,33 +317,37 @@ const volver = (p) => p.evaluate(() => document.querySelector('#pantalla-activid
       assert.equal(await pa.$eval('#maps-lugar', (e) => e.textContent), 'Ver en Maps');
       assert.match(await pa.$eval('#maps-lugar', (e) => e.href), /^https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=/);
       await pa.evaluate(() => [...document.querySelectorAll('#pantalla-actividades .btn-sec')].find((b) => b.textContent === 'Editar').click());
-      await pa.waitForSelector('#f-lugar-link');
+      await pa.waitForSelector('#f-lugar');
+      assert.equal(await cuantos(pa, '#f-lugar-link:not([hidden])'), 0, 'sin link no aparece "Link de Maps cargado"');
       assert.equal(await texto(pa, 'label[for="f-lugar"]'), 'Club o cancha');
       assert.equal(await pa.$eval('#f-destino', (e) => e.closest('.campo').hidden), true, 'el pádel no tiene destino');
       await pa.select('#f-tipo', 'trekking');
       assert.equal(await texto(pa, 'label[for="f-lugar"]'), 'Punto de encuentro');
       assert.equal(await pa.$eval('#f-destino', (e) => e.closest('.campo').hidden), false, 'el trekking tiene destino');
       await pa.select('#f-tipo', 'padel');
-      // un link que no es de Maps no se guarda
-      const upd = n('A:actividades:update');
-      await pa.$eval('#f-lugar-link', (e) => { e.value = 'https://evil.com/maps'; });
-      await clic(pa, '#btn-guardar-act');
-      assert.match(await texto(pa, '.form-act .error'), /no es de Google Maps/);
-      assert.equal(n('A:actividades:update'), upd);
-      // con el nombre vacío, pegar lo que copia Maps completa el nombre; al salir queda solo el link
+      // pegar algo que no es de Maps queda como texto (no es un link de Maps)
+      await pa.$eval('#f-lugar', (e) => { e.value = 'https://evil.com/maps'; e.dispatchEvent(new Event('input')); });
+      assert.equal(await cuantos(pa, '#f-lugar-link:not([hidden])'), 0);
+      // con el campo vacío, pegar lo que copia Maps deja el nombre en el campo y el link aparte
       await pa.$eval('#f-lugar', (e) => { e.value = ''; });
-      await pa.$eval('#f-lugar-link', (e) => { e.value = ''; });
-      await pa.$eval('#f-lugar-link', (e) => {
+      await pa.$eval('#f-lugar', (e) => {
         const dt = new DataTransfer(); dt.setData('text/plain', 'Club Norte Pádel\nAv. Libertador 1234\nhttps://maps.app.goo.gl/zzPrueba1');
         e.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
       });
       assert.equal(await pa.$eval('#f-lugar', (e) => e.value), 'Club Norte Pádel');
-      assert.equal(await pa.$eval('#f-lugar-link', (e) => e.value), 'https://maps.app.goo.gl/zzPrueba1');
+      assert.match(await texto(pa, '#f-lugar-link'), /Link de Maps cargado/);
+      // "Quitar" lo saca y un link escrito a mano en el campo se separa del nombre
+      await clic(pa, '#f-lugar-quitar');
+      assert.equal(await cuantos(pa, '#f-lugar-link:not([hidden])'), 0);
+      await pa.$eval('#f-lugar', (e) => { e.value = 'Club Norte Pádel https://maps.app.goo.gl/zzPrueba1'; e.dispatchEvent(new Event('input')); });
+      assert.equal(await pa.$eval('#f-lugar', (e) => e.value), 'Club Norte Pádel');
+      assert.match(await texto(pa, '#f-lugar-link'), /Link de Maps cargado/);
       await clic(pa, '#btn-guardar-act');
       await pa.waitForSelector('#maps-lugar');
       const act = db.actividades.find((x) => x.id === ACT);
       assert.equal(act.lugar, 'Club Norte Pádel');
-      assert.equal(act.lugar_link, 'https://maps.app.goo.gl/zzPrueba1');
+      assert.equal(act.lugar_link, undefined, 'el link no va en actividades');
+      assert.equal(db.actividades_links.find((x) => x.actividad === ACT).lugar_link, 'https://maps.app.goo.gl/zzPrueba1');
       assert.equal(act.destino, null);
       assert.equal(await pa.$eval('#maps-lugar', (e) => e.textContent), 'Cómo llegar');
       assert.equal(await pa.$eval('#maps-lugar', (e) => e.href), 'https://maps.app.goo.gl/zzPrueba1');
@@ -344,10 +361,17 @@ const volver = (p) => p.evaluate(() => document.querySelector('#pantalla-activid
       assert.match(comp, /\nCancha: Club Norte Pádel\nhttps:\/\/maps\.app\.goo\.gl\/zzPrueba1\n/);
       assert.match(comp, /Para anotarte, entrá acá \(así llevamos la cuenta\):\nhttps:\/\/ivanlipumacedi-maker\.github\.io\/thirdcedi-time\/#\/actividad\//);
       assert.doesNotMatch(comp, /null|undefined/);
+      // B no está anotado a la actividad: no ve el link (busca por nombre); al anotarse, aparece "Cómo llegar"
+      await pb.waitForSelector('#maps-lugar');
+      assert.equal(await pb.$eval('#maps-lugar', (e) => e.textContent), 'Ver en Maps');
+      await clic(pb, '#btn-voy');
+      await esperar(pb, () => document.getElementById('maps-lugar') && document.getElementById('maps-lugar').textContent === 'Cómo llegar');
+      await clic(pb, '#btn-voy'); // se baja: deja todo como estaba
+      await esperar(pb, () => document.getElementById('maps-lugar') && document.getElementById('maps-lugar').textContent === 'Ver en Maps');
       await pa.$eval('#maps-lugar', (e) => e.scrollIntoView({ block: 'center' }));
       await pa.screenshot({ path: 'dev/shots/actividades-maps.png' });
       await pa.evaluate(() => [...document.querySelectorAll('#pantalla-actividades .btn-sec')].find((b) => b.textContent === 'Editar').click());
-      await pa.waitForSelector('#f-lugar-link');
+      await pa.waitForSelector('#f-lugar');
       await pa.select('#f-tipo', 'trekking');
       await pa.$eval('#f-lugar', (e) => e.scrollIntoView({ block: 'start' }));
       await pa.screenshot({ path: 'dev/shots/actividades-maps-form.png' });
