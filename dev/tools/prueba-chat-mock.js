@@ -891,6 +891,54 @@ const centro = (p, sel) => p.$eval(sel, (e) => { e.scrollIntoView({ block: 'cent
     await pa.screenshot({ path: path.join(shots, 'chat-menu-oscuro.png') });
     await pa.keyboard.press('Escape');
 
+    await paso('textos largos (2000 caracteres, palabra o link sin espacios, muchos renglones) no se salen del cuadro', async () => {
+      await pa.keyboard.press('Escape').catch(() => {});
+      await sinCapas(pa);
+      await pb.click('.tarjeta-act');
+      await pb.waitForSelector('#chat-act .chat-texto');
+      const LARGO = 'Palabrasinespacios'.repeat(25) + ' https://maps.app.goo.gl/' + 'x'.repeat(150) + '\n' + 'renglón\n'.repeat(20) + 'jaja'.repeat(400);
+      const fuera = (p, quien) => p.evaluate((q) => {
+        const caja = (s) => document.querySelector(s).getBoundingClientRect();
+        const chat = caja('#chat-act'), lista = document.querySelector('#chat-act .chat-lista');
+        const malas = [];
+        const dentro = (r, c, n) => { if (r.left < c.left - 1 || r.right > c.right + 1) malas.push(n + ' ' + Math.round(r.left) + '-' + Math.round(r.right) + ' fuera de ' + Math.round(c.left) + '-' + Math.round(c.right)); };
+        const t = document.querySelector('#chat-act .chat-texto');
+        dentro(t.getBoundingClientRect(), chat, 'campo');
+        if (t.getBoundingClientRect().height > 140) malas.push('el campo creció a ' + t.getBoundingClientRect().height);
+        dentro(caja('#chat-act .chat-enviar'), chat, 'botón enviar');
+        for (const b of document.querySelectorAll('#chat-act .chat-burbuja')) dentro(b.getBoundingClientRect(), lista.getBoundingClientRect(), 'burbuja');
+        for (const s of document.querySelectorAll('#chat-act .chat-txt')) if (s.scrollWidth > s.clientWidth + 1) malas.push('el texto desborda su burbuja');
+        if (lista.scrollWidth > lista.clientWidth + 1) malas.push('la lista tiene scroll horizontal');
+        if (document.documentElement.scrollWidth > innerWidth + 1) malas.push('la página tiene scroll horizontal');
+        return malas.map((m) => q + ': ' + m);
+      }, quien);
+      // escrito (pegado) en el campo, antes de mandar
+      await pa.$eval('#chat-act .chat-texto', (e, v) => { e.focus(); e.value = v.slice(0, e.maxLength); e.dispatchEvent(new Event('input')); }, LARGO);
+      assert.equal(await pa.$eval('#chat-act .chat-texto', (e) => e.value.length), 2000, 'tope de 2000');
+      assert.deepEqual(await fuera(pa, 'A escribiendo'), []);
+      await pa.screenshot({ path: path.join(shots, 'chat-largo-campo.png') });
+      await pa.click('#chat-act .chat-enviar');
+      await esperar(pb, () => [...document.querySelectorAll('#chat-act .chat-txt')].some((e) => e.textContent.startsWith('Palabrasinespacios')));
+      await esperar(pa, () => !document.querySelector('#chat-act .subiendo'));
+      assert.equal(await pa.$eval('#chat-act .chat-texto', (e) => e.getBoundingClientRect().height < 60), true, 'el campo vuelve a su alto');
+      await dormir(300);
+      assert.deepEqual(await fuera(pa, 'A (mío)'), []);
+      assert.deepEqual(await fuera(pb, 'B (de otro)'), []);
+      // citarlo: la cita en el campo y en la burbuja tampoco se sale
+      const id = db.mensajes.find((m) => (m.texto || '').startsWith('Palabrasinespacios')).id;
+      await menu(pb, id);
+      await pb.click('.chat-hoja-menu .chat-i-responder');
+      await sinCapas(pb);
+      const citando = await pb.$eval('#chat-act .chat-citando', (e) => { const r = e.getBoundingClientRect(), c = document.querySelector('#chat-act').getBoundingClientRect(); return r.right <= c.right + 1 && r.height < 90; });
+      assert.equal(citando, true, 'la cita en el campo entra');
+      await escribir(pb, 'Qué largo');
+      await dormir(300);
+      assert.deepEqual(await fuera(pb, 'B con cita'), []);
+      assert.deepEqual(await fuera(pa, 'A con cita'), []);
+      await pb.evaluate(() => { const l = document.querySelector('#chat-act'); l.scrollIntoView({ block: 'start' }); l.querySelector('.chat-lista').scrollTop = 1e6; });
+      await pb.screenshot({ path: path.join(shots, 'chat-largo.png') });
+    });
+
     for (const r of paginas) if (r.page.errores.length) { fallas++; console.log('FALLA errores de página:', r.page.errores); }
   } finally { for (const n of navegadores) await n.close().catch(() => {}); }
   console.log(fallas ? fallas + ' falla(s)' : 'todo ok');
