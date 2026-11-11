@@ -1,29 +1,34 @@
-// Íconos de la app (instalada) de CEDI CLUB: parte de los íconos originales del logo de CEDI (dev/tools/iconos-app/base-*.png),
-// borra el "TECHCONSULTING" de abajo de "CEDI" y escribe "CLUB" en su lugar, del mismo ancho que "CEDI".
-// Uso: node dev/tools/iconos-app.js   (escribe icon-192.png, icon-512.png e icon-maskable-512.png en la raíz)
-// Necesita Chrome y salida a internet (fuente Montserrat de Google Fonts).
+// Íconos de la app (instalada) de CEDI CLUB. Parte del logo original de CEDI (dev/tools/iconos-app/base-512.png: rombo a la
+// izquierda, "CEDI" y "TECHCONSULTING" a la derecha), toma el rombo y la palabra "CEDI" tal cual, y arma un ícono apilado y
+// centrado: rombo arriba, "CEDI" y abajo "CLUB" (Montserrat 700, del ancho de "CEDI"), sobre el mismo azul.
+// Va apilado porque Android recorta el ícono (círculo o cuadrado redondeado): el logo horizontal quedaba cortado.
+// Todo entra en la zona segura (el círculo del 80 % del centro); el maskable va un poco más chico.
+// Uso: NODE_PATH=dev/tools/node_modules node dev/tools/iconos-app.js
+//      (escribe icon-192.png, icon-512.png e icon-maskable-512.png en la raíz). Necesita Chrome e internet (Montserrat).
 const fs = require('fs');
 const path = require('path');
 const puppeteer = require('puppeteer-core');
 
 const RAIZ = path.join(__dirname, '..', '..');
-const BASE = path.join(__dirname, 'iconos-app');
+const BASE = path.join(__dirname, 'iconos-app', 'base-512.png');
 const CHROME = process.env.CHROME || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
-const SALIDAS = [['base-192.png', 'icon-192.png'], ['base-512.png', 'icon-512.png'], ['base-maskable-512.png', 'icon-maskable-512.png']];
+// [archivo, lado, ancho de "CEDI" como fracción del lado]
+const SALIDAS = [['icon-192.png', 192, 0.5], ['icon-512.png', 512, 0.5], ['icon-maskable-512.png', 512, 0.4]];
 
-// Corre en la página: recibe el PNG en base64 y devuelve el PNG nuevo en base64.
-async function rehacer(b64) {
+// Corre en la página: recibe el logo base en base64 y devuelve el ícono nuevo en base64.
+async function armar(b64, lado, fraccion) {
   await document.fonts.load('700 40px Montserrat');
   const img = new Image();
   img.src = 'data:image/png;base64,' + b64;
   await img.decode();
   const W = img.width, H = img.height;
-  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-  const cx = cv.getContext('2d');
-  cx.drawImage(img, 0, 0);
-  const px = cx.getImageData(0, 0, W, H).data;
+  const src = document.createElement('canvas'); src.width = W; src.height = H;
+  const sx = src.getContext('2d');
+  sx.drawImage(img, 0, 0);
+  const px = sx.getImageData(0, 0, W, H).data;
   const claro = (x, y) => { const i = (y * W + x) * 4; return px[i] + px[i + 1] + px[i + 2] > 450; };
-  // columnas con trazo claro; el rombo y el texto están separados por un hueco
+  const fondo = `rgb(${px[0]},${px[1]},${px[2]})`;
+  // tramos de columnas con trazo claro: el rombo (a la izquierda) y el texto, separados por un hueco
   const cols = [];
   for (let x = 0; x < W; x++) { let n = 0; for (let y = 0; y < H; y++) if (claro(x, y)) n++; cols.push(n); }
   const tramos = [];
@@ -32,47 +37,48 @@ async function rehacer(b64) {
     const ult = tramos[tramos.length - 1];
     if (ult && x - ult[1] <= Math.round(W * 0.02)) ult[1] = x; else tramos.push([x, x]);
   }
-  // el texto es el bloque ancho de la derecha (el rombo puede venir en varios tramos)
-  const x0 = tramos.find((t, i) => i > 0 && t[0] - tramos[i - 1][1] > W * 0.03)[0];
-  const x1 = tramos[tramos.length - 1][1];
-  // filas con trazo en la columna del texto: dos bandas, "CEDI" y "TECHCONSULTING"
-  const filas = [];
-  for (let y = 0; y < H; y++) { let s = false; for (let x = x0; x <= x1 && !s; x++) if (claro(x, y)) s = true; filas.push(s); }
-  const bandas = [];
-  for (let y = 0; y < H; y++) {
-    if (!filas[y]) continue;
-    const ult = bandas[bandas.length - 1];
-    if (ult && y - ult[1] <= 1) ult[1] = y; else bandas.push([y, y]);
-  }
-  if (bandas.length < 2) throw new Error('no encontré las dos líneas del logo');
-  const cedi = bandas[0], sub = bandas[bandas.length - 1];
-  // color del fondo, de una esquina
-  const fondo = `rgb(${px[0]},${px[1]},${px[2]})`;
-  cx.fillStyle = fondo;
-  cx.fillRect(x0 - 2, sub[0] - 3, x1 - x0 + 5, sub[1] - sub[0] + 7);
-  // "CLUB" del ancho de "CEDI", con el mismo espacio entre líneas que tenía el original
-  const altoCedi = cedi[1] - cedi[0];
-  const hueco = sub[0] - cedi[1];
-  const ancho = x1 - x0 + 1;
-  let tam = altoCedi * 0.9, sep = 0;
+  const iTexto = tramos.findIndex((t, i) => i > 0 && t[0] - tramos[i - 1][1] > W * 0.03);
+  const r0 = tramos[0][0], r1 = tramos[iTexto - 1][1], x0 = tramos[iTexto][0], x1 = tramos[tramos.length - 1][1];
+  const filasCon = (a, b) => { const f = []; for (let y = 0; y < H; y++) { let s = false; for (let x = a; x <= b && !s; x++) if (claro(x, y)) s = true; f.push(s); } return f; };
+  const bandasDe = (f) => { const out = []; for (let y = 0; y < H; y++) { if (!f[y]) continue; const u = out[out.length - 1]; if (u && y - u[1] <= 1) u[1] = y; else out.push([y, y]); } return out; };
+  const fr = filasCon(r0, r1); const rb = bandasDe(fr);
+  const rombo = [rb[0][0], rb[rb.length - 1][1]];
+  const cedi = bandasDe(filasCon(x0, x1))[0];
+
+  const cv = document.createElement('canvas'); cv.width = lado; cv.height = lado;
+  const cx = cv.getContext('2d');
+  cx.fillStyle = fondo; cx.fillRect(0, 0, lado, lado);
+  cx.imageSmoothingQuality = 'high';
+  // escala: "CEDI" ocupa `fraccion` del lado
+  const anchoCedi = lado * fraccion;
+  const s = anchoCedi / (x1 - x0 + 1);
+  const altoCedi = (cedi[1] - cedi[0] + 1) * s;
+  const altoRombo = altoCedi * 1.55;
+  const sr = altoRombo / (rombo[1] - rombo[0] + 1);
+  const anchoRombo = (r1 - r0 + 1) * sr;
+  // "CLUB": Montserrat 700 con letras separadas, del ancho de "CEDI"
   cx.fillStyle = '#ffffff';
-  cx.textBaseline = 'alphabetic';
-  // se busca el tamaño y la separación entre letras que ocupan el ancho de "CEDI", con letras más chicas que "CEDI"
-  for (tam = altoCedi * 1.4; tam > 4; tam -= 0.5) {
+  let tam, sep;
+  for (tam = altoCedi * 1.4; tam > 4; tam -= 0.25) {
     cx.font = `700 ${tam}px Montserrat`;
-    const m = cx.measureText('CLUB');
-    sep = (ancho - m.width) / 3;
+    sep = (anchoCedi - cx.measureText('CLUB').width) / 3;
     if (sep >= tam * 0.3) break;
   }
   cx.font = `700 ${tam}px Montserrat`;
-  const m = cx.measureText('C');
-  const alto = m.actualBoundingBoxAscent;
-  const base = cedi[1] + Math.max(hueco, Math.round(altoCedi * 0.28)) + alto;
-  let x = x0;
+  const altoClub = cx.measureText('C').actualBoundingBoxAscent;
+  const g1 = altoCedi * 0.42, g2 = altoCedi * 0.34;
+  const total = altoRombo + g1 + altoCedi + g2 + altoClub;
+  let y = (lado - total) / 2;
+  cx.drawImage(src, r0, rombo[0], r1 - r0 + 1, rombo[1] - rombo[0] + 1, (lado - anchoRombo) / 2, y, anchoRombo, altoRombo);
+  y += altoRombo + g1;
+  const xc = (lado - anchoCedi) / 2;
+  cx.drawImage(src, x0, cedi[0], x1 - x0 + 1, cedi[1] - cedi[0] + 1, xc, y, anchoCedi, altoCedi);
+  y += altoCedi + g2 + altoClub;
+  let x = xc;
   for (const letra of 'CLUB') {
-    const mm = cx.measureText(letra);
-    cx.fillText(letra, x - mm.actualBoundingBoxLeft, base);
-    x += mm.actualBoundingBoxLeft + mm.actualBoundingBoxRight + sep;
+    const m = cx.measureText(letra);
+    cx.fillText(letra, x - m.actualBoundingBoxLeft, y);
+    x += m.actualBoundingBoxLeft + m.actualBoundingBoxRight + sep;
   }
   return cv.toDataURL('image/png').split(',')[1];
 }
@@ -81,9 +87,9 @@ async function rehacer(b64) {
   const b = await puppeteer.launch({ executablePath: CHROME, headless: true });
   const p = await b.newPage();
   await p.setContent('<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700&display=block" rel="stylesheet"><p style="font:700 20px Montserrat">CLUB</p>', { waitUntil: 'networkidle0' });
-  for (const [de, a] of SALIDAS) {
-    const b64 = fs.readFileSync(path.join(BASE, de)).toString('base64');
-    const nuevo = await p.evaluate(rehacer, b64);
+  const b64 = fs.readFileSync(BASE).toString('base64');
+  for (const [a, lado, fraccion] of SALIDAS) {
+    const nuevo = await p.evaluate(armar, b64, lado, fraccion);
     fs.writeFileSync(path.join(RAIZ, a), Buffer.from(nuevo, 'base64'));
     console.log('listo', a);
   }
