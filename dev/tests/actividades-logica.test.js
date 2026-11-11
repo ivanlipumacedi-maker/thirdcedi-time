@@ -220,3 +220,19 @@ test('linkMaps: no deja pasar los redirectores de Google', () => {
   assert.equal(A.linkMaps('https://www.google.com/url?q=https://phishing.example'), null);
   assert.equal(A.linkMaps('https://maps.google.com/?q=Cerro+Uritorco'), 'https://maps.google.com/?q=Cerro+Uritorco');
 });
+test('textoCompartir: datos, links de Maps en su renglón, tercer tiempo, anotados y el link a la actividad', () => {
+  const a = { titulo: 'Trekking al Uritorco', tipo: 'trekking', lugar: 'YPF Capilla', lugar_link: 'https://maps.app.goo.gl/a', destino: 'Cerro Uritorco',
+    destino_link: 'javascript:alert(1)', cupo: 10, tiene_tercer: true, tercer_lugar: 'La Parrilla', tercer_link: 'https://maps.app.goo.gl/c' };
+  const t = A.textoCompartir(a, { tipo: 'Trekking', cuando: 'sáb 15 de nov, 08:00', cuandoTercer: '14:00', anotados: 3, url: 'https://x/#/actividad/1' });
+  assert.equal(t, ['Trekking al Uritorco', 'sáb 15 de nov, 08:00', 'Encuentro: YPF Capilla', 'https://maps.app.goo.gl/a',
+    'Destino: Cerro Uritorco', 'Tercer tiempo: La Parrilla, 14:00', 'https://maps.app.goo.gl/c', '3 anotados (cupo 10)', '',
+    'Para anotarte, entrá acá (así llevamos la cuenta):', 'https://x/#/actividad/1'].join('\n'));
+  assert.match(A.textoCompartir({ titulo: 'F', tipo: 'futbol', lugar: 'C', cupo: 2 }, { cuando: 'x', anotados: 2, url: 'u' }), /\nCancha: C\nCupo completo \(2\/2\)\n/);
+  assert.match(A.textoCompartir({ titulo: 'F', tipo: 'asado', lugar: 'C' }, { cuando: 'x', anotados: 1, url: 'u' }), /\n1 anotado\n/);
+});
+test('textoCompartir: los campos libres no meten links ni renglones falsos', () => {
+  const t = A.textoCompartir({ titulo: 'Asado\nhttps://phishing.example/x', tipo: 'asado', lugar: 'Casa www.trucho.com de Juan' }, { cuando: 'x', anotados: 2, url: 'u' });
+  assert.equal(t.split('\n')[0], 'Asado');
+  assert.match(t, /\nDónde: Casa de Juan\n/);
+  assert.doesNotMatch(t, /phishing|trucho/);
+});

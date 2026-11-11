@@ -79,6 +79,35 @@
     return mejor ? mejor.link : null;
   }
 
+  /** Texto para compartir una actividad (WhatsApp, etc.), sin emojis. o: { tipo, cuando, cuandoTercer, anotados, url }.
+   *  Los links de Maps van solos en su renglón para que WhatsApp los muestre como link. */
+  function textoCompartir(a, o) {
+    // los campos libres van en una línea y sin links escritos a mano (solo viajan los links de Maps validados)
+    const limpio = (s) => String(s ?? '').replace(/\b(?:https?:\/\/|www\.)\S*/gi, '').replace(/\s+/g, ' ').trim();
+    a = { ...a, titulo: limpio(a.titulo), lugar: limpio(a.lugar), destino: a.destino == null ? null : limpio(a.destino), tercer_lugar: limpio(a.tercer_lugar) };
+    const lg = lugares(a.tipo), ls = [];
+    const conLink = (l) => (linkMaps(l) === l ? l : null);
+    const k = (s) => String(s || '').toLocaleLowerCase('es').normalize('NFD').replace(/[̀-ͯ]/g, '');
+    ls.push(a.titulo + (o.tipo && !k(a.titulo).includes(k(o.tipo)) ? ' (' + o.tipo + ')' : ''));
+    ls.push(o.cuando);
+    ls.push(lg.corto + ': ' + a.lugar);
+    if (conLink(a.lugar_link)) ls.push(a.lugar_link);
+    if (!vacio(a.destino)) { ls.push((lg.destinoCorto || 'Destino') + ': ' + a.destino); if (conLink(a.destino_link)) ls.push(a.destino_link); }
+    if (a.tiene_tercer && !vacio(a.tercer_lugar)) {
+      ls.push('Tercer tiempo: ' + a.tercer_lugar + (o.cuandoTercer ? ', ' + o.cuandoTercer : ''));
+      if (conLink(a.tercer_link)) ls.push(a.tercer_link);
+    }
+    // prueba social y cupo, solo con datos reales: sin "0 anotados" y "Quedan N lugares" cuando faltan 3 o menos
+    const n = o.anotados || 0, cupo = a.cupo, quedan = cupo != null ? cupo - n : null;
+    const van = n === 1 ? '1 anotado' : n + ' anotados';
+    if (cupo != null && quedan <= 0) ls.push('Cupo completo (' + n + '/' + cupo + ')');
+    else if (cupo != null && quedan <= 3) ls.push((n ? van + '. ' : '') + (quedan === 1 ? 'Queda 1 lugar' : 'Quedan ' + quedan + ' lugares'));
+    else if (cupo != null) ls.push(n ? van + ' (cupo ' + cupo + ')' : 'Cupo: ' + cupo);
+    else if (n) ls.push(van);
+    ls.push('', 'Para anotarte, entrá acá (así llevamos la cuenta):', o.url);
+    return ls.join('\n');
+  }
+
   const ms = (f) => (f instanceof Date ? f.getTime() : Date.parse(f));
   const vacio = (s) => !String(s == null ? '' : s).trim();
 
@@ -178,7 +207,7 @@
     return new Date(t + offsetMs(t, zona)).toISOString().slice(0, 16);
   }
 
-  const ActividadesLogica = { TIPOS, ZONA, lugares, linkMaps, buscarEnMaps, leerLink, nombreCompartido, mapsDe, linkDeLugarConocido, validar, cupoLleno, participantes, esFutura, editable, reactivable, anotadosQueSeQuitan, offsetMs, desdeInputArg, aInputArg };
+  const ActividadesLogica = { TIPOS, ZONA, lugares, linkMaps, buscarEnMaps, leerLink, nombreCompartido, mapsDe, linkDeLugarConocido, textoCompartir, validar, cupoLleno, participantes, esFutura, editable, reactivable, anotadosQueSeQuitan, offsetMs, desdeInputArg, aInputArg };
   if (typeof module !== 'undefined' && module.exports) module.exports = ActividadesLogica;
   else g.ActividadesLogica = ActividadesLogica;
 })(typeof window !== 'undefined' ? window : globalThis);

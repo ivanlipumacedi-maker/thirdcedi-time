@@ -335,6 +335,15 @@ const volver = (p) => p.evaluate(() => document.querySelector('#pantalla-activid
       assert.equal(await pa.$eval('#maps-lugar', (e) => e.textContent), 'Cómo llegar');
       assert.equal(await pa.$eval('#maps-lugar', (e) => e.href), 'https://maps.app.goo.gl/zzPrueba1');
       assert.equal(await pa.$eval('#maps-lugar', (e) => e.target + ' ' + e.rel), '_blank noopener noreferrer');
+      // Compartir: abre el menú del teléfono con el texto y el link directo a la actividad
+      await pa.evaluate(() => { window.__compartido = null; navigator.share = async (d) => { window.__compartido = d; }; });
+      await clic(pa, '#btn-compartir');
+      await esperar(pa, () => !!window.__compartido);
+      const comp = await pa.evaluate(() => window.__compartido.text);
+      assert.match(comp, /^Pádel del jueves \(cambiado\)\n/);
+      assert.match(comp, /\nCancha: Club Norte Pádel\nhttps:\/\/maps\.app\.goo\.gl\/zzPrueba1\n/);
+      assert.match(comp, /Para anotarte, entrá acá \(así llevamos la cuenta\):\nhttps:\/\/ivanlipumacedi-maker\.github\.io\/thirdcedi-time\/#\/actividad\//);
+      assert.doesNotMatch(comp, /null|undefined/);
       await pa.$eval('#maps-lugar', (e) => e.scrollIntoView({ block: 'center' }));
       await pa.screenshot({ path: 'dev/shots/actividades-maps.png' });
       await pa.evaluate(() => [...document.querySelectorAll('#pantalla-actividades .btn-sec')].find((b) => b.textContent === 'Editar').click());

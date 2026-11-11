@@ -299,6 +299,25 @@
     await refrescar();
   }
 
+  // Compartir la actividad (como en RodaApp): el menú del teléfono; sin él, se copia el texto para pegarlo en WhatsApp
+  // el link compartido apunta siempre a la app publicada (aunque se comparta desde una copia de prueba)
+  const URL_APP = 'https://ivanlipumacedi-maker.github.io/thirdcedi-time/';
+  async function compartir(a, anotados) {
+    const t = tipoDe(a.tipo), f = partes(a.fecha);
+    const texto = L.textoCompartir(a, {
+      tipo: a.tipo === 'otra' ? null : t.nombre,
+      cuando: fechaLarga(a.fecha) + ', ' + f.hora,
+      cuandoTercer: a.tiene_tercer && a.tercer_fecha ? partes(a.tercer_fecha).hora : null,
+      anotados,
+      url: URL_APP + '#/actividad/' + a.id,
+    });
+    if (navigator.share) {
+      try { await navigator.share({ text: texto }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+    try { await navigator.clipboard.writeText(texto); g.App.toast('Copiado: pegalo en WhatsApp'); return; } catch (e) { /* sin portapapeles */ }
+    g.open('https://wa.me/?text=' + encodeURIComponent(texto), '_blank', 'noopener');
+  }
+
   function botonMaps(nombre, link, id) {
     const m = L.mapsDe(nombre, link);
     // sin link es una búsqueda por nombre (puede no ser exacta): más discreta que "Cómo llegar"
@@ -339,6 +358,7 @@
         a.destino && dato('lugar', lg.destinoCorto || 'Destino', lugarCon(a.destino, a.destino_link, 'maps-destino', lg.destinoCorto || 'Destino')),
         dato('perfil', 'Organiza', perfilDe(a.creador).nombre)),
       a.descripcion && h('p', { class: 'dato desc' }, a.descripcion),
+      !cancelada && h('button', { type: 'button', id: 'btn-compartir', class: 'btn-sec btn-compartir', on: { click: () => compartir(a, enAct.length) } }, ico('enviar'), 'Compartir'),
       h('section', { class: 'parte-act', 'aria-labelledby': 'h-parte-act' },
         h('h2', { class: 'sub', id: 'h-parte-act' }, 'La actividad ', h('span', { class: 'cuenta' }, '(' + enAct.length + (a.cupo != null ? '/' + a.cupo : '') + ')')),
         cancelada ? h('p', { class: 'ayuda' }, 'Esta actividad fue cancelada.')
