@@ -369,6 +369,9 @@ async function capturas(p, nombre) {
     });
 
     await paso('el creador pasa a la votación; nadie se puede votar a sí mismo', async () => {
+      // A acaba de reconectarse (paso anterior): el botón se vuelve a dibujar cuando le llega el estado; se espera a que
+      // esté y habilitado antes de tocarlo (si no, la prueba fallaba de vez en cuando sin que hubiera un error)
+      await esperar(pa, () => { const b = document.getElementById('btn-imp-avanzar'); return !!b && !b.disabled; });
       await clic(pa, '#btn-imp-avanzar');
       for (const r of TODAS) {
         await esperar(r.page, () => document.querySelectorAll('.voto-imp').length === 2);
