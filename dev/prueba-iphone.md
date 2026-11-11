@@ -6,7 +6,7 @@ Si algo no anda o se ve raro, sacá una captura (botón lateral + subir volumen)
 ## 1. Instalar
 1. Abrí **Safari** (no Chrome) y entrá a https://ivanlipumacedi-maker.github.io/thirdcedi-time/
 2. Tocá el botón Compartir (el cuadrado con la flecha) → **Agregar a inicio** → Agregar.
-3. Cerrá Safari y abrí **ThirdCEDI Time** desde el ícono nuevo de la pantalla de inicio.
+3. Cerrá Safari y abrí **CEDI CLUB** desde el ícono nuevo de la pantalla de inicio.
    - ¿Abre sin la barra de Safari arriba?
 
 ## 2. Entrar

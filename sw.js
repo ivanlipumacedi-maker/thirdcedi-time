@@ -1,5 +1,5 @@
-// Service worker de ThirdCEDI Time: caché del shell (red primero, caché si no hay señal) y notificaciones push.
-const CACHE = 'thirdcedi-shell-v55';
+// Service worker de CEDI CLUB: caché del shell (red primero, caché si no hay señal) y notificaciones push.
+const CACHE = 'thirdcedi-shell-v56';
 const SHELL = ['./', 'index.html', 'estilos.css', 'app.js', 'dominios.js', 'errores.js', 'perfiles.js', 'actividades-logica.js', 'chat-logica.js', 'chat-medios.js', 'chat.js', 'cuentas-logica.js', 'cuentas.js', 'album-logica.js', 'album-cola.js', 'camara-logica.js', 'camara.js', 'editor-logica.js', 'editor.js', 'album.js', 'actividades.js', 'trivia-logica.js', 'trivia.js', 'impostor-logica.js', 'impostor.js', 'juegos.js', 'avisos.js', 'captcha.js', 'login.js', 'vendor/supabase.js', 'manifest.webmanifest', 'icon-192.png', 'badge-96.png', 'img/logo-cedi.png', 'img/logo-cedi-light.png'];
 
 self.addEventListener('install', (e) => {
@@ -22,7 +22,7 @@ self.addEventListener('fetch', (e) => {
     try {
       // 'no-cache': revalida contra el servidor (ETag) en vez de usar la caché HTTP del navegador. GitHub Pages manda
       // max-age=600 y, sin esto, después de publicar el teléfono podía mezclar archivos viejos y nuevos y romperse.
-      // redirect 'manual': si la página redirige (la mudanza de github.io a thirdcedi.univylabs.com), el navegador sigue
+      // redirect 'manual': si la página redirige (la mudanza de github.io a cediclub.univylabs.com), el navegador sigue
       // la redirección; con 'follow' la respuesta redirigida rompía la navegación con una pantalla de error.
       const r = e.request.mode === 'navigate'
         ? await fetch(e.request.url, { cache: 'no-cache', credentials: 'same-origin', redirect: 'manual' })
@@ -40,7 +40,7 @@ self.addEventListener('fetch', (e) => {
 self.addEventListener('push', (e) => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch { d = { body: e.data && e.data.text() }; }
-  e.waitUntil(self.registration.showNotification(d.title || 'ThirdCEDI Time', {
+  e.waitUntil(self.registration.showNotification(d.title || 'CEDI CLUB', {
     body: d.body || '',
     tag: d.tag,
     renotify: !!d.tag,

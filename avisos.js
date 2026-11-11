@@ -119,13 +119,13 @@
           h('li', null, 'Abrí esta página en Safari.'),
           h('li', null, 'Tocá Compartir (el cuadrado con la flecha para arriba).'),
           h('li', null, 'Elegí "Agregar a inicio" y confirmá.'),
-          h('li', null, 'Abrí ThirdCEDI Time desde el ícono nuevo y volvé a Perfil para activar los avisos.')));
+          h('li', null, 'Abrí CEDI CLUB desde el ícono nuevo y volvé a Perfil para activar los avisos.')));
     } else if (e === 'sin-soporte') {
       out.push(h('p', { class: 'ayuda', id: 'avisos-sin-soporte' }, 'Este navegador no permite avisos. Probá con Chrome en Android o con la app instalada en iPhone.'));
     } else if (e === 'bloqueado') {
-      out.push(h('p', { class: 'ayuda estado-avisos', id: 'avisos-bloqueados' }, g.App.icono('campana-off'), 'Los avisos están bloqueados para ThirdCEDI Time. Para habilitarlos:'),
+      out.push(h('p', { class: 'ayuda estado-avisos', id: 'avisos-bloqueados' }, g.App.icono('campana-off'), 'Los avisos están bloqueados para CEDI CLUB. Para habilitarlos:'),
         esIOS()
-          ? h('p', { class: 'ayuda' }, 'Andá a Ajustes ▸ Notificaciones ▸ ThirdCEDI Time y activá "Permitir notificaciones". Después volvé a abrir la app.')
+          ? h('p', { class: 'ayuda' }, 'Andá a Ajustes ▸ Notificaciones ▸ CEDI CLUB y activá "Permitir notificaciones". Después volvé a abrir la app.')
           : h('p', { class: 'ayuda' }, 'Tocá el candado (o los tres puntos ▸ Información del sitio) al lado de la dirección ▸ Permisos ▸ Notificaciones ▸ Permitir. Después recargá la página.'));
     } else if (e === 'activos') {
       out.push(h('p', { class: 'ayuda estado-avisos activos', id: 'avisos-activos' }, g.App.icono('campana'), 'Avisos activados en este teléfono.'),

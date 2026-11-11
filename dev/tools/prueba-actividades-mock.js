@@ -368,7 +368,7 @@ const volver = (p) => p.evaluate(() => document.querySelector('#pantalla-activid
       const comp = await pa.evaluate(() => window.__compartido.text);
       assert.match(comp, /^Pádel del jueves \(cambiado\)\n/);
       assert.match(comp, /\nCancha: Club Norte Pádel\nhttps:\/\/maps\.app\.goo\.gl\/zzPrueba1\n/);
-      assert.match(comp, /Para anotarte, entrá acá \(así llevamos la cuenta\):\nhttps:\/\/thirdcedi\.univylabs\.com\/#\/actividad\//);
+      assert.match(comp, /Para anotarte, entrá acá \(así llevamos la cuenta\):\nhttps:\/\/cediclub.univylabs\.com\/#\/actividad\//);
       assert.doesNotMatch(comp, /null|undefined/);
       // B no está anotado a la actividad: no ve el link (busca por nombre); al anotarse, aparece "Cómo llegar"
       await pb.waitForSelector('#maps-lugar');

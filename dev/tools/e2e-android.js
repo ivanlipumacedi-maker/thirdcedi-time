@@ -20,7 +20,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const puppeteer = require('puppeteer-core');
 
-const URL_APP = process.env.URL_APP || 'https://thirdcedi.univylabs.com/';
+const URL_APP = process.env.URL_APP || 'https://cediclub.univylabs.com/';
 const ADB = path.join(process.env.LOCALAPPDATA || '', 'Android', 'Sdk', 'platform-tools', 'adb.exe');
 const DISP = {
   A: { serial: process.env.SERIAL_A || 'emulator-5554', puerto: 9301 },

@@ -145,7 +145,7 @@ async function avisoMensajes(g: { sala: string; autor: string; ids: number[] }) 
   const vivos = (ms || []).filter((m: { tipo: string }) => m.tipo !== 'eliminado');
   if (!vivos.length) return 0;
   const [clase, id] = g.sala.split(':');
-  let titulo = 'ThirdCEDI Time', personas: string[] = [];
+  let titulo = 'CEDI CLUB', personas: string[] = [];
   if (clase === 'act') {
     const { data: a } = await sb.from('actividades').select('titulo').eq('id', id).maybeSingle();
     if (a) titulo = a.titulo;
@@ -162,7 +162,7 @@ async function avisoMensajes(g: { sala: string; autor: string; ids: number[] }) 
   return enviar(await subsDe(personas), { ...t, tag: 'chat-' + g.sala, url: L.urlSala(g.sala) });
 }
 
-const PRUEBA: Payload = { title: 'ThirdCEDI Time', body: 'Prueba: los avisos andan en este teléfono.', tag: 'prueba', url: '#/perfil' };
+const PRUEBA: Payload = { title: 'CEDI CLUB', body: 'Prueba: los avisos andan en este teléfono.', tag: 'prueba', url: '#/perfil' };
 
 async function cambios() {
   const ahora = Date.now();

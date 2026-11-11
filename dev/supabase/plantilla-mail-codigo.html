@@ -1,8 +1,8 @@
 <!-- Plantilla de mail de Auth (Dashboard → Authentication → Emails), cargada en "Magic link or OTP" y en "Confirm sign up".
-     Asunto: Tu código para ThirdCEDI Time: {{ .Token }}
+     Asunto: Tu código para CEDI CLUB: {{ .Token }}
      Solo el código, SIN {{ .ConfirmationURL }}: el escáner de links de Microsoft 365 abre los links y quema el código. -->
 <div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#001E3D">
-  <h2 style="color:#002F68;margin:0 0 16px">ThirdCEDI Time</h2>
+  <h2 style="color:#002F68;margin:0 0 16px">CEDI CLUB</h2>
   <p>Tu código para entrar es:</p>
   <p style="font-size:32px;font-weight:bold;letter-spacing:8px;color:#002F68;margin:16px 0">{{ .Token }}</p>
   <p>Escribilo en la app. Vence en una hora y sirve una sola vez.</p>

@@ -249,7 +249,7 @@ const cerrar = async () => { while (navegadores.length) await navegadores.pop().
       p = await abrir(UA, { ios: true, instalada: true, permiso: 'denied' });
       await irPerfil(p);
       await p.waitForSelector('#avisos-bloqueados', { timeout: 8000 });
-      assert.match(await avisosTxt(p), /Ajustes ▸ Notificaciones ▸ ThirdCEDI Time/);
+      assert.match(await avisosTxt(p), /Ajustes ▸ Notificaciones ▸ CEDI CLUB/);
       await cerrar();
     });
 
