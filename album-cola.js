@@ -28,7 +28,9 @@
   const almacenMemoria = () => ({
     getAll: () => ({ result: [...memoria.values()] }),
     put: (x) => { memoria.set(x.id, x); return { result: x.id }; },
-    delete: (id) => { memoria.delete(id); return {}; },
+    // lo que había quedado guardado en el teléfono antes de pasar a memoria se borra también de ahí (si no, al abrir
+    // la app de nuevo se volvería a subir)
+    delete: (id) => { memoria.delete(id); opBD('readwrite', (s) => s.delete(id)).catch(() => {}); return {}; },
   });
   async function op(modo, fn) {
     if (!memoria) {

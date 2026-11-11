@@ -4,7 +4,34 @@
 // claro. Sin cámara ni micrófono falsos (eso es de Chrome): las pruebas que los necesitan fallan en WebKit.
 // Con NAVEGADOR=webkit-privado usa una sesión privada: Safari no guarda archivos en IndexedDB y el álbum sube desde memoria.
 // Instalar WebKit una vez: npx playwright-core install webkit
-if (!/^webkit/.test(process.env.NAVEGADOR || '')) { module.exports = require('puppeteer-core'); return; }
+// Con DESBORDE=1 (en cualquier navegador): si algo queda más ancho que la pantalla, la página tira un error que la prueba
+// cuenta como falla ("errores de página"), con el elemento que se sale. Para probar anchos chicos: ANCHO=343.
+const DESBORDE = process.env.DESBORDE === '1' ? `(function () {
+  let avisado = false;
+  setInterval(() => {
+    if (avisado || !document.body) return;
+    const w = document.documentElement.clientWidth;
+    if (document.documentElement.scrollWidth <= w + 1) return;
+    const malo = [...document.body.querySelectorAll('*')].find((e) => { const r = e.getBoundingClientRect(); return r.width && (r.right > w + 1 || r.left < -1) && getComputedStyle(e).position !== 'fixed'; });
+    avisado = true;
+    const d = malo ? malo.tagName.toLowerCase() + (malo.id ? '#' + malo.id : '') + (malo.className && typeof malo.className === 'string' ? '.' + malo.className.trim().split(/\\s+/).join('.') : '') : '?';
+    setTimeout(() => { throw new Error('DESBORDE: la página es más ancha que la pantalla (' + document.documentElement.scrollWidth + ' > ' + w + '): ' + d); });
+  }, 400);
+})();` : null;
+
+if (!/^webkit/.test(process.env.NAVEGADOR || '')) {
+  const puppeteer = require('puppeteer-core');
+  if (!DESBORDE) { module.exports = puppeteer; return; }
+  module.exports = {
+    async launch(o) {
+      const b = await puppeteer.launch(o);
+      const nueva = b.newPage.bind(b);
+      b.newPage = async () => { const p = await nueva(); await p.evaluateOnNewDocument(DESBORDE); return p; };
+      return b;
+    },
+  };
+  return;
+}
 
 const { webkit, devices } = require('playwright-core');
 const IPHONE = devices['iPhone 13'];
@@ -90,7 +117,7 @@ module.exports = {
     if (PRIVADO) { browser = await webkit.launch({ headless: true }); ctx = await browser.newContext(op); }
     else { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'webkit-')); ctx = await webkit.launchPersistentContext(dir, { headless: true, ...op }); }
     return {
-      newPage: async () => envolverPagina(ctx, await ctx.newPage()),
+      newPage: async () => { const pg = await ctx.newPage(); if (DESBORDE) await pg.addInitScript({ content: DESBORDE }); return envolverPagina(ctx, pg); },
       defaultBrowserContext: () => ({ overridePermissions: async () => {} }), // WebKit no tiene cámara falsa
       close: async () => { await (browser || ctx).close(); if (dir) fs.rmSync(dir, { recursive: true, force: true }); },
     };

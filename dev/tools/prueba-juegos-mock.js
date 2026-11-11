@@ -260,7 +260,7 @@ async function abrir(uid, esperarSel) {
     else if (/fonts\.(googleapis|gstatic)\.com/.test(rq.url())) rq.respond({ status: 200, contentType: 'text/css', body: '' });
     else rq.continue();
   });
-  await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await page.setViewport({ width: Number(process.env.ANCHO) || 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }]);
   await page.goto(URL_APP + '/#/juegos', { waitUntil: 'networkidle0' });
   await page.evaluate((p) => { App.modoAcceso(false); App.setPerfil(p); }, db.perfiles.find((p) => p.id === uid));

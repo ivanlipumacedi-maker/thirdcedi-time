@@ -137,7 +137,7 @@ async function abrir(uid, opc = {}, hash = '') {
     else if (/fonts\.(googleapis|gstatic)\.com/.test(rq.url())) rq.respond({ status: 200, contentType: 'text/css', body: '' });
     else rq.continue();
   });
-  await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
+  await page.setViewport({ width: Number(process.env.ANCHO) || 390, height: 844, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
   await page.goto(URL_APP + '/' + hash, { waitUntil: 'networkidle0' });
   // con opc.sesion entra por login.js (pinta el Perfil completo, con "Cerrar sesión"); si no, se fija el perfil a mano
   if (opc.sesion) await page.waitForFunction(() => !!App.yo(), { timeout: 8000 });

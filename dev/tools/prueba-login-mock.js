@@ -90,7 +90,7 @@ async function abrir(op = {}) {
     }
     return rq.continue();
   });
-  await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
+  await page.setViewport({ width: Number(process.env.ANCHO) || 390, height: 844, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
   await page.goto(URL_APP, { waitUntil: 'networkidle2' });
   return page;
 }

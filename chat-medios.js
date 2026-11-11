@@ -4,10 +4,11 @@
   const L = window.ChatLogica;
   const BUCKET = 'chat', VIDA_S = 3600, MARGEN_MS = 5 * 60 * 1000;
 
-  function aBlob(canvas, calidad) {
+  // si el navegador no codifica WebP (Safari), JPEG; o PNG cuando hace falta la transparencia (stickers)
+  function aBlob(canvas, calidad, alternativo = 'image/jpeg') {
     return new Promise((res) => canvas.toBlob((b) => {
       if (b && b.type === 'image/webp') return res(b);
-      canvas.toBlob((j) => res(j), 'image/jpeg', calidad); // si el navegador no codifica WebP
+      canvas.toBlob((j) => res(j), alternativo, calidad);
     }, 'image/webp', calidad));
   }
 
@@ -136,11 +137,14 @@
     const base = lado - lado * 34 / 512, alto = tam * 1.05;
     lineas.forEach((t, i) => { const yy = base - (lineas.length - 1 - i) * alto; c2.strokeText(t, lado / 2, yy); c2.fillText(t, lado / 2, yy); });
   }
-  /** Sticker 512×512 (WebP con transparencia; JPEG si el navegador no codifica WebP). */
+  /** Sticker 512×512 con transparencia: WebP, o PNG si el navegador no codifica WebP (Safari; con JPEG las esquinas
+   *  salían negras). La carpeta de stickers acepta hasta 1 MB: un PNG más pesado se vuelve a hacer más chico. */
   async function hacerSticker(bm, pos, texto, lado = 512) {
     const c = document.createElement('canvas'); c.width = lado; c.height = lado;
     pintarSticker(c.getContext('2d'), bm, pos, texto, lado);
-    return aBlob(c, 0.85);
+    const b = await aBlob(c, 0.85, 'image/png');
+    if (b && b.size > 900 * 1024 && lado > 256) return hacerSticker(bm, pos, texto, Math.round(lado * 0.75));
+    return b;
   }
 
   /** Busca stickers en GIPHY (vacío = tendencias). Solo devuelve URLs de media*.giphy.com.

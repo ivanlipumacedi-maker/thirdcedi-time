@@ -146,6 +146,15 @@ input[type="email"], input[type="text"], select, textarea, input[type="datetime-
   width: 100%; padding: .75rem .85rem; font: inherit; font-size: 1rem;
   background: var(--bg-alt); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-ctrl);
 }
+/* iPhone (Safari): el campo de fecha y hora trae un ancho mínimo propio y se salía de la pantalla, y era más alto que
+   los demás. Solo en iOS (-webkit-touch-callout lo entiende solo Safari de iOS): en Android queda como siempre. */
+@supports (-webkit-touch-callout: none) {
+  input[type="datetime-local"] {
+    -webkit-appearance: none; appearance: none; display: block; min-width: 0; max-width: 100%;
+    line-height: 1.4; height: calc(1.4em + 1.5rem + 2px); text-align: left;
+  }
+  input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; margin: 0; }
+}
 input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
 #in-codigo { font-family: var(--fuente-titulos); font-size: 1.6rem; letter-spacing: .35em; text-align: center; font-variant-numeric: tabular-nums; }
 .error { margin: 0; color: var(--mal); font-size: .9rem; font-weight: 600; }

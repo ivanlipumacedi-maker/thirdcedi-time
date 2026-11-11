@@ -26,8 +26,10 @@
     const hay = new Set(lista.map((m) => m.id));
     return [...new Set(lista.map((m) => m.responde_a).filter((id) => id && !hay.has(id) && !citados.has(id)))];
   }
-  /** un insert con cita que vuelve con alguno de estos códigos se reintenta sin la cita (el original ya no está) */
-  const errorDeCita = (error) => !!error && ['23514', '22P02', '23503'].includes(String(error.code));
+  /** un insert con cita que vuelve con alguno de estos códigos se reintenta sin la cita (el original ya no está). El 23514
+   *  solo si es el del trigger de la cita: otro check (p. ej. las medidas de un video) no tiene que ver con la cita. */
+  const errorDeCita = (error) => !!error && (['22P02', '23503'].includes(String(error.code))
+    || (String(error.code) === '23514' && /respuesta/i.test(String(error.message || ''))));
 
   // ---- reacciones: una por persona y mensaje, con clave (no emoji) ----
   const REACCIONES = ['corazon', 'risa', 'sorpresa', 'triste', 'pulgar', 'fuego'];

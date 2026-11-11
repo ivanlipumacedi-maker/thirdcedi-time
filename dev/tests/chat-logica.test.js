@@ -217,7 +217,9 @@ test('textoCita y citasFaltantes', () => {
 });
 
 test('errorDeCita: solo los rechazos de la cita se reintentan sin ella', () => {
-  assert.equal(L.errorDeCita({ code: '23514' }), true);
+  assert.equal(L.errorDeCita({ code: '23514', message: 'La respuesta tiene que ser a un mensaje del mismo chat' }), true);
+  assert.equal(L.errorDeCita({ code: '23514', message: 'new row violates check constraint "mensajes_ancho_check"' }), false, 'otro check no es de la cita');
+  assert.equal(L.errorDeCita({ code: '23514' }), false);
   assert.equal(L.errorDeCita({ code: '23503' }), true);
   assert.equal(L.errorDeCita({ code: '22P02' }), true);
   assert.equal(L.errorDeCita({ code: '42501' }), false);

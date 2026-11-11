@@ -281,7 +281,7 @@ async function abrir(_ignorado, uid, tema) {
     else if (!u.startsWith(URL_APP) && !u.startsWith('data:') && !u.startsWith('blob:')) rq.abort(); // nada sale a internet
     else rq.continue();
   });
-  await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await page.setViewport({ width: Number(process.env.ANCHO) || 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   // sin animaciones: la hoja que sube movería los botones mientras se calcula dónde tocar
   await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: tema }, { name: 'prefers-reduced-motion', value: 'reduce' }]);
   await page.goto(URL_APP, { waitUntil: 'networkidle0' });

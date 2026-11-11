@@ -426,6 +426,7 @@
     // "Link de Maps cargado" con "Quitar") y en el campo queda el nombre. Un lugar ya usado con link lo trae solo.
     const campoLugar = (inNombre, link, queLink) => {
       let enlace = link && L.linkMaps(link) === link ? link : null;
+      let auto = false; // el link lo trajo "la última vez" (no lo puso la persona): si cambia el nombre, se recalcula
       const id = inNombre.id;
       const txt = h('span', { class: 'link-estado-txt' });
       const quitar = h('button', { type: 'button', class: 'btn-link link-quitar', id: id + '-quitar', 'aria-label': 'Quitar el link de Maps ' + queLink }, 'Quitar');
@@ -437,25 +438,34 @@
         const l = crudo && L.linkMaps(crudo);
         if (!l) return;
         e.preventDefault();
-        enlace = l;
+        enlace = l; auto = false;
         const n = L.nombreCompartido(crudo);
         if (n && !inNombre.value.trim()) inNombre.value = n;
         mostrar();
       });
-      // si el link entró de otra forma (teclados que no mandan el paste, arrastrar): se saca del texto
-      inNombre.addEventListener('input', () => {
+      // si el link entró de otra forma (teclados que no mandan el paste, arrastrar, autocompletar): se saca del texto.
+      // Tecleado letra por letra no: se cortaría en el dominio ("https://maps.app.goo.gl"); eso se resuelve al salir.
+      const sacarLink = () => {
         const l = L.linkMaps(inNombre.value);
-        if (!l) return;
-        enlace = l;
+        if (!l) return false;
+        enlace = l; auto = false;
         inNombre.value = inNombre.value.replace(/\bhttps?:\/\/\S*/gi, '').replace(/\s+/g, ' ').trim();
         mostrar();
+        return true;
+      };
+      inNombre.addEventListener('input', (e) => {
+        const deUnaVez = !e.inputType || /^insertFrom|^insertReplacementText$/.test(e.inputType) || (e.data && e.data.length > 1);
+        if (deUnaVez) sacarLink();
       });
       inNombre.addEventListener('change', () => {
-        if (enlace) return;
+        if (sacarLink()) return;
+        if (enlace && !auto) return;
+        // vacío o con el de la última vez: se busca el del nombre nuevo (o se va, si ese nombre no tiene)
         enlace = L.linkDeLugarConocido(inNombre.value, actividades);
+        auto = !!enlace;
         mostrar(true);
       });
-      quitar.addEventListener('click', () => { enlace = null; mostrar(); inNombre.focus(); });
+      quitar.addEventListener('click', () => { enlace = null; auto = false; mostrar(); inNombre.focus(); });
       mostrar();
       return { estado, link: () => enlace };
     };

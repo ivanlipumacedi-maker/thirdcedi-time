@@ -476,15 +476,17 @@
         try {
           const { data, error } = await sb.from('mensajes').select(CAMPOS).eq('sala', sala).or(L.filtroAntes(c))
             .order('creado', { ascending: false }).order('id', { ascending: false }).limit(TAM);
-          if (cerrado) return;
-          if (error) { toast('No pudimos traer los mensajes anteriores. Revisá la conexión.'); return; }
+          if (cerrado) return false;
+          if (error) { toast('No pudimos traer los mensajes anteriores. Revisá la conexión.'); return false; }
           await asegurarPerfiles(data);
-          if (cerrado) return;
+          if (cerrado) return false;
           lista = L.fusionarLote(lista, data);
           hayMas = data.length >= TAM;
           cargarReacciones(data.map((m) => m.id));
+          return true;
         } catch (e) {
           if (!cerrado) toast('No pudimos traer los mensajes anteriores. Revisá la conexión.');
+          return false;
         } finally {
           cargandoMas = null;
           if (!cerrado) { pintar(); elLista.scrollTop = elLista.scrollHeight - alto; }
@@ -653,7 +655,8 @@
     async function irAlOriginal(id) {
       if (citados.get(id) === null) { toast('Ese mensaje ya no está.'); return; }
       // si es más viejo que lo cargado, se traen páginas hasta llegar (con tope)
-      for (let i = 0; i < 20 && !lista.some((x) => x.id === id) && hayMas && !cerrado; i++) await cargarMas();
+      // si una página falla (sin señal) se corta: no 20 pedidos y 20 avisos seguidos
+      for (let i = 0; i < 20 && !lista.some((x) => x.id === id) && hayMas && !cerrado; i++) if (!(await cargarMas())) break;
       if (cerrado) return;
       if (ocultos.has(id)) { toast('Ese mensaje lo eliminaste para vos. Lo podés volver a mostrar desde el menú del chat.'); return; }
       const fila = elLista.querySelector(`.chat-msg[data-id="${CSS.escape(id)}"]`);
@@ -777,7 +780,8 @@
       if (problema) { toast(problema); return; }
       const fmt = L.formatoVideo(mime);
       const cita = usarCita();
-      const ancho = p.ancho || 1280, alto = p.alto || 720, duracion_ms = Math.round(p.duracion_ms);
+      // la base acepta medidas de hasta 4000 px (solo sirven para la proporción): un video 8K va escalado
+      const { ancho, alto } = L.escalar(p.ancho || 1280, p.alto || 720, 4000), duracion_ms = Math.round(p.duracion_ms);
       const tmp = { id: 'tmp-v' + Date.now(), sala, autor: yo, tipo: 'video', creado: new Date().toISOString(), subiendo: true, ancho, alto, duracion_ms,
         local: p.mini ? URL.createObjectURL(p.mini) : null, localVideo: URL.createObjectURL(p.video), responde_a: cita };
       if (tmp.local) locales.add(tmp.local);
@@ -798,6 +802,9 @@
       } catch (e) {
         lista = L.quitar(lista, tmp.id); medios.delete(tmp.id); pintar(); devolverCita(cita);
         toast('No pudimos mandar el video. Revisá la conexión y probá de nuevo.');
+      } finally {
+        // la copia local del video (puede ser de 100 MB) ya no hace falta, salvo que se esté viendo en el visor
+        if (!document.querySelector(`.chat-visor video[src="${tmp.localVideo}"]`)) { URL.revokeObjectURL(tmp.localVideo); locales.delete(tmp.localVideo); }
       }
     }
 

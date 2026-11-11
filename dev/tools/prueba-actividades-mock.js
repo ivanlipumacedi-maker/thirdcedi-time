@@ -180,7 +180,7 @@ async function abrir(uid, esperarSel = '.tarjeta-act') {
     else if (/fonts\.(googleapis|gstatic)\.com/.test(rq.url())) rq.respond({ status: 200, contentType: 'text/css', body: '' });
     else rq.continue();
   });
-  await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
+  await page.setViewport({ width: Number(process.env.ANCHO) || 390, height: 844, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
   await page.goto(URL_APP, { waitUntil: 'networkidle0' });
   await page.evaluate((p) => { App.modoAcceso(false); App.setPerfil(p); }, db.perfiles.find((p) => p.id === uid));
   await page.waitForSelector(esperarSel, { timeout: 8000 });
@@ -339,6 +339,15 @@ const volver = (p) => p.evaluate(() => document.querySelector('#pantalla-activid
       // "Quitar" lo saca y un link escrito a mano en el campo se separa del nombre
       await clic(pa, '#f-lugar-quitar');
       assert.equal(await cuantos(pa, '#f-lugar-link:not([hidden])'), 0);
+      // un link tecleado letra por letra no se corta en el dominio: se saca entero al salir del campo
+      await pa.$eval('#f-lugar', (e) => { e.value = ''; });
+      await pa.type('#f-lugar', 'https://maps.app.goo.gl/zzTecleado');
+      assert.equal(await pa.$eval('#f-lugar', (e) => e.value), 'https://maps.app.goo.gl/zzTecleado', 'se cortó mientras se tecleaba');
+      assert.equal(await cuantos(pa, '#f-lugar-link:not([hidden])'), 0);
+      await pa.$eval('#f-lugar', (e) => e.dispatchEvent(new Event('change')));
+      assert.equal(await pa.$eval('#f-lugar', (e) => e.value), '');
+      assert.match(await texto(pa, '#f-lugar-link'), /Link de Maps cargado/);
+      await clic(pa, '#f-lugar-quitar');
       await pa.$eval('#f-lugar', (e) => { e.value = 'Club Norte Pádel https://maps.app.goo.gl/zzPrueba1'; e.dispatchEvent(new Event('input')); });
       assert.equal(await pa.$eval('#f-lugar', (e) => e.value), 'Club Norte Pádel');
       assert.match(await texto(pa, '#f-lugar-link'), /Link de Maps cargado/);

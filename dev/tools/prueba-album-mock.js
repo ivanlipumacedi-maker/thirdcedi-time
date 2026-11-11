@@ -171,7 +171,7 @@ async function abrir(uid, tema, antes) {
     else if (/fonts\.(googleapis|gstatic)\.com/.test(rq.url())) rq.respond({ status: 200, contentType: 'text/css', body: '' });
     else rq.continue();
   });
-  await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await page.setViewport({ width: Number(process.env.ANCHO) || 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: tema }]);
   await page.goto(URL_APP, { waitUntil: 'networkidle0' });
   // la cola es del teléfono (IndexedDB): cada corrida arranca limpia

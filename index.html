@@ -25,6 +25,23 @@
   if (t !== 'claro' && t !== 'oscuro') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'oscuro' : 'claro';
   document.documentElement.setAttribute('data-tema', t);
 })();
+// Teléfonos (iPhone y Android): en vertical la página se muestra como si la pantalla fuera un 5 % más angosta (nunca
+// menos de 340; probado sin desbordes con las pruebas a 343, el S21): el teléfono agranda todo parejo (letras, íconos y
+// espacios) y nada cambia de lugar. En horizontal, tablets y computadoras, como siempre.
+(function () {
+  var ua = navigator.userAgent;
+  if (!(/iPhone|iPod/.test(ua) || /Android.*Mobile/.test(ua))) return;
+  var meta = document.querySelector('meta[name="viewport"]');
+  if (!meta) return;
+  function ajustar() {
+    var vertical = !window.matchMedia || matchMedia('(orientation: portrait)').matches;
+    var ancho = Math.min(screen.width, screen.height);
+    var w = Math.max(340, Math.round(ancho / 1.05));
+    meta.setAttribute('content', vertical && w < ancho ? 'width=' + w + ', viewport-fit=cover' : 'width=device-width, initial-scale=1, viewport-fit=cover');
+  }
+  ajustar();
+  window.addEventListener('orientationchange', function () { setTimeout(ajustar, 50); });
+})();
 </script>
 </head>
 <body>
