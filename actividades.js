@@ -306,7 +306,7 @@
 
   // Compartir la actividad (como en RodaApp): el menú del teléfono; sin él, se copia el texto para pegarlo en WhatsApp
   // el link compartido apunta siempre a la app publicada (aunque se comparta desde una copia de prueba)
-  const URL_APP = 'https://ivanlipumacedi-maker.github.io/thirdcedi-time/';
+  const URL_APP = 'https://thirdcedi.univylabs.com/';
   async function compartir(a, anotados) {
     const t = tipoDe(a.tipo), f = partes(a.fecha);
     const texto = L.textoCompartir(a, {
