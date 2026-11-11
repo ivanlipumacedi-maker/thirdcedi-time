@@ -419,11 +419,20 @@
     async function alChat() {
       if (!actual) return;
       if (A.esVideo(actual)) {
-        // un video no se sube al chat: va un mensaje con el link al álbum de la actividad
-        const url = location.origin + location.pathname + '#/actividad/' + act;
-        const texto = `${perfilDe(actual.autor).nombre.split(' ')[0]} subió un video (${A.duracion(actual.duracion_ms)}) al álbum: ${url}`;
-        const r = await sb.from('mensajes').insert({ sala, tipo: 'texto', texto }).select('id').single();
-        toast(r.error ? 'No se pudo mandar al chat. Revisá la señal.' : 'Mandamos al chat el link al video.');
+        // el video se sube al chat (con su miniatura): el chat lo valida (formato, 100 MB) y avisa si falla
+        const f = actual;
+        try {
+          toast('Mandando el video al chat…');
+          await M.firmar(sb, [f.ruta, f.mini].filter(Boolean), 'album').catch(() => {});
+          const uv = M.firmada(f.ruta), um = f.mini && M.firmada(f.mini);
+          if (!uv) throw new Error('sin el video');
+          const rv = await fetch(uv); if (!rv.ok) throw new Error('sin el video');
+          const video = await rv.blob();
+          let mini = null;
+          if (um) { const rm = await fetch(um).catch(() => null); if (rm && rm.ok) mini = await rm.blob(); }
+          const p = { video, mime: f.mime || video.type, mini, ancho: f.ancho, alto: f.alto, duracion_ms: f.duracion_ms };
+          if (!(await g.Chat.enviarVideo(sala, p))) toast('El chat de la actividad no está abierto.');
+        } catch (x) { console.error(x); toast('No se pudo mandar el video al chat. Revisá la señal.'); }
         return;
       }
       try {

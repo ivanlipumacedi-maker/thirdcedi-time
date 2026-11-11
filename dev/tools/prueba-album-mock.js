@@ -453,7 +453,7 @@ const celdas = (p) => cuantos(p, '#album-act .album-cel');
       assert.equal(await pa.evaluate(() => !!(history.state && history.state.cam)), false, 'quedó la entrada de la cámara');
     });
 
-    await paso('video: graba con la cámara, aparece en la grilla con play y duración, se reproduce, va al chat como link y se borra', async () => {
+    await paso('video: graba con la cámara, aparece en la grilla con play y duración, se reproduce, se manda al chat (sube el video) y se borra', async () => {
       const antes = db.fotos.length, msjs = db.mensajes.length;
       await pa.click('#album-camara');
       await pa.waitForSelector('#camara:not([hidden]) video');
@@ -497,12 +497,14 @@ const celdas = (p) => cuantos(p, '#album-act .album-cel');
       await pa.evaluate(() => { const x = document.querySelector('.album-visor video'); x.muted = true; return x.play(); });
       await esperar(pa, () => document.querySelector('.album-visor video').currentTime > 0.3);
       await pa.screenshot({ path: path.join(shots, 'album-video-visor-claro.png') });
-      // al chat va un link, no el archivo
+      // al chat va el video (se sube al chat con su miniatura), no un link
       if (!(await pa.$eval('.album-al-chat', (e) => e.hidden))) {
         await pa.click('.album-al-chat');
-        for (let i = 0; i < 30 && db.mensajes.length === msjs; i++) await new Promise((r) => setTimeout(r, 100));
+        for (let i = 0; i < 80 && db.mensajes.length === msjs; i++) await new Promise((r) => setTimeout(r, 100));
         const m = db.mensajes[db.mensajes.length - 1];
-        assert.equal(m.tipo, 'texto'); assert.match(m.texto, new RegExp(`subió un video \\(0:0\\d\\) al álbum: .*#/actividad/${ACT}$`));
+        assert.equal(m.tipo, 'video', 'toast: ' + await texto(pa, '#toast'));
+        assert.match(m.archivo, new RegExp(`^act:${ACT}/videos/[0-9a-f-]{36}\\.(mp4|webm)$`));
+        assert.ok(db.storage.has(m.archivo.replace(/\.(mp4|webm)$/, '.t.webp')), 'falta la miniatura del video en el chat');
       }
       // borrar
       await pa.click('.album-borrar');

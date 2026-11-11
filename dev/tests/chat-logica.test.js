@@ -197,3 +197,130 @@ test('09: el recorte de editar_mensaje (regex de Postgres) saca lo mismo que tri
   assert.equal(nuevo[1], viejo[1].replace('btrim(texto)', 'public.recortar_como_trim(texto)'));
   assert.doesNotMatch(sql.replace(/^\s*--.*$/gm, ''), /btrim/, 'la 09 no usa btrim');
 });
+
+// ---- 27: chat completo (como Rumbo al Sur, en grupo) ----
+test('resumen de audio, video y sticker (sin emojis)', () => {
+  assert.equal(L.resumen({ tipo: 'audio', duracion_ms: 65000 }), 'Audio (1:05)');
+  assert.equal(L.resumen({ tipo: 'video', duracion_ms: 9000 }), 'Video (0:09)');
+  assert.equal(L.resumen({ tipo: 'video' }), 'Video');
+  assert.equal(L.resumen({ tipo: 'sticker' }), 'Sticker');
+  assert.doesNotMatch(L.resumen({ tipo: 'foto' }) + L.resumen({ tipo: 'eliminado' }), /\p{Extended_Pictographic}/u);
+});
+
+test('textoCita y citasFaltantes', () => {
+  assert.equal(L.textoCita(null), 'Mensaje eliminado');
+  assert.equal(L.textoCita({ tipo: 'eliminado' }), 'Mensaje eliminado');
+  assert.equal(L.textoCita({ tipo: 'texto', texto: ' hola ' }), 'hola');
+  const lista = [{ id: '1', responde_a: '9' }, { id: '2', responde_a: '1' }, { id: '3', responde_a: '9' }, { id: '4', responde_a: '8' }, { id: '5' }];
+  assert.deepEqual(L.citasFaltantes(lista, new Map()), ['9', '8'], 'sin repetir y sin las que están en la lista');
+  assert.deepEqual(L.citasFaltantes(lista, new Map([['9', null]])), ['8'], 'las ya buscadas (aunque no existan) no se piden de nuevo');
+});
+
+test('errorDeCita: solo los rechazos de la cita se reintentan sin ella', () => {
+  assert.equal(L.errorDeCita({ code: '23514' }), true);
+  assert.equal(L.errorDeCita({ code: '23503' }), true);
+  assert.equal(L.errorDeCita({ code: '22P02' }), true);
+  assert.equal(L.errorDeCita({ code: '42501' }), false);
+  assert.equal(L.errorDeCita(null), false);
+});
+
+test('reacciones: tocar la misma la saca, otra la cambia; pastillas agrupadas con conteo y en orden fijo', () => {
+  assert.deepEqual(L.REACCIONES, ['corazon', 'risa', 'sorpresa', 'triste', 'pulgar', 'fuego']);
+  assert.equal(L.alternarReaccion(null, 'risa'), 'risa');
+  assert.equal(L.alternarReaccion('risa', 'risa'), null);
+  assert.equal(L.alternarReaccion('risa', 'fuego'), 'fuego');
+  const r = L.agruparReacciones(new Map([['a', 'fuego'], ['b', 'corazon'], ['c', 'fuego'], ['yo', 'fuego']]), 'yo');
+  assert.deepEqual(r.map((x) => [x.clave, x.n, x.mia]), [['corazon', 1, false], ['fuego', 3, true]]);
+  assert.deepEqual(r[1].quienes, ['a', 'c', 'yo']);
+  assert.deepEqual(L.agruparReacciones({ a: 'pulgar' }, 'yo').map((x) => x.clave), ['pulgar'], 'acepta un objeto');
+  assert.deepEqual(L.agruparReacciones(undefined, 'yo'), []);
+  for (const k of L.REACCIONES) assert.ok(L.NOMBRE_REACCION[k], 'falta el nombre de ' + k);
+});
+
+test('audio: duración, mínimo 0,7 s y tope 2 min', () => {
+  assert.equal(L.duracionTexto(0), '0:00');
+  assert.equal(L.duracionTexto(61400), '1:01');
+  assert.equal(L.duracionTexto(120000), '2:00');
+  assert.equal(L.audioValido(699), false);
+  assert.equal(L.audioValido(700), true);
+  assert.equal(L.audioValido(120000), true);
+  assert.equal(L.audioValido(120001), false);
+});
+
+test('audio: extensión y tipo según el mime real del navegador (lo que acepta el bucket)', () => {
+  assert.equal(L.extAudio('audio/webm;codecs=opus'), 'webm');
+  assert.equal(L.extAudio('audio/ogg;codecs=opus'), 'ogg');
+  assert.equal(L.extAudio('audio/mp4'), 'm4a');
+  assert.equal(L.extAudio(''), 'webm');
+  assert.equal(L.tipoAudio('audio/mp4;codecs=mp4a.40.2'), 'audio/mp4');
+  assert.equal(L.tipoAudio('audio/ogg'), 'audio/ogg');
+  assert.equal(L.tipoAudio('audio/webm'), 'audio/webm');
+  assert.equal(L.rutaArchivo('act:x', 'audio', 'u', L.extAudio('audio/mp4')), 'act:x/audios/u.m4a');
+});
+
+test('video: formato, tamaño y duración', () => {
+  assert.deepEqual(L.formatoVideo('video/mp4'), { ext: 'mp4', tipo: 'video/mp4' });
+  assert.deepEqual(L.formatoVideo('video/webm;codecs=vp9'), { ext: 'webm', tipo: 'video/webm' });
+  assert.deepEqual(L.formatoVideo('video/quicktime'), { ext: 'mp4', tipo: 'video/mp4' }, 'el .mov del iPhone va como mp4');
+  assert.equal(L.formatoVideo('video/x-msvideo'), null);
+  assert.equal(L.problemaVideo({ bytes: 1e6, ms: 5000, mime: 'video/mp4' }), null);
+  assert.match(L.problemaVideo({ bytes: 101 * 1024 * 1024, ms: 5000, mime: 'video/mp4' }), /100 MB/);
+  assert.match(L.problemaVideo({ bytes: 1e6, ms: 600001, mime: 'video/webm' }), /10 minutos/);
+  assert.match(L.problemaVideo({ bytes: 1e6, ms: 5000, mime: 'video/avi' }), /formato/);
+  assert.match(L.problemaVideo({ bytes: 1e6, ms: 0, mime: 'video/mp4' }), /No pudimos leer/);
+  assert.equal(L.rutaArchivo('act:x', 'video', 'u', 'webm'), 'act:x/videos/u.webm');
+  assert.equal(L.rutaArchivo('act:x', 'video', 'u'), 'act:x/videos/u.mp4');
+});
+
+test('rutaMini con .webp, .mp4 y .webm; archivosABorrar según tipo_antes', () => {
+  assert.equal(L.rutaMini('s/fotos/a.webp'), 's/fotos/a.t.webp');
+  assert.equal(L.rutaMini('s/videos/a.mp4'), 's/videos/a.t.webp');
+  assert.equal(L.rutaMini('s/videos/a.webm'), 's/videos/a.t.webp');
+  assert.deepEqual(L.archivosABorrar('foto', 's/fotos/a.webp'), ['s/fotos/a.webp', 's/fotos/a.t.webp']);
+  assert.deepEqual(L.archivosABorrar('video', 's/videos/a.mp4'), ['s/videos/a.mp4', 's/videos/a.t.webp']);
+  assert.deepEqual(L.archivosABorrar('audio', 's/audios/a.ogg'), ['s/audios/a.ogg'], 'un audio no tiene miniatura');
+  assert.deepEqual(L.archivosABorrar('sticker', 'stickers/a.webp'), [], 'el sticker es de la biblioteca del grupo');
+  assert.deepEqual(L.archivosABorrar('texto', null), []);
+  assert.equal(L.rutaSticker('u'), 'stickers/u.webp');
+});
+
+test('stickers: texto, líneas y GIPHY', () => {
+  assert.equal(L.textoSticker('  hola che  '), 'HOLA CHE');
+  assert.equal(L.textoSticker('x'.repeat(40)).length, 30);
+  assert.deepEqual(L.lineasSticker(''), []);
+  assert.deepEqual(L.lineasSticker('vamos'), ['VAMOS']);
+  assert.deepEqual(L.lineasSticker('vamos que se puede carajo'), ['VAMOS QUE SE', 'PUEDE CARAJO']);
+  assert.equal(L.externoValido('https://media2.giphy.com/media/abc/200.webp'), true);
+  assert.equal(L.externoValido('https://media.giphy.com/media/abc/giphy.gif'), true);
+  assert.equal(L.externoValido('http://media.giphy.com/x.gif'), false);
+  assert.equal(L.externoValido('https://evil.com/media.giphy.com/x.gif'), false);
+  assert.equal(L.externoValido('https://media.giphy.com/a b.gif'), false);
+  assert.equal(L.externoValido('https://media.giphy.com/' + 'a'.repeat(500)), false, 'el check de la base corta en 500');
+});
+
+test('buscar: patrón ILIKE escapado y marca de la coincidencia', () => {
+  assert.equal(L.patronBusqueda('  '), null);
+  assert.equal(L.patronBusqueda('*'), null);
+  assert.equal(L.patronBusqueda('50%_off'), '%50\\%\\_off%');
+  assert.equal(L.patronBusqueda('a*b'), '%ab%');
+  assert.deepEqual(L.partirCoincidencia('Llevo las Pelotas', 'pelo'), ['Llevo las ', 'Pelo', 'tas']);
+  assert.deepEqual(L.partirCoincidencia('hola', 'zz'), ['hola', '', '']);
+});
+
+test('claveLocal: por tipo, usuario y sala', () => {
+  assert.equal(L.claveLocal('destacados', 'act:1', 'u'), 'chat:destacados:u:act:1');
+  assert.notEqual(L.claveLocal('ocultos', 'act:1', 'u'), L.claveLocal('ocultos', 'act:1', 'v'));
+});
+
+test('27: los tipos y claves del cliente coinciden con la migración', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const sql = fs.readFileSync(path.join(__dirname, '..', 'supabase', '27-chat-completo.sql'), 'utf8');
+  assert.match(sql, /clave in \('corazon','risa','sorpresa','triste','pulgar','fuego'\)/);
+  assert.equal(/duracion_ms between (\d+) and (\d+) and texto/.exec(sql).slice(1).join('-'), L.AUDIO_MIN_MS + '-' + L.AUDIO_MAX_MS);
+  assert.match(sql, /duracion_ms between 1 and 600000/);
+  assert.equal(L.VIDEO_MAX_MS, 600000);
+  assert.match(sql, /file_size_limit = 104857600/);
+  assert.equal(L.VIDEO_MAX_BYTES, 104857600);
+  for (const t of ['audio/webm', 'audio/ogg', 'audio/mp4', 'video/mp4', 'video/webm']) assert.ok(sql.includes("'" + t + "'"), 'el bucket no acepta ' + t);
+});

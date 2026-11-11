@@ -55,3 +55,32 @@ test('miniatura: ruta derivada de la foto', () => {
   const M = cargarMedios();
   assert.equal(M.rutaMini('v/fotos/x.webp'), 'v/fotos/x.t.webp');
 });
+
+test('miniatura de un video (.mp4 y .webm)', () => {
+  const M = cargarMedios();
+  assert.equal(M.rutaMini('v/videos/x.mp4'), 'v/videos/x.t.webp');
+  assert.equal(M.rutaMini('v/videos/x.webm'), 'v/videos/x.t.webp');
+});
+
+test('buscarGiphy: tendencias sin texto, solo URLs de media*.giphy.com y errores con nombre', async () => {
+  const M = cargarMedios();
+  const real = global.fetch;
+  let pedida = '';
+  try {
+    global.fetch = async (u) => { pedida = u; return { ok: true, status: 200, json: async () => ({ data: [
+      { id: '1', title: 'Messi', images: { fixed_height: { webp: 'https://media1.giphy.com/media/1/200.webp' } } },
+      { id: '2', title: 'Malo', images: { fixed_height: { url: 'https://otro.com/x.gif' } } },
+    ] }) }; };
+    const r = await M.buscarGiphy('k', '');
+    assert.match(pedida, /\/v1\/stickers\/trending\?/);
+    assert.deepEqual(r, [{ id: '1', url: 'https://media1.giphy.com/media/1/200.webp', titulo: 'Messi' }]);
+    await M.buscarGiphy('k', 'gol');
+    assert.match(pedida, /\/v1\/stickers\/search\?.*q=gol/);
+    global.fetch = async () => ({ ok: false, status: 429 });
+    await assert.rejects(M.buscarGiphy('k', 'x'), /cuota/);
+    global.fetch = async () => ({ ok: false, status: 403 });
+    await assert.rejects(M.buscarGiphy('k', 'x'), /clave/);
+    global.fetch = async () => { throw new Error('offline'); };
+    await assert.rejects(M.buscarGiphy('k', 'x'), /red/);
+  } finally { global.fetch = real; }
+});

@@ -1,5 +1,5 @@
 // Service worker de ThirdCEDI Time: caché del shell (red primero, caché si no hay señal) y notificaciones push.
-const CACHE = 'thirdcedi-shell-v49';
+const CACHE = 'thirdcedi-shell-v50';
 const SHELL = ['./', 'index.html', 'estilos.css', 'app.js', 'dominios.js', 'errores.js', 'perfiles.js', 'actividades-logica.js', 'chat-logica.js', 'chat-medios.js', 'chat.js', 'cuentas-logica.js', 'cuentas.js', 'album-logica.js', 'album-cola.js', 'camara-logica.js', 'camara.js', 'editor-logica.js', 'editor.js', 'album.js', 'actividades.js', 'trivia-logica.js', 'trivia.js', 'impostor-logica.js', 'impostor.js', 'juegos.js', 'avisos.js', 'captcha.js', 'login.js', 'vendor/supabase.js', 'manifest.webmanifest', 'icon-192.png', 'badge-96.png', 'img/logo-cedi.png', 'img/logo-cedi-light.png'];
 
 self.addEventListener('install', (e) => {
@@ -17,7 +17,7 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   const u = new URL(e.request.url);
-  if (u.origin !== self.location.origin) return; // Supabase, fuentes, Turnstile (challenges.cloudflare.com), etc. van directo a la red, sin caché
+  if (u.origin !== self.location.origin) return; // Supabase, fuentes, Turnstile (challenges.cloudflare.com), GIPHY (api y media*.giphy.com), etc. van directo a la red, sin caché
   e.respondWith((async () => {
     try {
       // 'no-cache': revalida contra el servidor (ETag) en vez de usar la caché HTTP del navegador. GitHub Pages manda

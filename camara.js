@@ -712,7 +712,7 @@
     }
     function abrir(o = {}) {
       op = o; ultima = null; brillo = 0; ponerDestino(o.destino); q('ultima').replaceChildren(); q('ultima').setAttribute('aria-label', 'Ver la última en el álbum');
-      // soloFoto (la usa el chat): sin el modo video
+      // soloFoto: sin el modo video (hoy no lo usa nadie: el chat también manda videos)
       q('m-video').hidden = !!o.soloFoto;
       if (o.soloFoto && modo !== 'foto') { modo = 'foto'; raiz.classList.remove('modo-video'); raiz.classList.add('modo-foto'); q('m-foto').setAttribute('aria-pressed', 'true'); q('m-video').setAttribute('aria-pressed', 'false'); q('disparo').setAttribute('aria-label', 'Sacar foto'); }
       raiz.hidden = false; panel(false);

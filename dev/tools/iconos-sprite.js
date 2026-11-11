@@ -24,6 +24,10 @@ const ICONOS = {
   linterna: 'flashlight', flash: 'lightning', 'flash-no': 'lightning-slash', grilla: 'grid-nine', temporizador: 'timer', 'cambiar-camara': 'camera-rotate',
   filtros: 'circles-three', intensidad: 'circle-half', play: 'play', pausa: 'pause', microfono: 'microphone', 'microfono-no': 'microphone-slash',
   cruz: ['x', 'bold'], tilde: ['check', 'bold'], recortar: ['crop', 'bold'], rotar: ['arrow-clockwise', 'bold'], deshacer: ['arrow-u-up-left', 'bold'],
+  // chat: reacciones (con clave, no emoji), cabecera y menú del mensaje
+  corazon: 'heart', risa: 'smiley', sorpresa: 'smiley-x-eyes', triste: 'smiley-sad', pulgar: 'thumbs-up', fuego: 'fire',
+  buscar: 'magnifying-glass', estrella: 'star', fijar: 'push-pin', 'fijar-no': 'push-pin-slash', sticker: 'sticker',
+  responder: 'arrow-bend-up-left', copiar: 'copy', editar: 'pencil-simple', basura: 'trash', ocultar: 'eye-slash', video: 'video-camera',
 };
 
 const raiz = path.join(__dirname, '..', '..');

@@ -140,6 +140,9 @@ test('fusionarActividad: nueva gana; si no, el último cambio de estado; si no, 
 
 test('resumenMensaje: texto recortado o foto', () => {
   assert.equal(L.resumenMensaje({ tipo: 'foto', texto: null }), 'Foto');
+  assert.equal(L.resumenMensaje({ tipo: 'audio', texto: null }), 'Audio');
+  assert.equal(L.resumenMensaje({ tipo: 'video', texto: null }), 'Video');
+  assert.equal(L.resumenMensaje({ tipo: 'sticker', texto: null }), 'Sticker');
   assert.equal(L.resumenMensaje({ tipo: 'texto', texto: '  hola  ' }), 'hola');
   const largo = L.resumenMensaje({ tipo: 'texto', texto: 'x'.repeat(200) });
   assert.equal(Array.from(largo).length, 80);

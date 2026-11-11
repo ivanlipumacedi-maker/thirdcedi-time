@@ -3,6 +3,9 @@
   // Proyecto Supabase "thirdcedi-time". La clave publicable es pública por diseño; los permisos los dan las RLS.
   const SUPABASE_URL = 'https://qvezbnkrfqewanlcejha.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_nHg5W-1bGZwudTST-ejzeA_w_gUNYXQ';
+  // Clave de GIPHY para los stickers del chat (pública por diseño: la API de GIPHY se llama desde el navegador). Vacía = la
+  // pestaña GIPHY avisa que falta configurarla.
+  const GIPHY_KEY = 'QQUF5JNRUQQCBSdrG2WXHkBGBlZs20dg';
   // Site key de Cloudflare Turnstile (captcha del acceso; es pública por diseño). Vacía = sin captcha: el acceso anda
   // como siempre. Con la clave puesta, además hay que prender el captcha en Supabase (pasos en CLAUDE.md).
   const TURNSTILE_SITE_KEY = '';
@@ -108,6 +111,6 @@
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
   }
 
-  g.App = { ir, rutaActual, sb, yo: () => perfil, setPerfil, modoAcceso, toast, icono, SUPABASE_URL, TURNSTILE_SITE_KEY };
+  g.App = { ir, rutaActual, sb, yo: () => perfil, setPerfil, modoAcceso, toast, icono, SUPABASE_URL, TURNSTILE_SITE_KEY, GIPHY_KEY };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar();
 })(window);

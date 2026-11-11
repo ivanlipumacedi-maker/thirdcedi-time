@@ -108,6 +108,9 @@
   function resumenMensaje(m) {
     if (!m) return '';
     if (m.tipo === 'foto') return 'Foto';
+    if (m.tipo === 'audio') return 'Audio';
+    if (m.tipo === 'video') return 'Video';
+    if (m.tipo === 'sticker') return 'Sticker';
     const t = Array.from(String(m.texto || '').trim().replace(/\s+/g, ' '));
     return t.length > 80 ? t.slice(0, 79).join('') + '…' : t.join('');
   }
