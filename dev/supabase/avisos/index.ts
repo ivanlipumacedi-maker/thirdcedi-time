@@ -1,4 +1,4 @@
-// Edge Function "avisos" de ThirdCEDI Time: avisos push (Task 6) y copia del álbum a Drive (Task 5b).
+// Edge Function "avisos" de CEDI CLUB: avisos push (Task 6) y copia del álbum a Drive (Task 5b).
 // La llaman pg_cron, el trigger de fotos y avisos_probar() con public.avisos_llamar(), que manda el secreto de Vault en
 // x-cron-secret. Sin ese header (o sin el secreto cargado en Vault) responde 401. Con el secreto bien responde 202 enseguida
 // y hace el trabajo en EdgeRuntime.waitUntil (pg_net deja de esperar, el trabajo sigue). Con { esperar: true } espera y
