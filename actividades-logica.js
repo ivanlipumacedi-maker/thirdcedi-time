@@ -10,6 +10,75 @@
     { id: 'otra', nombre: 'Otra', corto: 'Otra', icono: 'otra' },
   ];
 
+  // Cómo se llama el lugar según el tipo (en el formulario y en el detalle). destino: el tipo tiene además
+  // "a dónde se va" (el trekking: se encuentran en un lado y caminan hasta otro).
+  const LUGARES = {
+    futbol: { etiqueta: 'Cancha', corto: 'Cancha', falta: 'la cancha', ejemplo: 'Ej.: Complejo El Potrero, cancha 3' },
+    padel: { etiqueta: 'Club o cancha', corto: 'Cancha', falta: 'el club o la cancha', ejemplo: 'Ej.: Pádel Norte' },
+    trekking: { etiqueta: 'Punto de encuentro', corto: 'Encuentro', falta: 'el punto de encuentro', ejemplo: 'Ej.: YPF de Panamericana y 197',
+      destino: 'A dónde van (opcional)', destinoCorto: 'Destino', destinoFalta: 'a dónde se va', destinoEjemplo: 'Ej.: Cerro Uritorco' },
+    asado: { etiqueta: 'Dónde es el asado', corto: 'Dónde', falta: 'dónde es el asado', ejemplo: 'Ej.: Quinta de Martín, Pilar' },
+    after: { etiqueta: 'Bar o lugar', corto: 'Dónde', falta: 'el bar o el lugar', ejemplo: 'Ej.: Antares Palermo' },
+    otra: { etiqueta: 'Lugar', corto: 'Dónde', falta: 'el lugar', ejemplo: '' },
+  };
+  const lugares = (tipo) => LUGARES[tipo] || LUGARES.otra;
+
+  // ---- links de Google Maps (igual que la hoja de ruta de Rumbo al Sur) ----
+  // solo dominios de Google de verdad (no cualquier "google.com.xx" que podría registrar otro)
+  const TLD = new Set(['com', 'com.ar', 'cl', 'com.uy', 'com.py', 'com.bo', 'com.pe', 'com.br', 'com.mx', 'es', 'co', 'com.co', 'com.ec', 'co.ve', 'us', 'co.uk', 'fr', 'it', 'de']);
+  const esGoogle = (h) => { const m = h.match(/^(?:www\.|maps\.)?google\.(.+)$/); return !!m && TLD.has(m[1]); };
+  /** El link de Google Maps (normalizado) que haya en el texto, o null. Acepta el texto entero que copia Maps al
+   *  compartir (nombre, dirección y el link, una cosa por renglón). */
+  function linkMaps(texto) {
+    const m = String(texto ?? '').match(/https?:\/\/[^\s<>"]+/i);
+    if (!m) return null;
+    let u; try { u = new URL(m[0]); } catch { return null; }
+    if (u.protocol !== 'https:' || u.username || u.password || u.port) return null;
+    const h = u.hostname.toLowerCase();
+    const ok = h === 'maps.app.goo.gl'
+      || (h === 'goo.gl' && u.pathname.startsWith('/maps'))
+      || (esGoogle(h) && (u.pathname.startsWith('/maps') || (h.startsWith('maps.') && u.pathname === '/')));
+    return ok && u.href.length <= 600 ? u.href : null;
+  }
+  const buscarEnMaps = (lugar) => 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(String(lugar ?? '').trim());
+  /** Lo que se guarda del campo del link: null si está vacío, el link limpio si es de Maps, o el texto tal cual (y
+   *  validar avisa que no sirve). */
+  function leerLink(texto) {
+    const t = String(texto ?? '').trim();
+    if (!t) return null;
+    return linkMaps(t) || t;
+  }
+  const linkValido = (l) => l == null || l === '' || linkMaps(l) === l;
+  const MSG_LINK = 'Ese link no es de Google Maps. En Maps tocá Compartir, copiá y pegalo acá.';
+  /** Del texto que copia Maps al compartir, el nombre del lugar (la primera línea que no es el link), o ''. */
+  function nombreCompartido(texto) {
+    const t = String(texto ?? '');
+    if (!linkMaps(t)) return '';
+    const l = t.split(/\r?\n/).map((x) => x.trim()).find((x) => x && !/https?:\/\//i.test(x));
+    return l ? l.slice(0, 120) : '';
+  }
+  /** Adónde lleva el botón de Maps: el link guardado si es válido; si no, una búsqueda por el nombre (o null). */
+  function mapsDe(nombre, link) {
+    const l = linkMaps(link);
+    if (l && l === link) return { href: l, conLink: true };
+    return vacio(nombre) ? null : { href: buscarEnMaps(nombre), conLink: false };
+  }
+
+  /** El link de Maps de una actividad anterior con el mismo lugar (sin importar mayúsculas ni espacios), o null.
+   *  Mira el lugar y el del tercer tiempo; gana la más nueva. */
+  function linkDeLugarConocido(nombre, actividades) {
+    const k = (s) => String(s ?? '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('es');
+    const n = k(nombre);
+    if (!n) return null;
+    let mejor = null;
+    (actividades || []).forEach((a) => {
+      [[a.lugar, a.lugar_link], [a.destino, a.destino_link], [a.tercer_lugar, a.tercer_link]].forEach(([l, link]) => {
+        if (link && k(l) === n && linkMaps(link) === link && (!mejor || ms(a.fecha) > ms(mejor.fecha))) mejor = { fecha: a.fecha, link };
+      });
+    });
+    return mejor ? mejor.link : null;
+  }
+
   const ms = (f) => (f instanceof Date ? f.getTime() : Date.parse(f));
   const vacio = (s) => !String(s == null ? '' : s).trim();
 
@@ -20,10 +89,13 @@
     if (!TIPOS.some((t) => t.id === a.tipo)) return 'Elegí qué tipo de actividad es.';
     if (a.tipo === 'otra' && vacio(a.tipo_otro)) return 'Contanos qué actividad es.';
     if (a.fecha == null || a.fecha === '' || Number.isNaN(ms(a.fecha))) return 'Elegí el día y la hora.';
-    if (vacio(a.lugar)) return 'Indicá el lugar.';
+    if (vacio(a.lugar)) return 'Indicá ' + lugares(a.tipo).falta + '.';
+    if (!linkValido(a.lugar_link) || !linkValido(a.destino_link)) return MSG_LINK;
+    if (!vacio(a.destino_link) && vacio(a.destino)) return 'Poné el nombre de ' + (lugares(a.tipo).destinoFalta || 'a dónde se va') + '.';
     if (a.cupo != null && a.cupo !== '' && (!Number.isInteger(a.cupo) || a.cupo < 1)) return 'El cupo tiene que ser un número entero de 1 o más.';
     if (a.tiene_tercer) {
       if (vacio(a.tercer_lugar)) return 'Indicá el lugar del tercer tiempo.';
+      if (!linkValido(a.tercer_link)) return MSG_LINK;
       if (a.tercer_fecha == null || a.tercer_fecha === '' || Number.isNaN(ms(a.tercer_fecha))) return 'Elegí el día y la hora del tercer tiempo.';
       if (ms(a.tercer_fecha) < ms(a.fecha)) return 'El tercer tiempo no puede ser antes que la actividad.';
     }
@@ -106,7 +178,7 @@
     return new Date(t + offsetMs(t, zona)).toISOString().slice(0, 16);
   }
 
-  const ActividadesLogica = { TIPOS, ZONA, validar, cupoLleno, participantes, esFutura, editable, reactivable, anotadosQueSeQuitan, offsetMs, desdeInputArg, aInputArg };
+  const ActividadesLogica = { TIPOS, ZONA, lugares, linkMaps, buscarEnMaps, leerLink, nombreCompartido, mapsDe, linkDeLugarConocido, validar, cupoLleno, participantes, esFutura, editable, reactivable, anotadosQueSeQuitan, offsetMs, desdeInputArg, aInputArg };
   if (typeof module !== 'undefined' && module.exports) module.exports = ActividadesLogica;
   else g.ActividadesLogica = ActividadesLogica;
 })(typeof window !== 'undefined' ? window : globalThis);

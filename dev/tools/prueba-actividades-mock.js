@@ -299,6 +299,54 @@ const volver = (p) => p.evaluate(() => document.querySelector('#pantalla-activid
       assert.equal(db.actividades.find((x) => x.id === ACT).titulo, 'Pádel del jueves (cambiado)');
     });
 
+    await paso('lugares con Google Maps: etiqueta por tipo, destino del trekking, pegar lo que copia Maps y el botón del detalle', async () => {
+      // sin link: el detalle ofrece buscar el lugar por nombre
+      assert.equal(await pa.$eval('#maps-lugar', (e) => e.textContent), 'Ver en Maps');
+      assert.match(await pa.$eval('#maps-lugar', (e) => e.href), /^https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=/);
+      await pa.evaluate(() => [...document.querySelectorAll('#pantalla-actividades .btn-sec')].find((b) => b.textContent === 'Editar').click());
+      await pa.waitForSelector('#f-lugar-link');
+      assert.equal(await texto(pa, 'label[for="f-lugar"]'), 'Club o cancha');
+      assert.equal(await pa.$eval('#f-destino', (e) => e.closest('.campo').hidden), true, 'el pádel no tiene destino');
+      await pa.select('#f-tipo', 'trekking');
+      assert.equal(await texto(pa, 'label[for="f-lugar"]'), 'Punto de encuentro');
+      assert.equal(await pa.$eval('#f-destino', (e) => e.closest('.campo').hidden), false, 'el trekking tiene destino');
+      await pa.select('#f-tipo', 'padel');
+      // un link que no es de Maps no se guarda
+      const upd = n('A:actividades:update');
+      await pa.$eval('#f-lugar-link', (e) => { e.value = 'https://evil.com/maps'; });
+      await clic(pa, '#btn-guardar-act');
+      assert.match(await texto(pa, '.form-act .error'), /no es de Google Maps/);
+      assert.equal(n('A:actividades:update'), upd);
+      // con el nombre vacío, pegar lo que copia Maps completa el nombre; al salir queda solo el link
+      await pa.$eval('#f-lugar', (e) => { e.value = ''; });
+      await pa.$eval('#f-lugar-link', (e) => { e.value = ''; });
+      await pa.$eval('#f-lugar-link', (e) => {
+        const dt = new DataTransfer(); dt.setData('text/plain', 'Club Norte Pádel\nAv. Libertador 1234\nhttps://maps.app.goo.gl/zzPrueba1');
+        e.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+      });
+      assert.equal(await pa.$eval('#f-lugar', (e) => e.value), 'Club Norte Pádel');
+      assert.equal(await pa.$eval('#f-lugar-link', (e) => e.value), 'https://maps.app.goo.gl/zzPrueba1');
+      await clic(pa, '#btn-guardar-act');
+      await pa.waitForSelector('#maps-lugar');
+      const act = db.actividades.find((x) => x.id === ACT);
+      assert.equal(act.lugar, 'Club Norte Pádel');
+      assert.equal(act.lugar_link, 'https://maps.app.goo.gl/zzPrueba1');
+      assert.equal(act.destino, null);
+      assert.equal(await pa.$eval('#maps-lugar', (e) => e.textContent), 'Cómo llegar');
+      assert.equal(await pa.$eval('#maps-lugar', (e) => e.href), 'https://maps.app.goo.gl/zzPrueba1');
+      assert.equal(await pa.$eval('#maps-lugar', (e) => e.target + ' ' + e.rel), '_blank noopener noreferrer');
+      await pa.$eval('#maps-lugar', (e) => e.scrollIntoView({ block: 'center' }));
+      await pa.screenshot({ path: 'dev/shots/actividades-maps.png' });
+      await pa.evaluate(() => [...document.querySelectorAll('#pantalla-actividades .btn-sec')].find((b) => b.textContent === 'Editar').click());
+      await pa.waitForSelector('#f-lugar-link');
+      await pa.select('#f-tipo', 'trekking');
+      await pa.$eval('#f-lugar', (e) => e.scrollIntoView({ block: 'start' }));
+      await pa.screenshot({ path: 'dev/shots/actividades-maps-form.png' });
+      await pa.select('#f-tipo', 'padel');
+      await pa.evaluate(() => document.querySelector('.form-act .volver, .form-act button').click());
+      await pa.waitForSelector('#btn-voy');
+    });
+
     await paso('punto 5: cancelada no muestra Editar ni Confirmar', async () => {
       await clic(pa, '#btn-cancelar');
       await clic(pa, '#btn-cancelar'); // segundo toque

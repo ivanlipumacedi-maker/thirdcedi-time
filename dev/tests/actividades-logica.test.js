@@ -157,3 +157,66 @@ test('reactivable: solo el creador, solo cancelada y solo si todavía no pasó l
   assert.equal(A.reactivable({ ...c, tiene_tercer: true, tercer_fecha: '2026-12-11T23:00:00Z' }, ahora, 'yo'), true);
   assert.equal(A.reactivable(null, ahora, 'yo'), false);
 });
+
+// ---- lugares con link de Google Maps ----
+test('linkMaps: acepta los links de Maps y el texto que copia Maps al compartir', () => {
+  assert.equal(A.linkMaps('https://maps.app.goo.gl/AbC123xyz'), 'https://maps.app.goo.gl/AbC123xyz');
+  assert.equal(A.linkMaps('https://www.google.com/maps/place/Cerro+Uritorco/@-30.8,-64.5,13z'), 'https://www.google.com/maps/place/Cerro+Uritorco/@-30.8,-64.5,13z');
+  assert.equal(A.linkMaps('https://www.google.com.ar/maps/place/X'), 'https://www.google.com.ar/maps/place/X');
+  assert.equal(A.linkMaps('https://goo.gl/maps/xyz'), 'https://goo.gl/maps/xyz');
+  assert.equal(A.linkMaps('Complejo El Potrero\nAv. Siempreviva 742\nhttps://maps.app.goo.gl/q1W2e3 '), 'https://maps.app.goo.gl/q1W2e3');
+});
+test('linkMaps: rechaza lo que no es Google Maps', () => {
+  for (const malo of ['javascript:alert(1)', 'http://maps.app.goo.gl/x', 'https://evil.com/maps', 'https://google.com.evil.com/maps/x',
+    'https://www.google.com/search?q=x', 'https://goo.gl/xyz', 'https://user:pw@maps.app.goo.gl/x', 'https://maps.app.goo.gl:8443/x', 'nada', '', null]) {
+    assert.equal(A.linkMaps(malo), null, String(malo));
+  }
+});
+test('nombreCompartido: saca el nombre del texto de Maps', () => {
+  assert.equal(A.nombreCompartido('Complejo El Potrero\r\nAv. Siempreviva 742\r\nhttps://maps.app.goo.gl/q1W2e3'), 'Complejo El Potrero');
+  assert.equal(A.nombreCompartido('https://maps.app.goo.gl/q1W2e3'), '');
+  assert.equal(A.nombreCompartido('Bar sin link'), '');
+});
+test('leerLink y mapsDe', () => {
+  assert.equal(A.leerLink('  '), null);
+  assert.equal(A.leerLink('Bar\nhttps://maps.app.goo.gl/a'), 'https://maps.app.goo.gl/a');
+  assert.equal(A.leerLink('cualquier cosa'), 'cualquier cosa');
+  assert.deepEqual(A.mapsDe('Bar', 'https://maps.app.goo.gl/a'), { href: 'https://maps.app.goo.gl/a', conLink: true });
+  assert.deepEqual(A.mapsDe('Pilar, Bs As', null), { href: 'https://www.google.com/maps/search/?api=1&query=Pilar%2C%20Bs%20As', conLink: false });
+  assert.deepEqual(A.mapsDe('Bar', 'javascript:alert(1)'), { href: 'https://www.google.com/maps/search/?api=1&query=Bar', conLink: false });
+  assert.equal(A.mapsDe('', null), null);
+});
+test('lugares: etiqueta según el tipo; el trekking tiene destino', () => {
+  assert.equal(A.lugares('futbol').etiqueta, 'Cancha');
+  assert.equal(A.lugares('trekking').etiqueta, 'Punto de encuentro');
+  assert.ok(A.lugares('trekking').destino);
+  assert.ok(!A.lugares('asado').destino);
+  assert.equal(A.lugares('cualquiera').etiqueta, 'Lugar');
+});
+test('validar: links de Maps y destino', () => {
+  const base = { titulo: 'x', tipo: 'trekking', fecha: '2026-12-01T10:00:00Z', lugar: 'YPF' };
+  assert.equal(A.validar({ ...base, lugar: '' }), 'Indicá el punto de encuentro.');
+  assert.equal(A.validar({ ...base, lugar_link: 'https://maps.app.goo.gl/a' }), null);
+  assert.match(A.validar({ ...base, lugar_link: 'https://evil.com/maps' }), /no es de Google Maps/);
+  assert.match(A.validar({ ...base, destino_link: 'https://maps.app.goo.gl/b' }), /nombre de a dónde se va/);
+  assert.equal(A.validar({ ...base, destino: 'Cerro', destino_link: 'https://maps.app.goo.gl/b' }), null);
+  const ter = { ...base, tiene_tercer: true, tercer_lugar: 'Parrilla', tercer_fecha: '2026-12-01T15:00:00Z' };
+  assert.equal(A.validar({ ...ter, tercer_link: 'https://maps.app.goo.gl/c' }), null);
+  assert.match(A.validar({ ...ter, tercer_link: 'hola' }), /no es de Google Maps/);
+});
+test('linkDeLugarConocido: el link del mismo lugar en otra actividad (la más nueva)', () => {
+  const acts = [
+    { fecha: '2026-10-01T10:00:00Z', lugar: 'Complejo El Potrero', lugar_link: 'https://maps.app.goo.gl/viejo' },
+    { fecha: '2026-11-01T10:00:00Z', lugar: 'complejo  el potrero ', lugar_link: 'https://maps.app.goo.gl/nuevo' },
+    { fecha: '2026-11-05T10:00:00Z', lugar: 'Otro', lugar_link: 'https://evil.com/maps', tercer_lugar: 'La Parrilla', tercer_link: 'https://maps.app.goo.gl/parri' },
+  ];
+  assert.equal(A.linkDeLugarConocido('Complejo El Potrero', acts), 'https://maps.app.goo.gl/nuevo');
+  assert.equal(A.linkDeLugarConocido('la parrilla', acts), 'https://maps.app.goo.gl/parri');
+  assert.equal(A.linkDeLugarConocido('Otro', acts), null, 'un link inválido no se copia');
+  assert.equal(A.linkDeLugarConocido('', acts), null);
+});
+test('linkMaps: no deja pasar los redirectores de Google', () => {
+  assert.equal(A.linkMaps('https://maps.google.com/url?q=https://phishing.example'), null);
+  assert.equal(A.linkMaps('https://www.google.com/url?q=https://phishing.example'), null);
+  assert.equal(A.linkMaps('https://maps.google.com/?q=Cerro+Uritorco'), 'https://maps.google.com/?q=Cerro+Uritorco');
+});

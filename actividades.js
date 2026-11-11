@@ -299,6 +299,12 @@
     await refrescar();
   }
 
+  function botonMaps(nombre, link, id) {
+    const m = L.mapsDe(nombre, link);
+    // sin link es una búsqueda por nombre (puede no ser exacta): más discreta que "Cómo llegar"
+    return m && h('a', { class: 'btn-maps' + (m.conLink ? '' : ' btn-maps-buscar'), id, href: m.href, target: '_blank', rel: 'noopener noreferrer' }, ico('lugar'), m.conLink ? 'Cómo llegar' : 'Ver en Maps');
+  }
+
   function detalle(a) {
     const yo = yoId();
     const cancelada = a.estado === 'cancelada';
@@ -317,6 +323,10 @@
 
     const f = partes(a.fecha);
     const dato = (icono, etiqueta, valor) => h('div', { class: 'dato-fila' }, ico(icono), h('dt', { class: 'sr' }, etiqueta), h('dd', null, valor));
+    // el lugar con su botón a Google Maps: "Cómo llegar" si cargaron el link; si no, "Buscar en Maps" por el nombre
+    const lg = L.lugares(a.tipo);
+    const lugarCon = (nombre, link, id, etq) => h('span', { class: 'dato-lugar' },
+      h('span', null, etq && h('span', { class: 'dato-etq' }, etq + ': '), nombre), botonMaps(nombre, link, id));
     const out = [
       volverBtn(() => irA({ tipo: 'lista' })),
       h('div', { class: 'det-cab' + (cancelada ? ' cancelada' : '') },
@@ -325,7 +335,8 @@
         (a.estado === 'confirmada' || cancelada) && h('p', { class: 'tarjeta-badges' }, a.estado === 'confirmada' && badge('Confirmada', 'ok'), cancelada && badge('Cancelada', 'mal'))),
       h('dl', { class: 'datos' },
         dato('reloj', 'Cuándo', h('span', null, fechaLarga(a.fecha) + ', ', h('span', { class: 'hora' }, f.hora))),
-        dato('lugar', 'Dónde', a.lugar),
+        dato('lugar', lg.corto, lugarCon(a.lugar, a.lugar_link, 'maps-lugar', a.destino ? lg.corto : null)),
+        a.destino && dato('lugar', lg.destinoCorto || 'Destino', lugarCon(a.destino, a.destino_link, 'maps-destino', lg.destinoCorto || 'Destino')),
         dato('perfil', 'Organiza', perfilDe(a.creador).nombre)),
       a.descripcion && h('p', { class: 'dato desc' }, a.descripcion),
       h('section', { class: 'parte-act', 'aria-labelledby': 'h-parte-act' },
@@ -341,6 +352,7 @@
         h('h2', { class: 'sub talon-titulo', id: 'h-tercer' }, ico('tercer', null, 'talon-ico'), 'Tercer tiempo ', h('span', { class: 'cuenta' }, '(' + enTer.length + ')')),
         h('p', { class: 'talon-cuando' }, h('span', { class: 'talon-hora' }, ft.hora),
           h('span', { class: 'talon-donde' }, h('span', { class: 'talon-lugar' }, a.tercer_lugar), h('span', { class: 'talon-dia' }, fechaLarga(a.tercer_fecha)))),
+        botonMaps(a.tercer_lugar, a.tercer_link, 'maps-tercer'),
         cancelada ? null : h('button', { type: 'button', id: 'btn-voy-tercer', class: voyTer ? 'btn-sec btn-ancho' : 'btn-primario btn-ancho', on: { click: alternar('tercer', voyTer) } }, voyTer ? 'Ya no voy al tercer tiempo' : 'Voy al tercer tiempo'),
         anotadosLista(enTer)));
     }
@@ -385,12 +397,44 @@
     const inTitulo = h('input', { id: 'f-titulo', type: 'text', maxLength: 80, value: v.titulo || '', placeholder: 'Ej.: Pádel del jueves' });
     const inFecha = h('input', { id: 'f-fecha', type: 'datetime-local', value: L.aInputArg(v.fecha) });
     const inLugar = h('input', { id: 'f-lugar', type: 'text', maxLength: 120, value: v.lugar || '' });
+    // el link de Maps de un lugar: se puede pegar el texto entero que copia Maps al compartir (si el nombre está
+    // vacío, se completa con el de Maps) y al salir del campo queda solo el link
+    const inLink = (id, valor, inNombre, etiqueta) => {
+      const el = h('input', { id, type: 'text', inputMode: 'url', autocomplete: 'off', spellcheck: false, maxLength: 2000, value: valor || '',
+        placeholder: 'Pegá el link de Maps (opcional)', 'aria-label': etiqueta });
+      // el mismo lugar de otra actividad que ya tenía link: se completa solo (la cancha de siempre)
+      inNombre.addEventListener('change', () => {
+        if (el.value.trim()) return;
+        const l = L.linkDeLugarConocido(inNombre.value, actividades);
+        if (l) el.value = l;
+      });
+      // al pegar se lee el portapapeles: un campo de una línea saca los saltos y se perdería qué renglón es el nombre
+      el.addEventListener('paste', (e) => {
+        const crudo = e.clipboardData && e.clipboardData.getData('text');
+        const l = crudo && L.linkMaps(crudo);
+        if (!l) return;
+        e.preventDefault();
+        el.value = l;
+        const n = L.nombreCompartido(crudo);
+        if (n && !inNombre.value.trim()) inNombre.value = n;
+      });
+      el.addEventListener('change', () => { const l = L.linkMaps(el.value); if (l) el.value = l; });
+      return el;
+    };
+    const lblLugar = h('label', { for: 'f-lugar' });
+    const inLugarLink = inLink('f-lugar-link', v.lugar_link, inLugar, 'Link de Google Maps del lugar');
+    const ayudaLink = h('p', { class: 'ayuda ayuda-link' }, 'En Maps tocá Compartir y Copiar, y pegalo acá: así llegan con un toque.');
+    const inDestino = h('input', { id: 'f-destino', type: 'text', maxLength: 120, value: v.destino || '' });
+    const lblDestino = h('label', { for: 'f-destino' });
+    const inDestinoLink = inLink('f-destino-link', v.destino_link, inDestino, 'Link de Google Maps del destino');
+    const bloqueDestino = h('div', { class: 'campo' }, lblDestino, inDestino, inDestinoLink);
     const inCupo = h('input', { id: 'f-cupo', type: 'number', min: '1', step: '1', inputMode: 'numeric', value: v.cupo != null ? String(v.cupo) : '', placeholder: 'Sin límite' });
     const inDesc = h('textarea', { id: 'f-desc', maxLength: 500, rows: 3, value: v.descripcion || '' });
     const chkTer = h('input', { id: 'f-tercer', type: 'checkbox', checked: !!v.tiene_tercer });
     const inTerLugar = h('input', { id: 'f-ter-lugar', type: 'text', maxLength: 120, value: v.tercer_lugar || '', placeholder: 'Ej.: Parrilla de la esquina' });
     const inTerFecha = h('input', { id: 'f-ter-fecha', type: 'datetime-local', value: L.aInputArg(v.tercer_fecha) });
-    const bloqueTer = h('div', { class: 'bloque-tercer' }, campo('f-ter-lugar', 'Lugar del tercer tiempo', inTerLugar), campo('f-ter-fecha', 'Cuándo es el tercer tiempo', inTerFecha));
+    const inTerLink = inLink('f-ter-link', v.tercer_link, inTerLugar, 'Link de Google Maps del tercer tiempo');
+    const bloqueTer = h('div', { class: 'bloque-tercer' }, campo('f-ter-lugar', 'Lugar del tercer tiempo', [inTerLugar, inTerLink]), campo('f-ter-fecha', 'Cuándo es el tercer tiempo', inTerFecha));
     const bloqueOtro = campo('f-otro', 'Qué actividad es', inOtro);
     const err = h('p', { class: 'error', role: 'alert', hidden: true });
     // Apagar el tercer tiempo quita a sus anotados (lo hace la base): se avisa en la página cuántos antes de guardar.
@@ -405,7 +449,11 @@
       h('div', { class: 'fila-botones' },
         h('button', { type: 'button', id: 'btn-confirmar-tercer', class: 'btn-peligro', on: { click: () => { confirmado = true; guardar(); } } }, 'Sí, sacarlo y guardar'),
         h('button', { type: 'button', id: 'btn-dejar-tercer', class: 'btn-sec', 'aria-describedby': 'aviso-tercer-txt', on: { click: () => { chkTer.checked = true; sync(); chkTer.focus(); } } }, 'No, dejar el tercer tiempo')));
-    const sync = () => { bloqueOtro.hidden = selTipo.value !== 'otra'; bloqueTer.hidden = !chkTer.checked; aviso.hidden = true; confirmado = false; };
+    const sync = () => {
+      const lg = L.lugares(selTipo.value);
+      lblLugar.textContent = lg.etiqueta; inLugar.placeholder = lg.ejemplo;
+      bloqueDestino.hidden = !lg.destino; lblDestino.textContent = lg.destino || ''; inDestino.placeholder = lg.destinoEjemplo || '';
+      bloqueOtro.hidden = selTipo.value !== 'otra'; bloqueTer.hidden = !chkTer.checked; aviso.hidden = true; confirmado = false; };
     selTipo.addEventListener('change', sync); chkTer.addEventListener('change', sync);
     sync();
 
@@ -415,7 +463,8 @@
       campo('f-tipo', 'Tipo', h('div', { class: 'f-tipo' }, icoTipo, selTipo)), bloqueOtro,
       campo('f-titulo', 'Título', inTitulo),
       campo('f-fecha', 'Día y hora (hora de Argentina)', inFecha),
-      campo('f-lugar', 'Lugar', inLugar),
+      h('div', { class: 'campo' }, lblLugar, inLugar, inLugarLink, ayudaLink),
+      bloqueDestino,
       campo('f-cupo', 'Cupo (opcional)', inCupo),
       campo('f-desc', 'Descripción (opcional)', inDesc),
       h('div', { class: 'talon talon-form' },
@@ -429,17 +478,22 @@
       const actual = editando ? actividades.find((x) => x.id === a.id) || a : null;
       if (editando && !L.editable(actual)) { err.textContent = MSG_CANCELADA; err.hidden = false; aviso.hidden = true; return; }
       const tercer = chkTer.checked;
+      const conDestino = !!L.lugares(selTipo.value).destino && !!(inDestino.value.trim() || inDestinoLink.value.trim());
       const datos = {
         tipo: selTipo.value,
         tipo_otro: selTipo.value === 'otra' ? inOtro.value.trim() : null,
         titulo: inTitulo.value.trim(),
         fecha: L.desdeInputArg(inFecha.value),
         lugar: inLugar.value.trim(),
+        lugar_link: L.leerLink(inLugarLink.value),
+        destino: conDestino ? inDestino.value.trim() || null : null,
+        destino_link: conDestino ? L.leerLink(inDestinoLink.value) : null,
         cupo: inCupo.value.trim() === '' ? null : Number(inCupo.value),
         descripcion: inDesc.value.trim(),
         tiene_tercer: tercer,
         tercer_lugar: tercer ? inTerLugar.value.trim() : null,
         tercer_fecha: tercer ? L.desdeInputArg(inTerFecha.value) : null,
+        tercer_link: tercer ? L.leerLink(inTerLink.value) : null,
       };
       const msg = L.validar(datos);
       err.hidden = !msg; err.textContent = msg || '';
