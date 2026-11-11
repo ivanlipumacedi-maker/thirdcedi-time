@@ -463,7 +463,7 @@
 
     // ---------- Modo ----------
     function ponerModo(m) {
-      if (m === modo || grab || ocupado) return;
+      if (m === modo || grab || ocupado || (m === 'video' && op.soloFoto)) return;
       modo = m; panel(false);
       raiz.classList.toggle('modo-video', m === 'video'); raiz.classList.toggle('modo-foto', m === 'foto');
       q('m-foto').setAttribute('aria-pressed', String(m === 'foto')); q('m-video').setAttribute('aria-pressed', String(m === 'video'));
@@ -712,6 +712,9 @@
     }
     function abrir(o = {}) {
       op = o; ultima = null; brillo = 0; ponerDestino(o.destino); q('ultima').replaceChildren(); q('ultima').setAttribute('aria-label', 'Ver la última en el álbum');
+      // soloFoto (la usa el chat): sin el modo video
+      q('m-video').hidden = !!o.soloFoto;
+      if (o.soloFoto && modo !== 'foto') { modo = 'foto'; raiz.classList.remove('modo-video'); raiz.classList.add('modo-foto'); q('m-foto').setAttribute('aria-pressed', 'true'); q('m-video').setAttribute('aria-pressed', 'false'); q('disparo').setAttribute('aria-label', 'Sacar foto'); }
       raiz.hidden = false; panel(false);
       history.pushState({ ...(history.state || {}), cam: 1 }, '', location.hash || location.pathname + location.search);
       requestAnimationFrame(pintarPista);

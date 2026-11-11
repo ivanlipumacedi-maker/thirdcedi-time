@@ -53,12 +53,18 @@
     const elLista = h('div', { class: 'chat-lista', role: 'log', 'aria-live': 'polite', 'aria-label': 'Mensajes' });
     const inTexto = h('textarea', { class: 'chat-texto', rows: 1, maxLength: L.MAX_TEXTO, placeholder: 'Escribí un mensaje', 'aria-label': 'Mensaje', enterKeyHint: tactil ? 'enter' : 'send' });
     const inFoto = h('input', { type: 'file', accept: 'image/*', hidden: true, id: 'chat-foto-' + Math.random().toString(36).slice(2) });
-    const btnFoto = h('button', { type: 'button', class: 'chat-adj', 'aria-label': 'Mandar una foto', on: { click: () => inFoto.click() } }, g.App.icono('camara'));
+    // la cámara saca la foto con la cámara de la app (solo foto) y la manda al chat; la galería sube una que ya tenés
+    const abrirCamara = () => {
+      if (!g.Camara) { inFoto.click(); return; }
+      g.Camara.abrir({ soloFoto: true, destino: 'el chat', alSacar: async (p) => { g.Camara.cerrar(); if (p && p.foto) await enviarFoto(p.foto); } });
+    };
+    const btnFoto = h('button', { type: 'button', class: 'chat-adj', 'aria-label': 'Sacar una foto para el chat', on: { click: abrirCamara } }, g.App.icono('camara'));
+    const btnGaleria = h('button', { type: 'button', class: 'chat-adj', 'aria-label': 'Mandar una foto de la galería', on: { click: () => inFoto.click() } }, g.App.icono('galeria'));
     const btnEnviar = h('button', { type: 'submit', class: 'chat-enviar', 'aria-label': 'Enviar' }, g.App.icono('enviar'));
     const barraEdicion = h('div', { class: 'chat-edicion', hidden: true },
       h('span', null, 'Editando mensaje'),
       h('button', { type: 'button', class: 'btn-link', on: { click: () => cancelarEdicion() } }, 'Cancelar'));
-    const form = h('form', { class: 'chat-form', autocomplete: 'off' }, btnFoto, inFoto, inTexto, btnEnviar);
+    const form = h('form', { class: 'chat-form', autocomplete: 'off' }, btnFoto, btnGaleria, inFoto, inTexto, btnEnviar);
     const raiz = h('div', { class: 'chat' }, h('h2', { class: 'sub titulo-ico' }, g.App.icono('chat'), 'Chat'), elLista, barraEdicion, form);
     cont.replaceChildren(raiz);
 

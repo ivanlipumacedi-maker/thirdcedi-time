@@ -87,7 +87,7 @@ const texto = (p, sel) => p.$eval(sel, (e) => e.textContent);
     assert.equal(await texto(B, '#btn-voy'), 'Voy', 'B no debe figurar en la actividad');
 
     // A, que está viendo el detalle, ve a B en el tercer tiempo sin recargar
-    await A.waitForFunction(() => /Tercer tiempo \(1\)/.test(document.body.innerText), { timeout: 15000 });
+    await A.waitForFunction(() => /Tercer tiempo\s*\(1\)/.test(document.body.innerText), { timeout: 15000 });
     // Cada parte es un h2 seguido de su lista (o de "Todavía no se anotó nadie."): se lee el texto entre los h2.
     const anotadosA = await A.evaluate(() => {
       const [hAct, hTer] = [...document.querySelectorAll('#pantalla-actividades h2.sub')].filter((e) => /^La actividad|Tercer tiempo/.test(e.textContent));
