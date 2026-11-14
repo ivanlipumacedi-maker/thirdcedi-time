@@ -1,5 +1,5 @@
-// ThirdCEDI Time: copia de las fotos y videos del álbum en Google Drive.
-// Lo publica Ivan como Web App en su cuenta (Ejecutar como: yo; Quién tiene acceso: cualquier persona).
+// CEDI CLUB (antes ThirdCEDI Time): copia de las fotos y videos del álbum en Google Drive.
+// Lo publica Ivan como Web App en la cuenta de Google exclusiva de CEDI CLUB (desde 2026-11-14) (Ejecutar como: yo; Quién tiene acceso: cualquier persona).
 // Lo llama solo la Edge Function "avisos" con un secreto compartido.
 //
 // Configuración (una sola vez), en el editor de Apps Script:
@@ -11,10 +11,10 @@
 //   carpetaId: si ya se creó antes, su id (así un cambio de título no crea otra carpeta)
 //   mime:      image/jpeg, video/mp4 o video/webm (los videos llegan solo hasta 35 MB: más grandes no entran en un POST)
 // Devuelve: { id, carpetaId, carpetaUrl, ya? }  o  { error }
-// Todo queda dentro de la carpeta raíz "ThirdCEDI Time" de Mi unidad (se crea si no existe).
+// Todo queda dentro de la carpeta raíz "CEDI CLUB" de Mi unidad (se crea si no existe).
 // Si ya hay un archivo con ese nombre en la subcarpeta, devuelve ese (un reintento no duplica).
 
-var RAIZ = 'ThirdCEDI Time';
+var RAIZ = 'CEDI CLUB';
 var MIMES = { 'image/jpeg': true, 'video/mp4': true, 'video/webm': true };
 
 function responder(obj) {
