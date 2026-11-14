@@ -304,7 +304,49 @@ async function drive() {
       if (u.error) { errores.push('no se pudo guardar el error de la foto: ' + u.error.message); break; }
     }
   }
-  return { subidas, tomadas: fotos.length, errores, ...(await liberar()) };
+  let lectores: unknown = null;
+  try { lectores = await lectoresDrive(url, secreto); } catch (e) { lectores = { error: String((e as Error).message).slice(0, 300) }; }
+  return { subidas, tomadas: fotos.length, errores, lectores, ...(await liberar()) };
+}
+
+// Quién ve cada carpeta de Drive (decisión de Ivan, 2026-11-14): la de una actividad, su creador y sus anotados (como el
+// álbum en la app); "Fotos de todos", los miembros activos. Se manda en cada pasada; el Apps Script guarda una huella
+// por carpeta y no toca nada si la lista no cambió.
+async function mailsPorId() {
+  const m = new Map<string, string>();
+  for (let page = 1; page <= 20; page++) {
+    const { data, error } = await sb.auth.admin.listUsers({ page, perPage: 1000 });
+    if (error) throw error;
+    for (const u of data.users) if (u.email) m.set(u.id, u.email.toLowerCase());
+    if (data.users.length < 1000) break;
+  }
+  return m;
+}
+async function lectoresDrive(url: string, secreto: string) {
+  const ra = await sb.from('actividades').select('id,creador,drive_url').not('drive_url', 'is', null);
+  if (ra.error) throw ra.error;
+  const acts = (ra.data || []).filter((a: { drive_url: string | null }) => idDeCarpeta(a.drive_url));
+  const rp = await sb.from('perfiles').select('id').eq('activo', true);
+  if (rp.error) throw rp.error;
+  const activos = new Set((rp.data || []).map((p: { id: string }) => p.id));
+  const porAct = new Map<string, Set<string>>();
+  if (acts.length) {
+    const rs = await sb.from('asistencias').select('actividad,persona').in('actividad', acts.map((a: { id: string }) => a.id));
+    if (rs.error) throw rs.error;
+    for (const s of rs.data || []) {
+      if (!porAct.has(s.actividad)) porAct.set(s.actividad, new Set());
+      porAct.get(s.actividad)!.add(s.persona);
+    }
+  }
+  const mails = await mailsPorId();
+  const aMails = (ids: Iterable<string>) => [...new Set([...ids].filter((id) => activos.has(id)).map((id) => mails.get(id)).filter(Boolean))] as string[];
+  const carpetas = acts.map((a: { id: string; creador: string; drive_url: string }) => ({
+    carpetaId: idDeCarpeta(a.drive_url), mails: aMails([a.creador, ...(porAct.get(a.id) || [])]),
+  }));
+  carpetas.push({ nombre: CARPETA_TODOS, mails: aMails(activos) } as never);
+  const r = await fetch(url, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ secreto, accion: 'lectores', carpetas }) });
+  const texto = await r.text();
+  try { return JSON.parse(texto); } catch { throw new Error('Drive (lectores) respondió algo que no es JSON (' + r.status + '): ' + texto.slice(0, 200)); }
 }
 
 // Espacio de la app (plan gratis: 1 GB por proyecto). Pasado el 70 %, se borran de la app las originales

@@ -104,6 +104,8 @@
     // ---------- Estructura ----------
     const inGaleria = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, id: 'album-galeria-' + act.slice(0, 8) });
     const linkDrive = h('a', { class: 'album-drive', id: 'album-drive', target: '_blank', rel: 'noopener', hidden: true }, g.App.icono('drive'), 'Ver en Drive');
+    // la carpeta de Drive la ven solo los anotados, con una cuenta de Google de su mail (decisión de Ivan, 2026-11-14)
+    const ayudaDrive = h('p', { class: 'ayuda ayuda-link', id: 'album-drive-ayuda', hidden: true }, 'Se abre con una cuenta de Google de tu mail. Si no tenés, creala con tu mail en accounts.google.com.');
     const elEstadoTxt = h('div', { class: 'album-estado-txt', 'aria-live': 'polite' });
     const elBarra = h('div', { class: 'barra', hidden: true }, h('i'));
     const elEstado = h('div', { class: 'album-estado' }, elEstadoTxt, elBarra);
@@ -115,7 +117,7 @@
         h('button', { type: 'button', id: 'album-camara', class: 'btn-primario btn-chico btn-con-ico', on: { click: abrirCamara } }, g.App.icono('camara'), 'Cámara'),
         h('button', { type: 'button', id: 'album-galeria', class: 'btn-sec btn-chico btn-con-ico', on: { click: () => inGaleria.click() } }, g.App.icono('galeria'), 'Galería'),
         inGaleria),
-      linkDrive, elEstado, elGrilla);
+      linkDrive, ayudaDrive, elEstado, elGrilla);
 
     // ---------- Pintar ----------
     function pintarEstado() {
@@ -128,6 +130,7 @@
       elBarra.firstChild.style.width = e.pct + '%';
       g.Camara.pendientes(pend);
       linkDrive.hidden = !driveUrl;
+      ayudaDrive.hidden = !driveUrl;
       if (driveUrl) linkDrive.href = driveUrl;
     }
 
