@@ -355,6 +355,11 @@
     }
 
     function filaMensaje(m) {
+      // alta o baja de la actividad (33): una línea centrada, sin burbuja, sin menú ni reacciones
+      if (m.tipo === 'sistema') {
+        return h('div', { class: 'chat-sistema', 'data-id': m.id, role: 'note' },
+          L.textoSistema(m, nombreDe(m.autor), m.autor === yo), h('span', { class: 'chat-hora' }, L.horaCorta(m.creado)));
+      }
       const mio = m.autor === yo;
       const eliminado = m.tipo === 'eliminado';
       if (eliminado) soltarMedio(m.id);
@@ -578,7 +583,7 @@
     }
     async function reaccionar(id, clave) {
       const m = lista.find((x) => x.id === id);
-      if (!m || m.tipo === 'eliminado' || esTmp(m) || reaccionando.has(id)) return;
+      if (!m || m.tipo === 'eliminado' || m.tipo === 'sistema' || esTmp(m) || reaccionando.has(id)) return;
       const antes = (reacs.get(id) && reacs.get(id).get(yo)) || null;
       const nueva = L.alternarReaccion(antes, clave);
       ponerReac(id, yo, nueva); pintar();
@@ -630,7 +635,7 @@
     // ---------- Responder citando ----------
     function responder(id) {
       const o = originalDe(id);
-      if (!o || o.tipo === 'eliminado' || String(id).startsWith('tmp-')) return;
+      if (!o || o.tipo === 'eliminado' || o.tipo === 'sistema' || String(id).startsWith('tmp-')) return;
       if (editandoId) cancelarEdicion(); // responder cancela la edición
       citando = id;
       citaNombre.textContent = 'Respondiendo a ' + (o.autor === yo ? 'vos' : nombreDe(o.autor));
@@ -1117,7 +1122,7 @@
     let capaMenu = null;
     function abrirMenu(id) {
       const m = lista.find((x) => x.id === id);
-      if (!m || esTmp(m) || eliminando.has(id) || (capaMenu && capas.includes(capaMenu))) return;
+      if (!m || m.tipo === 'sistema' || esTmp(m) || eliminando.has(id) || (capaMenu && capas.includes(capaMenu))) return;
       const eliminado = m.tipo === 'eliminado';
       const mia = (reacs.get(id) && reacs.get(id).get(yo)) || null;
       const hijos = [];

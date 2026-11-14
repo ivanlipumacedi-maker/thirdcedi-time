@@ -185,3 +185,29 @@ test('la copia de la Edge Function es idéntica a avisos-logica.js', () => {
   const raiz = path.join(__dirname, '..', '..');
   assert.equal(fs.readFileSync(path.join(raiz, 'dev/supabase/avisos/avisos-logica.js'), 'utf8'), fs.readFileSync(path.join(raiz, 'avisos-logica.js'), 'utf8'));
 });
+
+test('33: avisos personales agrupados por tipo, destino, autor y sala, con sus textos', () => {
+  const S = 'act:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const evs = [
+    { id: 1, tipo: 'gasto_rechazo', sala: S, autor: 'B', destino: 'A', detalle: 'Carne' },
+    { id: 2, tipo: 'gasto_rechazo', sala: S, autor: 'B', destino: 'A', detalle: 'Bebidas' },
+    { id: 3, tipo: 'pago_objetado', sala: S, autor: 'B', destino: 'A', detalle: 'no_recibio:3200' },
+    { id: 4, tipo: 'baja', sala: S, autor: 'C', destino: 'A', detalle: 'actividad' },
+    { id: 5, tipo: 'baja', sala: S, autor: 'C', destino: 'A', detalle: 'tercer' },
+    { id: 6, tipo: 'baja', sala: S, autor: 'D', destino: 'A', detalle: 'tercer' },
+    { id: 7, tipo: 'mensaje', sala: S, autor: 'B', mensaje: 'm' },
+    { id: 8, tipo: 'baja', sala: S, autor: 'C', destino: null, detalle: 'actividad' },
+  ];
+  const gs = L.agruparPersonales(evs);
+  assert.equal(gs.length, 4);
+  const de = (tipo, autor) => gs.find((g) => g.tipo === tipo && g.autor === autor);
+  assert.deepEqual(de('gasto_rechazo', 'B').ids, [1, 2]);
+  const t1 = L.textoPersonal(de('gasto_rechazo', 'B'), 'Asado', 'Beto');
+  assert.equal(t1.title, 'Cuentas de Asado');
+  assert.equal(t1.body, 'Beto dice que no estuvo en "Carne", "Bebidas". Ya no figura en esos gastos.');
+  assert.equal(t1.url, '#/actividad/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+  assert.match(L.textoPersonal(de('pago_objetado', 'B'), 'Asado', 'Beto').body, /^Beto dice que no recibió \$\s3\.200\. Ese pago no cuenta hasta que lo arreglen\.$/);
+  assert.equal(L.textoPersonal(de('baja', 'C'), 'Asado', 'Cami').body, 'Cami se bajó.');
+  assert.equal(L.textoPersonal(de('baja', 'D'), 'Asado', 'Dani').body, 'Dani se bajó del tercer tiempo.');
+  assert.equal(L.textoPersonal({ tipo: 'gasto_sumado', sala: S, detalles: ['Carne'] }, 'Asado', 'Ana').body, 'Ana te volvió a sumar a "Carne".');
+});

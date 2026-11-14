@@ -326,3 +326,11 @@ test('27: los tipos y claves del cliente coinciden con la migración', () => {
   assert.equal(L.VIDEO_MAX_BYTES, 104857600);
   for (const t of ['audio/webm', 'audio/ogg', 'audio/mp4', 'video/mp4', 'video/webm']) assert.ok(sql.includes("'" + t + "'"), 'el bucket no acepta ' + t);
 });
+
+test('33: líneas de sistema (altas y bajas de la actividad)', () => {
+  assert.equal(L.textoSistema({ texto: 'alta:actividad' }, 'Ana', false), 'Ana se sumó');
+  assert.equal(L.textoSistema({ texto: 'baja:tercer' }, 'Ana', false), 'Ana se bajó del tercer tiempo');
+  assert.equal(L.textoSistema({ texto: 'alta:tercer' }, 'Ana', true), 'Te sumaste al tercer tiempo');
+  assert.equal(L.textoSistema({ texto: 'baja:actividad' }, '', true), 'Te bajaste');
+  assert.equal(L.resumen({ tipo: 'sistema', texto: 'baja:actividad' }), 'Alguien se bajó');
+});

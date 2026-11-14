@@ -10,8 +10,19 @@
   const textoEditado = (nuevo, original) => { const t = String(nuevo ?? '').trim(); return textoValido(t) && t !== String(original ?? '').trim() ? t : null; };
 
   const NOMBRE_TIPO = { foto: 'Foto', audio: 'Audio', video: 'Video', sticker: 'Sticker' };
+  // líneas de sistema (33): las pone el servidor cuando alguien se anota o se baja de la actividad
+  const SISTEMA = {
+    'alta:actividad': ['se sumó', 'Te sumaste'], 'alta:tercer': ['se sumó al tercer tiempo', 'Te sumaste al tercer tiempo'],
+    'baja:actividad': ['se bajó', 'Te bajaste'], 'baja:tercer': ['se bajó del tercer tiempo', 'Te bajaste del tercer tiempo'],
+  };
+  /** "Ana se sumó" / "Te bajaste del tercer tiempo" */
+  function textoSistema(m, nombre, esYo) {
+    const t = SISTEMA[m && m.texto] || ['cambió su lugar en la actividad', 'Cambiaste tu lugar en la actividad'];
+    return esYo ? t[1] : (nombre || 'Alguien') + ' ' + t[0];
+  }
   function resumen(m) {
     if (m.tipo === 'eliminado') return 'Se eliminó este mensaje';
+    if (m.tipo === 'sistema') return textoSistema(m, 'Alguien', false);
     if (m.tipo === 'audio' || m.tipo === 'video') return NOMBRE_TIPO[m.tipo] + (m.duracion_ms ? ' (' + duracionTexto(m.duracion_ms) + ')' : '');
     if (NOMBRE_TIPO[m.tipo]) return NOMBRE_TIPO[m.tipo];
     const t = String(m.texto ?? '').trim();
@@ -175,7 +186,7 @@
     return [archivoAntes, rutaMini(archivoAntes)];
   }
 
-  const L = { MAX_TEXTO, TAM_PAGINA, textoValido, textoEditado, resumen, puedeEditar, EDITAR_MS, comparar, fusionar, fusionarLote, quitar, aplicarEvento,
+  const L = { MAX_TEXTO, TAM_PAGINA, textoValido, textoEditado, resumen, textoSistema, puedeEditar, EDITAR_MS, comparar, fusionar, fusionarLote, quitar, aplicarEvento,
     horaCorta, reconciliar, cursor, filtroAntes, escalar, rutaArchivo, rutaSticker, rutaMini, archivosABorrar,
     textoCita, citasFaltantes, errorDeCita, REACCIONES, NOMBRE_REACCION, alternarReaccion, agruparReacciones,
     duracionTexto, AUDIO_MIN_MS, AUDIO_MAX_MS, audioValido, mimeBase, extAudio, tipoAudio,

@@ -1,4 +1,4 @@
-// RLS, función cargar_gasto y triggers de Cuentas claras (11-cuentas.sql, 17 y 20: objetar) contra el proyecto real, con los usuarios
+// RLS, función cargar_gasto y triggers de Cuentas claras (11-cuentas.sql, 17, 20 y 33: reclamos) contra el proyecto real, con los usuarios
 // de prueba zz-prueba-a/b/c@cedi.com.ar. Las contraseñas se leen de .env (ZZ_PRUEBA_A_PASSWORD, _B_, _C_).
 // Las actividades de la prueba quedan canceladas con título "zz prueba cuentas"; los gastos y pagos se borran al final.
 // Uso: node dev/tests/cuentas-rls.mjs
@@ -191,13 +191,35 @@ try {
     assert.equal((await A.api('GET', `gastos?id=eq.${cancha.id}`)).data.length, 1, 'C borró la cancha');
   });
 
-  await paso('20: B, que está en el reparto, borra un gasto que cargó A ("No lo reconozco")', async () => {
-    const g = await cargar(A, 'A', act.id, 'actividad', A.id, 60, 'Carbón', [A.id, B.id]);
-    const r = await B.api('DELETE', `gastos?id=eq.${g.id}`);
-    assert.equal(r.status, 200, JSON.stringify(r.data));
-    assert.equal(r.data.length, 1, 'no borró nada');
-    assert.equal((await A.api('GET', `gastos?id=eq.${g.id}`)).data.length, 0);
-    assert.equal((await A.api('GET', `gasto_partes?gasto=eq.${g.id}`)).data.length, 0, 'quedó el reparto');
+  await paso('33: B, que está en el reparto, NO borra un gasto que cargó A: dice "No estuve" y sale solo él; A lo vuelve a sumar', async () => {
+    const g = await cargar(A, 'A', act.id, 'actividad', A.id, 60, 'Carbón', [A.id, B.id, C.id]);
+    vacio(await B.api('DELETE', `gastos?id=eq.${g.id}`));
+    assert.equal((await A.api('GET', `gastos?id=eq.${g.id}`)).data.length, 1, 'B lo borró');
+    // C no puede escribir directo en gasto_rechazos ni en gasto_partes, ni "No estuve" por otro
+    falla(await C.api('POST', 'gasto_rechazos', { gasto: g.id, actividad: act.id, persona: B.id }));
+    falla(await C.api('DELETE', `gasto_partes?gasto=eq.${g.id}&persona=eq.${B.id}`).then((r) => (r.status < 400 && r.data.length === 0 ? { status: 403, data: 'sin filas' } : r)));
+    // A (cargó y pagó) no puede decir "No estuve": lo borra
+    falla(await A.api('POST', 'rpc/gasto_no_estuve', { p_gasto: g.id }), /borralo/);
+    const r = await B.api('POST', 'rpc/gasto_no_estuve', { p_gasto: g.id });
+    assert.ok(r.status < 300, JSON.stringify(r.data));
+    const partes = (await A.api('GET', `gasto_partes?gasto=eq.${g.id}&select=persona`)).data.map((x) => x.persona).sort();
+    assert.deepEqual(partes, [A.id, C.id].sort(), 'reparto después de "No estuve"');
+    const rech = (await C.api('GET', `gasto_rechazos?gasto=eq.${g.id}&select=persona`)).data;
+    assert.deepEqual(rech.map((x) => x.persona), [B.id], 'C ve que B dijo que no estuvo');
+    // dos veces: ya no figura
+    falla(await B.api('POST', 'rpc/gasto_no_estuve', { p_gasto: g.id }), /No figurás/);
+    // B no se vuelve a sumar solo, ni C lo suma
+    falla(await B.api('POST', 'rpc/gasto_volver_a_sumar', { p_gasto: g.id, p_persona: B.id }));
+    falla(await C.api('POST', 'rpc/gasto_volver_a_sumar', { p_gasto: g.id, p_persona: B.id }));
+    // a quien no dijo "No estuve" no se lo puede meter por acá
+    falla(await A.api('POST', 'rpc/gasto_volver_a_sumar', { p_gasto: g.id, p_persona: C.id }), /ya está/);
+    const s = await A.api('POST', 'rpc/gasto_volver_a_sumar', { p_gasto: g.id, p_persona: B.id });
+    assert.ok(s.status < 300, JSON.stringify(s.data));
+    assert.equal((await A.api('GET', `gasto_partes?gasto=eq.${g.id}`)).data.length, 3, 'no volvió a 3');
+    assert.equal((await A.api('GET', `gasto_rechazos?gasto=eq.${g.id}`)).data.length, 0, 'quedó el rechazo');
+    // lo borra A, que lo cargó
+    const d = await A.api('DELETE', `gastos?id=eq.${g.id}`);
+    assert.equal(d.data.length, 1, 'A no lo pudo borrar');
     gastosDe.A = gastosDe.A.filter((x) => x !== g.id);
   });
 
@@ -224,6 +246,7 @@ try {
     falla(await B.api('POST', 'pagos', { actividad: act.id, parte: 'actividad', de: B.id, a: B.id, monto: 5 }));
     falla(await B.api('POST', 'pagos', { actividad: act.id, parte: 'actividad', de: B.id, a: A.id, monto: 5, cargado_por: A.id }), /permission denied|42501/i);
     falla(await B.api('POST', 'pagos', { actividad: act.id, parte: 'actividad', de: B.id, a: A.id, monto: 0 }));
+    falla(await B.api('POST', 'pagos', { actividad: act.id, parte: 'actividad', de: B.id, a: A.id, monto: 5, objetado: new Date().toISOString() }), /permission denied|42501/i);
   });
 
   await paso('pago: las dos personas tienen que figurar en las cuentas de la actividad', async () => {
@@ -231,15 +254,28 @@ try {
     falla(await A.api('POST', 'pagos', { actividad: solo.id, parte: 'actividad', de: B.id, a: A.id, monto: 5 }));
   });
 
-  await paso('20: un pago lo borra quien lo cargó o la otra parte; un tercero no', async () => {
+  await paso('33: un pago lo borra solo quien lo cargó; la otra parte lo marca (no se borra) y saca la marca; un tercero no', async () => {
     vacio(await C.api('DELETE', `pagos?id=eq.${pagoB.id}`));
-    assert.equal((await B.api('GET', `pagos?id=eq.${pagoB.id}`)).data.length, 1, 'C borró un pago entre B y A');
-    // B le paga 7 a A; A (la otra parte, no lo cargó) dice "No lo reconozco" y lo borra
     const p = await pagar(B, 'B', { actividad: act.id, parte: 'actividad', de: B.id, a: A.id, monto: 7 });
-    const r = await A.api('DELETE', `pagos?id=eq.${p.id}`);
-    assert.equal(r.status, 200, JSON.stringify(r.data));
-    assert.equal(r.data.length, 1, 'A no lo pudo borrar');
-    pagosDe.B = pagosDe.B.filter((x) => x !== p.id);
+    vacio(await A.api('DELETE', `pagos?id=eq.${p.id}`));
+    assert.equal((await B.api('GET', `pagos?id=eq.${p.id}`)).data.length, 1, 'A borró un pago que cargó B');
+    // marcar: ni quien lo cargó, ni un tercero, ni directo por update
+    falla(await B.api('POST', 'rpc/pago_objetar', { p_pago: p.id, p_objetar: true }), /no lo podés/);
+    falla(await C.api('POST', 'rpc/pago_objetar', { p_pago: p.id, p_objetar: true }), /no lo podés/);
+    const u = await A.api('PATCH', `pagos?id=eq.${p.id}`, { objetado: new Date().toISOString() });
+    assert.ok(u.status >= 400 || (Array.isArray(u.data) && u.data.length === 0), 'A escribió objetado directo: ' + JSON.stringify(u.data));
+    const m = await A.api('POST', 'rpc/pago_objetar', { p_pago: p.id, p_objetar: true });
+    assert.ok(m.status < 300, JSON.stringify(m.data));
+    const visto = (await B.api('GET', `pagos?id=eq.${p.id}&select=objetado,objetado_por`)).data[0];
+    assert.ok(visto.objetado && visto.objetado_por === A.id, 'B no ve la marca: ' + JSON.stringify(visto));
+    // un pago marcado no frena volver a cargar el mismo
+    const otro = await pagar(B, 'B', { actividad: act.id, parte: 'actividad', de: B.id, a: A.id, monto: 7 });
+    // sacar la marca
+    assert.ok((await A.api('POST', 'rpc/pago_objetar', { p_pago: p.id, p_objetar: false })).status < 300);
+    assert.equal((await B.api('GET', `pagos?id=eq.${p.id}&select=objetado`)).data[0].objetado, null);
+    // B (que los cargó) los borra
+    for (const id of [p.id, otro.id]) assert.equal((await B.api('DELETE', `pagos?id=eq.${id}`)).data.length, 1);
+    pagosDe.B = pagosDe.B.filter((x) => x !== p.id && x !== otro.id);
   });
 
   await paso('Review Focus 3: C se baja y sigue viendo su deuda (gastos, reparto y pagos) y puede pagarla', async () => {

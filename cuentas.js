@@ -5,9 +5,9 @@
 (function (g) {
   const L = g.CuentasLogica;
   const CAMPOS_G = 'id,actividad,parte,pagador,monto,concepto,creado,cargado_por';
-  const CAMPOS_P = 'id,actividad,parte,de,a,monto,creado,cargado_por';
+  const CAMPOS_P = 'id,actividad,parte,de,a,monto,creado,cargado_por,objetado,objetado_por';
   // los motivos que devuelve la base ya están en español: se muestran tal cual
-  const MOTIVO = /^(La actividad|Quien pagó|Solo |Elegí|El monto|El concepto|Son demasiadas|Esa persona|Ese pago)/;
+  const MOTIVO = /^(La actividad|Quien pagó|Solo |Elegí|El monto|El concepto|Son demasiadas|Esa persona|Ese pago|Ese gasto|No figurás|Lo cargaste)/;
 
   const nodos = (xs) => xs.flat(Infinity).filter((c) => c != null && c !== false && c !== '');
   function h(tag, props, ...hijos) {
@@ -31,7 +31,7 @@
     const sb = g.App.sb;
     let ctx = ctx0;
     const act = ctx.actividad.id;
-    let gastos = [], partes = [], pagos = [];
+    let gastos = [], partes = [], pagos = [], rechazos = [];
     let estado = 'cargando';      // 'cargando' | 'error' | 'ok'
     let cerrado = false;
     let enVuelo = null;           // la recarga en curso (una sola a la vez)
@@ -88,11 +88,13 @@
 
     // ---------- Datos ----------
     async function cargar() {
-      const [gs, ps] = await Promise.all([
+      const [gs, ps, rs] = await Promise.all([
         sb.from('gastos').select(CAMPOS_G).eq('actividad', act).order('creado', { ascending: false }),
         sb.from('pagos').select(CAMPOS_P).eq('actividad', act).order('creado', { ascending: false }),
+        // quienes dijeron "No estuve" (33)
+        sb.from('gasto_rechazos').select('gasto,persona,creado').eq('actividad', act).order('creado'),
       ]);
-      if (gs.error || ps.error) throw (gs.error || ps.error);
+      if (gs.error || ps.error || rs.error) throw (gs.error || ps.error || rs.error);
       let pts = [];
       if (gs.data.length) {
         const r = await sb.from('gasto_partes').select('gasto,persona').in('gasto', gs.data.map((x) => x.id));
@@ -100,7 +102,7 @@
         pts = r.data;
       }
       if (cerrado) return;
-      gastos = gs.data; pagos = ps.data; partes = pts;
+      gastos = gs.data; pagos = ps.data; partes = pts; rechazos = rs.data || [];
       estado = 'ok';
     }
     // Igual que en actividades: si la piden con otra en vuelo, al terminar se corre una sola más (otraVez).
@@ -130,7 +132,12 @@
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'gastos', filter: 'actividad=eq.' + act }, alAlta)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'pagos', filter: 'actividad=eq.' + act }, alAlta)
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'gastos' }, alBaja(() => gastos))
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'pagos' }, alBaja(() => pagos));
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'pagos' }, alBaja(() => pagos))
+      // marcar o desmarcar un pago como no reconocido; "No estuve" y "Volver a sumar" (33): el reparto cambia junto con
+      // gasto_rechazos (las bajas solo traen la clave: se recarga si el gasto es de acá)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pagos', filter: 'actividad=eq.' + act }, alAlta)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'gasto_rechazos', filter: 'actividad=eq.' + act }, alAlta)
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'gasto_rechazos' }, (p) => { const id = p && p.old && p.old.gasto; if (id && gastos.some((x) => x.id === id)) programar(); });
     // al (re)conectar se pone al día: lo que cambió con el socket caído no llegó en vivo
     canal.subscribe((st) => { if (st === 'SUBSCRIBED' && !cerrado) refrescar(); });
 
@@ -337,58 +344,94 @@
         poner(formAbierto ? form : btnNuevo);
       }
 
-      // gastos
+      // gastos. Borrar entero: quien lo cargó o quien pagó. Quien está en el reparto y no estuvo: "No estuve" (se saca
+      // solo él y queda a la vista). Quien lo cargó o lo pagó puede volver a sumar a quien dijo que no estuvo (33).
       if (d.gastos.length) {
         const cuantos = new Map();
         d.partes.forEach((p) => cuantos.set(p.gasto, (cuantos.get(p.gasto) || 0) + 1));
+        const fueraDe = new Map();
+        rechazos.forEach((r) => { if (!fueraDe.has(r.gasto)) fueraDe.set(r.gasto, []); fueraDe.get(r.gasto).push(r.persona); });
+        const confirmacion = (clave) => (confirmando && confirmando.clave === clave ? botonConfirmar(confirmando) : null);
         abajo.append(h('h3', { class: 'cu-h3' }, 'Gastos'), h('ul', { class: 'cu-lista', id: 'cu-gastos' }, d.gastos.map((x) => {
           const clave = 'g:' + x.id;
           const n = cuantos.get(x.id) || 0;
           const quien = x.pagador === yo() ? 'Pagaste vos' : 'Pagó ' + nombre(x.pagador);
-          let accion = null;
-          // lo borra quien lo cargó, y también quien pagó o está en el reparto (20): "No lo reconozco"
-          const mio = x.cargado_por === yo();
-          const meToca = mio || x.pagador === yo() || d.partes.some((p) => p.gasto === x.id && p.persona === yo());
-          if (meToca) {
-            const ajeno = mio ? '' : ' Lo cargó ' + nombre(x.cargado_por) + '.';
-            if (confirmando && confirmando.clave === clave) accion = botonConfirmar(confirmando);
-            else accion = h('button', { type: 'button', class: 'btn-link cu-borrar' + (mio ? '' : ' cu-objetar'), 'data-clave': clave,
-              'aria-label': (mio ? 'Borrar el gasto ' : 'No reconozco el gasto ') + x.concepto, disabled: ocupado,
+          const manda = x.cargado_por === yo() || x.pagador === yo();
+          const enReparto = d.partes.some((p) => p.gasto === x.id && p.persona === yo());
+          let accion = confirmacion(clave);
+          if (!accion && manda) {
+            accion = h('button', { type: 'button', class: 'btn-link cu-borrar', 'data-clave': clave, 'aria-label': 'Borrar el gasto ' + x.concepto, disabled: ocupado,
               on: { click: () => pedirConfirmacion({ clave, volver: '[data-clave="' + clave + '"]', volverOk: '#cu-resumen', peligro: true,
-                texto: (mio ? '¿Borramos el gasto "' + x.concepto + '" de ' + L.pesos(x.monto) + '?'
-                  : '¿Borrar el gasto "' + x.concepto + '" de ' + L.pesos(x.monto) + '?' + ajeno) + ' Las cuentas se recalculan.'
+                texto: '¿Borramos el gasto "' + x.concepto + '" de ' + L.pesos(x.monto) + '? Las cuentas se recalculan.'
                   + (d.pagos.length ? ' Ya hay pagos registrados: revisalos después.' : ''), si: 'Sí, borrarlo',
-                accion: () => escribir(() => sb.from('gastos').delete().eq('id', x.id), 'Gasto borrado', 'No pudimos borrar el gasto. Probá de nuevo en un momento.') }) } },
-              mio ? 'Borrar' : 'No lo reconozco');
+                accion: () => escribir(() => sb.from('gastos').delete().eq('id', x.id), 'Gasto borrado', 'No pudimos borrar el gasto. Probá de nuevo en un momento.') }) } }, 'Borrar');
+          } else if (!accion && enReparto) {
+            accion = h('button', { type: 'button', class: 'btn-link cu-borrar cu-objetar', 'data-clave': clave, 'aria-label': 'No estuve en el gasto ' + x.concepto, disabled: ocupado,
+              on: { click: () => pedirConfirmacion({ clave, volver: '[data-clave="' + clave + '"]', volverOk: '#cu-resumen', peligro: true,
+                texto: '¿No estuviste en "' + x.concepto + '"? Te sacamos de este gasto y lo tuyo se reparte entre los demás. Le avisamos a ' + nombre(x.pagador) + '.',
+                si: 'Sí, no estuve',
+                accion: () => escribir(() => sb.rpc('gasto_no_estuve', { p_gasto: x.id }), 'Listo: ya no figurás en ese gasto', 'No pudimos sacarte del gasto. Probá de nuevo en un momento.') }) } }, 'No estuve');
           }
+          const meta = n ? quien + ', entre ' + n + (n === 1 ? ' persona' : ' personas') : quien + '. No queda nadie en el reparto: no cuenta';
+          const afuera = (fueraDe.get(x.id) || []).map((pid) => {
+            const cr = 'r:' + x.id + ':' + pid;
+            let b = confirmacion(cr);
+            if (!b && manda) {
+              b = h('button', { type: 'button', class: 'btn-link cu-sumar', 'data-clave': cr, 'aria-label': 'Volver a sumar a ' + nombre(pid) + ' al gasto ' + x.concepto, disabled: ocupado,
+                on: { click: () => pedirConfirmacion({ clave: cr, volver: '[data-clave="' + cr + '"]', volverOk: '#cu-resumen',
+                  texto: '¿Volvés a sumar a ' + nombre(pid) + ' a "' + x.concepto + '"? Le vuelve a tocar su parte y le avisamos.', si: 'Sí, sumarlo',
+                  accion: () => escribir(() => sb.rpc('gasto_volver_a_sumar', { p_gasto: x.id, p_persona: pid }), 'Lo volviste a sumar', 'No pudimos volver a sumarlo. Probá de nuevo en un momento.') }) } }, 'Volver a sumar');
+            }
+            return h('span', { class: 'cu-rechazo', 'data-persona': pid }, (pid === yo() ? 'Dijiste que no estuviste.' : nombre(pid) + ' dijo que no estuvo.'), b);
+          });
           return h('li', { class: 'cu-gasto', 'data-id': x.id },
             h('span', { class: 'cu-txt' }, h('span', { class: 'cu-gasto-cab' }, h('strong', null, x.concepto), h('span', { class: 'cu-monto-txt' }, L.pesos(x.monto))),
-              h('span', { class: 'cu-meta' }, quien + ', entre ' + n + (n === 1 ? ' persona' : ' personas'))),
+              h('span', { class: 'cu-meta' }, meta), afuera),
             accion);
         })));
       }
 
-      // pagos
+      // pagos. Lo borra solo quien lo cargó. La otra parte lo puede marcar como no reconocido: no se borra, deja de contar
+      // y lo ven los dos; quien lo marcó le saca la marca (33).
       if (d.pagos.length) {
         abajo.append(h('h3', { class: 'cu-h3' }, 'Pagos registrados'), h('ul', { class: 'cu-lista', id: 'cu-pagos' }, d.pagos.map((p) => {
           const clave = 'p:' + p.id;
           const txt = p.de === yo() ? 'Le pagaste ' + L.pesos(p.monto) + ' a ' + nombre(p.a)
             : p.a === yo() ? nombre(p.de) + ' te pagó ' + L.pesos(p.monto)
               : nombre(p.de) + ' le pagó ' + L.pesos(p.monto) + ' a ' + nombre(p.a);
-          let accion = null;
-          // lo borra quien lo registró y también la otra parte (20)
           const mio = p.cargado_por === yo();
-          if (mio || p.de === yo() || p.a === yo()) {
-            if (confirmando && confirmando.clave === clave) accion = botonConfirmar(confirmando);
-            else accion = h('button', { type: 'button', class: 'btn-link cu-borrar-pago' + (mio ? '' : ' cu-objetar'), 'data-clave': clave,
-              'aria-label': (mio ? 'Borrar el pago: ' : 'No reconozco el pago: ') + txt, disabled: ocupado,
-              on: { click: () => pedirConfirmacion({ clave, volver: '[data-clave="' + clave + '"]', volverOk: '#cu-resumen', peligro: true,
-                texto: mio ? '¿Borramos este pago? La deuda vuelve a aparecer.'
-                  : '¿Borrar este pago? Lo registró ' + nombre(p.cargado_por) + '. La deuda vuelve a aparecer.', si: 'Sí, borrarlo',
-                accion: () => escribir(() => sb.from('pagos').delete().eq('id', p.id), 'Pago borrado', 'No pudimos borrar el pago. Probá de nuevo en un momento.') }) } },
-              mio ? 'Borrar' : 'No lo reconozco');
+          const otraParte = !mio && (p.de === yo() || p.a === yo());
+          const soyCobrador = p.a === yo();
+          let nota = null;
+          if (p.objetado) {
+            const quienMarco = p.objetado_por;
+            const cobro = quienMarco === p.a;
+            nota = h('span', { class: 'cu-objetado-txt' }, quienMarco === yo()
+              ? (cobro ? 'Marcaste que no lo recibiste: no cuenta.' : 'Marcaste que no lo hiciste: no cuenta.')
+              : (quienMarco ? nombre(quienMarco) : 'La otra parte') + (cobro ? ' dice que no lo recibió: no cuenta.' : ' dice que no lo hizo: no cuenta.'));
           }
-          return h('li', { class: 'cu-pago', 'data-id': p.id }, h('span', { class: 'cu-txt' }, txt), accion);
+          let accion = confirmando && confirmando.clave === clave ? botonConfirmar(confirmando) : null;
+          if (!accion && mio) {
+            accion = h('button', { type: 'button', class: 'btn-link cu-borrar-pago', 'data-clave': clave, 'aria-label': 'Borrar el pago: ' + txt, disabled: ocupado,
+              on: { click: () => pedirConfirmacion({ clave, volver: '[data-clave="' + clave + '"]', volverOk: '#cu-resumen', peligro: true,
+                texto: p.objetado ? '¿Borramos este pago? Ya no contaba.' : '¿Borramos este pago? La deuda vuelve a aparecer.', si: 'Sí, borrarlo',
+                accion: () => escribir(() => sb.from('pagos').delete().eq('id', p.id), 'Pago borrado', 'No pudimos borrar el pago. Probá de nuevo en un momento.') }) } }, 'Borrar');
+          } else if (!accion && otraParte && !p.objetado) {
+            accion = h('button', { type: 'button', class: 'btn-link cu-borrar-pago cu-objetar', 'data-clave': clave,
+              'aria-label': (soyCobrador ? 'No recibí el pago: ' : 'No reconozco el pago: ') + txt, disabled: ocupado,
+              on: { click: () => pedirConfirmacion({ clave, volver: '[data-clave="' + clave + '"]', volverOk: '#cu-resumen', peligro: true,
+                texto: (soyCobrador ? '¿No recibiste este pago?' : '¿No hiciste este pago?') + ' Deja de contar en las cuentas hasta que lo arreglen. Le avisamos a ' + nombre(p.cargado_por) + '.',
+                si: soyCobrador ? 'Sí, no lo recibí' : 'Sí, no lo hice',
+                accion: () => escribir(() => sb.rpc('pago_objetar', { p_pago: p.id, p_objetar: true }), 'Marcado: el pago no cuenta', 'No pudimos marcar el pago. Probá de nuevo en un momento.') }) } },
+              soyCobrador ? 'No lo recibí' : 'No lo reconozco');
+          } else if (!accion && otraParte && p.objetado_por === yo()) {
+            accion = h('button', { type: 'button', class: 'btn-link cu-desmarcar', 'data-clave': clave, 'aria-label': 'Sacar la marca del pago: ' + txt, disabled: ocupado,
+              on: { click: () => pedirConfirmacion({ clave, volver: '[data-clave="' + clave + '"]', volverOk: '#cu-resumen',
+                texto: soyCobrador ? '¿Al final lo recibiste? El pago vuelve a contar.' : '¿Al final lo hiciste? El pago vuelve a contar.', si: 'Sí, vuelve a contar',
+                accion: () => escribir(() => sb.rpc('pago_objetar', { p_pago: p.id, p_objetar: false }), 'El pago vuelve a contar', 'No pudimos sacar la marca. Probá de nuevo en un momento.') }) } },
+              soyCobrador ? 'Lo recibí' : 'Sí lo hice');
+          }
+          return h('li', { class: 'cu-pago' + (p.objetado ? ' cu-objetado' : ''), 'data-id': p.id }, h('span', { class: 'cu-txt' }, txt, nota), accion);
         })));
       }
       if (confirmando && !cont.querySelector('#cu-confirmar-si')) confirmando = null; // lo que se confirmaba ya no está

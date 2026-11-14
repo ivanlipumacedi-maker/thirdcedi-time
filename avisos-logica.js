@@ -149,7 +149,47 @@
     return out;
   }
 
-  const AvisosLogica = { ZONA, diaART, horaART, recordatoriosDiarios, etiquetaDia, textoDiario, textoActividad, fusionarActividad, resumenMensaje, textoMensajes, tituloPartida, urlSala, urlActividad, mensajesListos };
+  // ---- Avisos para una sola persona (33): reclamos en Cuentas claras y bajas de una actividad ----
+  const PERSONALES = ['gasto_rechazo', 'gasto_sumado', 'pago_objetado', 'baja'];
+  /** Junta los eventos personales por tipo, destino, autor y sala: una tanda de varios gastos es un solo aviso. */
+  function agruparPersonales(eventos) {
+    const g = new Map();
+    (eventos || []).forEach((e) => {
+      if (PERSONALES.indexOf(e.tipo) < 0 || !e.destino || !e.sala || !/^act:/.test(e.sala)) return;
+      const k = [e.tipo, e.destino, e.autor, e.sala].join('|');
+      if (!g.has(k)) g.set(k, { tipo: e.tipo, destino: e.destino, autor: e.autor, sala: e.sala, ids: [], detalles: [] });
+      const x = g.get(k);
+      x.ids.push(e.id);
+      if (e.detalle && x.detalles.indexOf(e.detalle) < 0) x.detalles.push(e.detalle);
+    });
+    return [...g.values()];
+  }
+  let nfP = null;
+  const pesosP = (n) => { if (!nfP) nfP = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 }); return '$ ' + nfP.format(Number(n) || 0); };
+  const comillas = (xs) => xs.map((c) => '"' + c + '"').join(', ');
+  /** grupo: de agruparPersonales; tituloAct: el título de la actividad; nombre: quien hizo la acción */
+  function textoPersonal(grupo, tituloAct, nombre) {
+    const quien = nombre || 'Un compañero';
+    const act = String(tituloAct || 'una actividad');
+    const id = String(grupo.sala).split(':')[1];
+    const base = { tag: grupo.tipo + '-' + id, url: urlActividad(id) };
+    const ds = grupo.detalles || [];
+    if (grupo.tipo === 'gasto_rechazo') {
+      return { title: 'Cuentas de ' + act, body: quien + ' dice que no estuvo en ' + (ds.length ? comillas(ds) : 'un gasto') + '. Ya no figura en ' + (ds.length > 1 ? 'esos gastos.' : 'ese gasto.'), ...base };
+    }
+    if (grupo.tipo === 'gasto_sumado') {
+      return { title: 'Cuentas de ' + act, body: quien + ' te volvió a sumar a ' + (ds.length ? comillas(ds) : 'un gasto') + '.', ...base };
+    }
+    if (grupo.tipo === 'pago_objetado') {
+      const partes = ds.map((d) => { const [k, m] = String(d).split(':'); return (k === 'no_recibio' ? 'no recibió ' : 'no hizo el pago de ') + pesosP(m); });
+      return { title: 'Cuentas de ' + act, body: quien + ' dice que ' + (partes.length ? partes.join(' y ') : 'no reconoce un pago') + '. Ese pago no cuenta hasta que lo arreglen.', ...base };
+    }
+    // baja
+    const soloTercer = ds.length > 0 && ds.indexOf('actividad') < 0;
+    return { title: act, body: quien + (soloTercer ? ' se bajó del tercer tiempo.' : ' se bajó.'), ...base };
+  }
+
+  const AvisosLogica = { ZONA, diaART, horaART, recordatoriosDiarios, etiquetaDia, textoDiario, textoActividad, fusionarActividad, resumenMensaje, textoMensajes, tituloPartida, urlSala, urlActividad, mensajesListos, PERSONALES, agruparPersonales, textoPersonal };
   if (typeof module !== 'undefined' && module.exports) module.exports = AvisosLogica;
   else g.AvisosLogica = AvisosLogica;
 })(typeof window !== 'undefined' ? window : globalThis);

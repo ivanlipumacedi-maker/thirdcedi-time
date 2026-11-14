@@ -946,6 +946,19 @@ const centro = (p, sel) => p.$eval(sel, (e) => { e.scrollIntoView({ block: 'cent
       await pb.screenshot({ path: path.join(shots, 'chat-largo.png') });
     });
 
+    await paso('33: una alta o baja de la actividad es una línea centrada con el nombre, sin burbuja ni menú', async () => {
+      const fila = { id: '5150aaaa-0000-4000-8000-000000000001', sala: SALA, autor: UC, tipo: 'sistema', texto: 'baja:actividad', archivo: null, editado: false, creado: new Date().toISOString() };
+      db.mensajes.push(fila); emitir('mensajes', 'INSERT', fila);
+      await esperar(pa, () => [...document.querySelectorAll('#chat-act .chat-sistema')].some((e) => /Cami Ruiz se bajó/.test(e.textContent)));
+      assert.equal(await pa.evaluate((id) => !!document.querySelector('#chat-act .chat-burbuja[data-id="' + id + '"]'), fila.id), false, 'tiene burbuja');
+      await pa.evaluate((id) => document.querySelector('#chat-act .chat-sistema[data-id="' + id + '"]').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })), fila.id);
+      await dormir(250);
+      assert.equal(await cuantos(pa, '.chat-hoja-menu'), 0, 'abrió el menú');
+      const mia = { ...fila, id: '5150aaaa-0000-4000-8000-000000000002', autor: UA, texto: 'alta:tercer' };
+      db.mensajes.push(mia); emitir('mensajes', 'INSERT', mia);
+      await esperar(pa, () => /Te sumaste al tercer tiempo/.test(document.querySelector('#chat-act .chat-lista').textContent));
+    });
+
     for (const r of paginas) if (r.page.errores.length) { fallas++; console.log('FALLA errores de página:', r.page.errores); }
   } finally { for (const n of navegadores) await n.close().catch(() => {}); }
   console.log(fallas ? fallas + ' falla(s)' : 'todo ok');

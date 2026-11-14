@@ -64,7 +64,7 @@ const MAX_ESPERA_MS = 10 * 60_000;   // pero nunca más de 10 minutos
 const VIEJO_MS = 60 * 60_000;        // un evento de hace más de una hora ya no se avisa (p. ej. la cola de antes de las claves)
 
 type Sub = { endpoint: string; persona: string; p256dh: string; auth: string };
-type Ev = { id: number; tipo: string; actividad: string | null; sala: string | null; autor: string | null; mensaje: string | null; creado: string };
+type Ev = { id: number; tipo: string; actividad: string | null; sala: string | null; autor: string | null; mensaje: string | null; creado: string; destino?: string | null; detalle?: string | null };
 type Payload = { title: string; body: string; tag?: string; url?: string };
 
 function claves() {
@@ -162,6 +162,18 @@ async function avisoMensajes(g: { sala: string; autor: string; ids: number[] }) 
   return enviar(await subsDe(personas), { ...t, tag: 'chat-' + g.sala, url: L.urlSala(g.sala) });
 }
 
+// Reclamos en Cuentas claras y bajas (33): a una sola persona (destino). Van con actividad null y sala 'act:<id>'.
+async function avisoPersonal(g: { tipo: string; destino: string; autor: string | null; sala: string; ids: number[]; detalles: string[] }) {
+  const tomados = await tomar(g.ids);
+  if (!tomados.length) return 0;
+  const id = g.sala.split(':')[1];
+  const { data: a, error } = await sb.from('actividades').select('titulo').eq('id', id).maybeSingle();
+  if (error) throw error;
+  if (!a) return 0;
+  const detalles = [...new Set(tomados.map((e) => e.detalle).filter(Boolean))] as string[];
+  return enviar(await subsDe([g.destino]), L.textoPersonal({ ...g, detalles }, a.titulo, await nombreDe(g.autor)));
+}
+
 const PRUEBA: Payload = { title: 'CEDI CLUB', body: 'Prueba: los avisos andan en este teléfono.', tag: 'prueba', url: '#/perfil' };
 
 async function cambios() {
@@ -182,7 +194,7 @@ async function cambios() {
   };
   const porAct = new Map<string, Ev[]>();
   for (const e of vivos) {
-    if (e.tipo === 'mensaje' || e.tipo === 'prueba' || !e.actividad) continue;
+    if (e.tipo === 'mensaje' || e.tipo === 'prueba' || L.PERSONALES.includes(e.tipo) || !e.actividad) continue;
     if (!porAct.has(e.actividad)) porAct.set(e.actividad, []);
     porAct.get(e.actividad)!.push(e);
   }
@@ -191,6 +203,7 @@ async function cambios() {
     await intento(async () => ((await tomar([e.id])).length ? enviar(await subsDe([e.autor]), PRUEBA) : 0));
   }
   for (const g of L.mensajesListos(vivos, ahora, { silencio: SILENCIO_MS, maxEspera: MAX_ESPERA_MS })) await intento(() => avisoMensajes(g));
+  for (const g of L.agruparPersonales(vivos)) await intento(() => avisoPersonal(g));
   return { enviados, descartados, errores };
 }
 

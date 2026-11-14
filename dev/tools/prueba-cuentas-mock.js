@@ -32,7 +32,7 @@ const db = {
     { actividad: ACT, persona: UA, parte: 'actividad' }, { actividad: ACT, persona: UB, parte: 'actividad' }, { actividad: ACT, persona: UC, parte: 'actividad' },
     { actividad: ACT, persona: UA, parte: 'tercer' }, { actividad: ACT, persona: UC, parte: 'tercer' },
   ],
-  mensajes: [], gastos: [], gasto_partes: [], pagos: [],
+  mensajes: [], gastos: [], gasto_partes: [], pagos: [], gasto_rechazos: [],
 };
 const paginas = []; // { page, uid, desconectada }
 const cuenta = {};
@@ -84,6 +84,34 @@ function consulta(uid, s) {
   contar(uid, s.table + ':' + s.action);
   if (s.action === 'rpc') {
     if (s.table === 'cargar_gasto') return cargarGasto(uid, s.values);
+    // 33: reclamos
+    if (s.table === 'gasto_no_estuve') {
+      const g = db.gastos.find((x) => x.id === s.values.p_gasto);
+      if (!g || !db.gasto_partes.some((x) => x.gasto === g.id && x.persona === uid)) return P0001('No figurás en ese gasto');
+      if (g.pagador === uid || g.cargado_por === uid) return P0001('Lo cargaste o lo pagaste vos: si no va, borralo');
+      db.gasto_partes = db.gasto_partes.filter((x) => !(x.gasto === g.id && x.persona === uid));
+      const f = { gasto: g.id, actividad: g.actividad, persona: uid, creado: new Date().toISOString() };
+      db.gasto_rechazos.push(f); emitir('gasto_rechazos', 'INSERT', f);
+      return { data: null };
+    }
+    if (s.table === 'gasto_volver_a_sumar') {
+      const g = db.gastos.find((x) => x.id === s.values.p_gasto);
+      if (!g) return P0001('Ese gasto ya no está');
+      if (uid !== g.pagador && uid !== g.cargado_por) return { error: { code: '42501', message: 'Solo quien lo cargó o lo pagó puede volver a sumar a alguien' } };
+      const f = db.gasto_rechazos.find((x) => x.gasto === g.id && x.persona === s.values.p_persona);
+      if (!f) return P0001('Esa persona ya está en el gasto');
+      db.gasto_partes.push({ gasto: g.id, persona: f.persona });
+      db.gasto_rechazos = db.gasto_rechazos.filter((x) => x !== f); emitir('gasto_rechazos', 'DELETE', { gasto: f.gasto, persona: f.persona });
+      return { data: null };
+    }
+    if (s.table === 'pago_objetar') {
+      const x = db.pagos.find((q) => q.id === s.values.p_pago);
+      if (!x) return P0001('Ese pago ya no está');
+      if (!(x.de === uid || x.a === uid) || x.cargado_por === uid) return { error: { code: '42501', message: 'Ese pago no lo podés marcar' } };
+      if (s.values.p_objetar && !x.objetado) { x.objetado = new Date().toISOString(); x.objetado_por = uid; emitir('pagos', 'UPDATE', { ...x }); }
+      else if (!s.values.p_objetar && x.objetado) { x.objetado = null; x.objetado_por = null; emitir('pagos', 'UPDATE', { ...x }); }
+      return { data: null };
+    }
     return { error: { message: 'sin rpc' } };
   }
   if (s.table === 'gastos' && s.action === 'select' && uid === UA && fallarGastosA > 0) { fallarGastosA--; return { error: { message: 'sin red' } }; }
@@ -126,25 +154,23 @@ function consulta(uid, s) {
     const v = s.values;
     if (!enCuentas(uid, v.actividad) || !(v.de === uid || v.a === uid) || v.de === v.a || !(v.monto >= 1)) return { error: { code: '42501', message: 'new row violates row-level security policy' } };
     if (!figuraEnParte(v.actividad, v.parte, v.de) || !figuraEnParte(v.actividad, v.parte, v.a)) return P0001('Esa persona no figura en las cuentas de esa parte');
-    if (db.pagos.some((p) => p.actividad === v.actividad && p.parte === v.parte && p.de === v.de && p.a === v.a && p.monto === v.monto && Date.now() - Date.parse(p.creado) < 6e5)) return P0001('Ese pago ya está registrado');
-    const p = { id: nuevoId(), ...v, creado: new Date().toISOString(), cargado_por: uid };
+    if (db.pagos.some((p) => p.actividad === v.actividad && p.parte === v.parte && p.de === v.de && p.a === v.a && p.monto === v.monto && !p.objetado && Date.now() - Date.parse(p.creado) < 6e5)) return P0001('Ese pago ya está registrado');
+    const p = { id: nuevoId(), ...v, creado: new Date().toISOString(), cargado_por: uid, objetado: null, objetado_por: null };
     db.pagos.push(p); emitir('pagos', 'INSERT', p);
     return { data: null };
   }
   if ((s.table === 'gastos' || s.table === 'pagos') && s.action === 'delete') {
-    // 20: un gasto lo borra quien lo cargó, quien pagó o quien está en el reparto; un pago, quien lo cargó o la otra parte
-    const puede = (f) => f.cargado_por === uid || (s.table === 'gastos'
-      ? f.pagador === uid || db.gasto_partes.some((p) => p.gasto === f.id && p.persona === uid)
-      : f.de === uid || f.a === uid);
+    // 33: un gasto lo borra quien lo cargó o quien pagó; un pago, solo quien lo cargó
+    const puede = (f) => f.cargado_por === uid || (s.table === 'gastos' && f.pagador === uid);
     const fuera = db[s.table].filter((f) => cumple(f, s.filtros) && puede(f));
     db[s.table] = db[s.table].filter((f) => !fuera.includes(f));
-    if (s.table === 'gastos') db.gasto_partes = db.gasto_partes.filter((p) => !fuera.some((g) => g.id === p.gasto));
+    if (s.table === 'gastos') { db.gasto_partes = db.gasto_partes.filter((p) => !fuera.some((g) => g.id === p.gasto)); db.gasto_rechazos = db.gasto_rechazos.filter((p) => !fuera.some((g) => g.id === p.gasto)); }
     fuera.forEach((f) => emitir(s.table, 'DELETE', { id: f.id })); // Realtime: los DELETE solo traen la clave
     return { data: null };
   }
   let filas = db[s.table] || [];
   if (s.table === 'mensajes') filas = filas.filter((m) => enSala(uid, m.sala));
-  if (s.table === 'gastos' || s.table === 'pagos') filas = filas.filter((f) => enCuentas(uid, f.actividad));
+  if (s.table === 'gastos' || s.table === 'pagos' || s.table === 'gasto_rechazos') filas = filas.filter((f) => enCuentas(uid, f.actividad));
   if (s.table === 'gasto_partes') filas = filas.filter((p) => { const g = db.gastos.find((x) => x.id === p.gasto); return g && enCuentas(uid, g.actividad); });
   let r = filas.filter((f) => cumple(f, s.filtros));
   if (s.ordenes.length) r = [...r].sort((a, b) => { for (const o of s.ordenes) { if (a[o.col] !== b[o.col]) return (a[o.col] < b[o.col] ? -1 : 1) * (o.asc ? 1 : -1); } return 0; });
@@ -302,8 +328,8 @@ async function cargarGastoUI(p, { monto, concepto, pagador, sacar = [] }) {
       assert.deepEqual(tb, [[pes('Le debés $ 333 a Ana Pérez'), 1], [pes('Carla Ruiz le debe $ 333 a Ana Pérez'), 0]]);
       assert.match(await cuentasTxt(pb), /Carne/);
       assert.match(await cuentasTxt(pb), /Pagó Ana Pérez, entre 3 personas/);
-      // B está en el reparto: puede objetarlo (20), con otro texto que el de quien lo cargó
-      assert.equal(await pb.$eval('#cu-gastos .cu-borrar', (e) => e.textContent), 'No lo reconozco');
+      // B está en el reparto: dice "No estuve" (33), no borra
+      assert.equal(await pb.$eval('#cu-gastos .cu-borrar', (e) => e.textContent), 'No estuve');
       assert.equal(await pa.$eval('#cu-gastos .cu-borrar', (e) => e.textContent), 'Borrar');
     });
 
@@ -385,45 +411,74 @@ async function cargarGastoUI(p, { monto, concepto, pagador, sacar = [] }) {
       assert.match(r.error.message, /Ese pago ya está registrado/);
     });
 
-    await paso('20: "No lo reconozco" en pagos: la otra parte lo ve y la confirmación dice quién lo registró; un tercero no', async () => {
-      const botones = (p) => p.$$eval('#cu-pagos li', (ls) => ls.map((l) => [l.querySelector('.cu-txt').textContent, (l.querySelector('button') || {}).textContent || null]));
-      assert.deepEqual(await botones(pa), [[pes('Carla Ruiz te pagó $ 333'), 'Borrar'], [pes('Beto Gómez te pagó $ 333'), 'No lo reconozco']]);
-      // B: el suyo lo borra; en uno entre otros dos (si lo ve) no tiene botón
+    await paso('33: un pago lo borra solo quien lo cargó; la otra parte lo marca "No lo recibí" (no cuenta, lo ven los dos) y le saca la marca', async () => {
+      const botones = (p) => p.$$eval('#cu-pagos li', (ls) => ls.map((l) => [l.querySelector('.cu-txt').firstChild.textContent, (l.querySelector('button') || {}).textContent || null]));
+      assert.deepEqual(await botones(pa), [[pes('Carla Ruiz te pagó $ 333'), 'Borrar'], [pes('Beto Gómez te pagó $ 333'), 'No lo recibí']]);
       const deB = await botones(pb);
       assert.deepEqual(deB.find((x) => x[0] === pes('Le pagaste $ 333 a Ana Pérez')), [pes('Le pagaste $ 333 a Ana Pérez'), 'Borrar']);
       assert.ok(deB.filter((x) => x[0] !== pes('Le pagaste $ 333 a Ana Pérez')).every((x) => x[1] === null), JSON.stringify(deB));
+      // la base no deja que A borre el que cargó B
+      const delB = db.pagos.find((x) => x.cargado_por === UB);
+      consulta(UA, { table: 'pagos', action: 'delete', filtros: [['eq', 'id', delB.id]], ordenes: [] });
+      assert.ok(db.pagos.includes(delB), 'A borró un pago que cargó B');
+      await enCuentasHay(pb, /Estás al día/);
       await pa.evaluate(() => [...document.querySelectorAll('#cu-pagos li')].find((l) => l.textContent.includes('Beto')).querySelector('button').click());
       await pa.waitForSelector('#cu-confirmar-txt');
-      assert.equal(await texto(pa, '#cu-confirmar-txt'), '¿Borrar este pago? Lo registró Beto Gómez. La deuda vuelve a aparecer.');
-      await clic(pa, '#cu-confirmar-no');
-      assert.equal(db.pagos.length, 2);
+      assert.equal(await texto(pa, '#cu-confirmar-txt'), '¿No recibiste este pago? Deja de contar en las cuentas hasta que lo arreglen. Le avisamos a Beto Gómez.');
+      await clic(pa, '#cu-confirmar-si');
+      await esperar(pa, () => /Marcaste que no lo recibiste: no cuenta\./.test(document.getElementById('cu-pagos').textContent));
+      assert.equal(delB.objetado_por, UA);
+      assert.equal(await pa.evaluate(() => [...document.querySelectorAll('#cu-pagos li')].find((l) => l.textContent.includes('Beto')).querySelector('button').textContent), 'Lo recibí');
+      // B lo ve en vivo y vuelve a deber
+      await esperar(pb, () => /Ana Pérez dice que no lo recibió: no cuenta\./.test(document.getElementById('cu-pagos').textContent));
+      await enCuentasHay(pb, new RegExp(pes('Debés \\$ 333')));
+      // A se arrepiente: vuelve a contar
+      await pa.evaluate(() => [...document.querySelectorAll('#cu-pagos li')].find((l) => l.textContent.includes('Beto')).querySelector('button').click());
+      await pa.waitForSelector('#cu-confirmar-txt');
+      assert.equal(await texto(pa, '#cu-confirmar-txt'), '¿Al final lo recibiste? El pago vuelve a contar.');
+      await clic(pa, '#cu-confirmar-si');
+      await enCuentasHay(pb, /Estás al día/);
+      assert.equal(delB.objetado, null);
+      assert.deepEqual(await botones(pa), [[pes('Carla Ruiz te pagó $ 333'), 'Borrar'], [pes('Beto Gómez te pagó $ 333'), 'No lo recibí']]);
     });
 
-    await paso('20: B borra un gasto que cargó A y en el que está ("Lo cargó Ana Pérez"); en uno ajeno no tiene el botón', async () => {
+    await paso('33: en un gasto ajeno, B toca "No estuve": sale solo él, queda a la vista y A lo puede volver a sumar; B no lo puede borrar', async () => {
       await cargarGastoUI(pa, { monto: '90', concepto: 'Agua', sacar: [UB] }); // entre A y C
       await enCuentasHay(pa, /Agua/);
       await pa.waitForSelector('#cu-nuevo');
       await cargarGastoUI(pa, { monto: '80', concepto: 'Soda', sacar: [UC] }); // entre A y B
       await enCuentasHay(pb, /Soda/);
       await enCuentasHay(pb, /Agua/);
-      const boton = (p, c) => p.evaluate((c) => { const l = [...document.querySelectorAll('#cu-gastos li')].find((x) => x.textContent.includes(c)); const b = l && l.querySelector('button'); return b ? b.textContent : null; }, c);
-      assert.equal(await boton(pb, 'Agua'), null, 'B no está en el gasto "Agua" y tiene el botón');
-      assert.equal(await boton(pb, 'Soda'), 'No lo reconozco');
-      // la base tampoco lo deja (aunque mande el pedido igual)
-      consulta(UB, { table: 'gastos', action: 'delete', filtros: [['eq', 'id', db.gastos.find((g) => g.concepto === 'Agua').id]], ordenes: [] });
-      assert.ok(db.gastos.some((g) => g.concepto === 'Agua'), 'B borró un gasto en el que no está');
-      await pb.evaluate(() => [...document.querySelectorAll('#cu-gastos li')].find((x) => x.textContent.includes('Soda')).querySelector('button').click());
+      const fila = (p, c) => p.evaluate((c) => { const l = [...document.querySelectorAll('#cu-gastos li')].find((x) => x.textContent.includes(c)); const b = l && l.querySelector(':scope > button'); return { b: b ? b.textContent : null, t: l ? l.textContent : '' }; }, c);
+      assert.equal((await fila(pb, 'Agua')).b, null, 'B no está en el gasto "Agua" y tiene el botón');
+      assert.equal((await fila(pb, 'Soda')).b, 'No estuve');
+      // la base no deja que B lo borre (aunque esté en el reparto)
+      const soda = db.gastos.find((g) => g.concepto === 'Soda');
+      consulta(UB, { table: 'gastos', action: 'delete', filtros: [['eq', 'id', soda.id]], ordenes: [] });
+      assert.ok(db.gastos.includes(soda), 'B borró un gasto que cargó y pagó A');
+      await pb.evaluate(() => [...document.querySelectorAll('#cu-gastos li')].find((x) => x.textContent.includes('Soda')).querySelector(':scope > button').click());
       await pb.waitForSelector('#cu-confirmar-txt');
-      assert.match(await texto(pb, '#cu-confirmar-txt'), new RegExp('^' + pes('¿Borrar el gasto "Soda" de \\$ 80\\? Lo cargó Ana Pérez\\. Las cuentas se recalculan\\.')));
+      assert.equal(await texto(pb, '#cu-confirmar-txt'), '¿No estuviste en "Soda"? Te sacamos de este gasto y lo tuyo se reparte entre los demás. Le avisamos a Ana Pérez.');
       await clic(pb, '#cu-confirmar-si');
-      await esperar(pb, () => !/Soda/.test(document.getElementById('cu-gastos').textContent));
-      assert.equal(db.gastos.some((g) => g.concepto === 'Soda'), false);
-      await esperar(pa, () => !/Soda/.test(document.getElementById('cu-gastos').textContent));
-      // A borra el suyo ("Agua") y queda todo como antes
-      await pa.evaluate(() => [...document.querySelectorAll('#cu-gastos li')].find((x) => x.textContent.includes('Agua')).querySelector('button').click());
-      await pa.waitForSelector('#cu-confirmar-si');
+      await esperar(pb, () => /Dijiste que no estuviste\./.test(document.getElementById('cu-gastos').textContent));
+      assert.equal((await fila(pb, 'Soda')).b, null);
+      assert.ok(!db.gasto_partes.some((x) => x.gasto === soda.id && x.persona === UB));
+      // A lo ve en vivo: B ya no está en el reparto
+      await esperar(pa, () => /Beto Gómez dijo que no estuvo\./.test(document.getElementById('cu-gastos').textContent));
+      assert.match((await fila(pa, 'Soda')).t, /Pagaste vos, entre 1 persona/);
+      await pa.evaluate(() => document.querySelector('#cu-gastos .cu-sumar').click());
+      await pa.waitForSelector('#cu-confirmar-txt');
+      assert.equal(await texto(pa, '#cu-confirmar-txt'), '¿Volvés a sumar a Beto Gómez a "Soda"? Le vuelve a tocar su parte y le avisamos.');
       await clic(pa, '#cu-confirmar-si');
-      await esperar(pa, () => !/Agua/.test(document.getElementById('cu-gastos').textContent));
+      await esperar(pb, () => { const l = [...document.querySelectorAll('#cu-gastos li')].find((x) => x.textContent.includes('Soda')); return l && !/no estuviste/.test(l.textContent) && l.querySelector(':scope > button'); });
+      assert.match((await fila(pa, 'Soda')).t, /Pagaste vos, entre 2 personas/);
+      // A borra los dos y queda todo como antes
+      for (const c of ['Soda', 'Agua']) {
+        await pa.evaluate((c) => [...document.querySelectorAll('#cu-gastos li')].find((x) => x.textContent.includes(c)).querySelector(':scope > button').click(), c);
+        await pa.waitForSelector('#cu-confirmar-si');
+        await clic(pa, '#cu-confirmar-si');
+        await esperar(pa, (c) => !document.getElementById('cu-gastos') || !document.getElementById('cu-gastos').textContent.includes(c), c);
+      }
       await enCuentasHay(pa, /Estás al día/);
     });
 

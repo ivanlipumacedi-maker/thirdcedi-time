@@ -401,6 +401,9 @@ button:disabled { opacity: .55; cursor: default; }
 .chat-msg { display: flex; align-items: flex-end; gap: .4rem; max-width: 86%; }
 .chat-msg.mio { align-self: flex-end; flex-direction: row-reverse; }
 .chat-msg.otro { align-self: flex-start; }
+/* altas y bajas de la actividad (33): una línea centrada, sin burbuja ni menú */
+.chat-sistema { align-self: center; max-width: 92%; margin: .2rem 0; padding: .2rem .7rem; font-size: .78rem; color: var(--muted); text-align: center; background: var(--bg-alt); border: 1px solid var(--border); border-radius: 999px; }
+.chat-sistema .chat-hora { margin-left: .4rem; }
 .chat-col { display: flex; flex-direction: column; min-width: 0; gap: .2rem; }
 .chat-msg.mio .chat-col { align-items: flex-end; }
 .chat-msg.otro .chat-col { align-items: flex-start; }
@@ -576,6 +579,11 @@ button:disabled { opacity: .55; cursor: default; }
 .cu-gasto-cab { display: flex; align-items: baseline; justify-content: space-between; gap: .75rem; }
 .cu-monto-txt { font-weight: 700; white-space: nowrap; }
 .cu-meta { font-size: .8rem; color: var(--muted); }
+/* reclamos (33): "dijo que no estuvo" en un gasto y pago marcado como no reconocido (no cuenta) */
+.cu-rechazo, .cu-objetado-txt { display: flex; flex-wrap: wrap; align-items: baseline; gap: .1rem .6rem; font-size: .8rem; color: var(--mal); }
+.cu-rechazo .cu-confirmar { flex-basis: 100%; }
+.cu-lista > li.cu-objetado { border-style: dashed; }
+.cu-lista > li.cu-objetado > .cu-txt { color: var(--muted); }
 .cu-confirmar { flex-basis: 100%; margin: .25rem 0 0; }
 .cu-zona-form { margin-top: .75rem; }
 .cu-form { margin-top: .25rem; padding: .85rem; border: 1px solid var(--border); border-radius: var(--r-tarjeta); }

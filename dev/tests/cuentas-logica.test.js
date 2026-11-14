@@ -138,3 +138,21 @@ test('dePart: filtra gastos, partes y pagos de una parte', () => {
   assert.equal(t.pagos.length, 1);
   assert.deepEqual(Object.fromEntries(C.saldos(t.gastos, t.partes, t.pagos)), { A: 0, B: 0 });
 });
+
+test('saldos: un pago marcado como no reconocido (objetado) no cuenta; sin la marca vuelve a contar', () => {
+  const gastos = [{ id: 'g', pagador: 'A', monto: 1000 }];
+  const partes = [{ gasto: 'g', persona: 'A' }, { gasto: 'g', persona: 'B' }];
+  const pago = { de: 'B', a: 'A', monto: 500 };
+  assert.deepEqual(Object.fromEntries(C.saldos(gastos, partes, [pago])), { A: 0, B: 0 });
+  assert.deepEqual(Object.fromEntries(C.saldos(gastos, partes, [{ ...pago, objetado: '2026-11-14T12:00:00Z' }])), { A: 500, B: -500 });
+});
+
+test('saldos: quien dijo "No estuve" sale del reparto y lo suyo se reparte entre los demás', () => {
+  const gastos = [{ id: 'g', pagador: 'A', monto: 900 }];
+  const todos = [{ gasto: 'g', persona: 'A' }, { gasto: 'g', persona: 'B' }, { gasto: 'g', persona: 'C' }];
+  assert.deepEqual(Object.fromEntries(C.saldos(gastos, todos, [])), { A: 600, B: -300, C: -300 });
+  const sinC = todos.filter((p) => p.persona !== 'C');
+  assert.deepEqual(Object.fromEntries(C.saldos(gastos, sinC, [])), { A: 450, B: -450 });
+  // si se van todos, el gasto no mueve nada
+  assert.deepEqual(Object.fromEntries(C.saldos(gastos, [], [])), {});
+});

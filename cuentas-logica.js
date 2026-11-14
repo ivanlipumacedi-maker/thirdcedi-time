@@ -20,8 +20,9 @@
     return out;
   }
 
-  // gastos: [{id, pagador, monto}], partes: [{gasto, persona}], pagos: [{de, a, monto}].
-  // Un gasto sin personas no mueve nada. Cada pago le suma a quien pagó y le resta a quien cobró.
+  // gastos: [{id, pagador, monto}], partes: [{gasto, persona}], pagos: [{de, a, monto, objetado?}].
+  // Un gasto sin personas no mueve nada. Cada pago le suma a quien pagó y le resta a quien cobró. Un pago que la otra
+  // parte marcó como no reconocido (objetado, 33) no cuenta hasta que lo arreglen.
   function saldos(gastos, partes, pagos) {
     const s = new Map();
     const sumar = (id, v) => s.set(id, (s.get(id) || 0) + v);
@@ -36,7 +37,7 @@
       sumar(x.pagador, x.monto);
       repartir(x.monto, personas).forEach((v, id) => sumar(id, -v));
     });
-    (pagos || []).forEach((p) => { sumar(p.de, p.monto); sumar(p.a, -p.monto); });
+    (pagos || []).forEach((p) => { if (p.objetado) return; sumar(p.de, p.monto); sumar(p.a, -p.monto); });
     return s;
   }
 
