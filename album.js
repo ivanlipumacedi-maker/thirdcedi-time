@@ -8,9 +8,6 @@
 .album [hidden] { display: none !important }
 .album .album-acciones { display: flex; gap: 8px; flex-wrap: wrap; align-items: center }
 .album .album-acciones .btn-sec, .album .album-acciones .btn-primario { flex: 1; margin-top: 0; text-align: center; cursor: pointer }
-.album .album-drive { display: inline-block; margin-top: .6rem; color: var(--accent-hover); font-weight: 600; text-decoration: none }
-[data-tema="oscuro"] .album .album-drive { color: var(--accent) }
-.album .album-drive:hover { text-decoration: underline }
 .album .album-estado { font-size: .88rem; color: var(--muted); margin: .6rem 0 0 }
 .album .album-estado .barra { height: 5px; border-radius: 3px; background: var(--border); margin-top: 5px; overflow: hidden }
 .album .album-estado .barra i { display: block; height: 100%; background: var(--accent) }
@@ -91,7 +88,7 @@
     if (!estilo) { estilo = true; document.head.appendChild(h('style', null, CSS)); }
     const q = laCola();
 
-    let fotos = [], uso = 0, driveUrl = null, truncado = false;
+    let fotos = [], uso = 0, truncado = false;
     let estado = 'cargando';      // 'cargando' | 'error' | 'ok'
     let cerrado = false;
     let enVuelo = null;           // la sincronización en curso (una sola a la vez)
@@ -103,9 +100,8 @@
 
     // ---------- Estructura ----------
     const inGaleria = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, id: 'album-galeria-' + act.slice(0, 8) });
-    const linkDrive = h('a', { class: 'album-drive', id: 'album-drive', target: '_blank', rel: 'noopener', hidden: true }, g.App.icono('drive'), 'Ver en Drive');
-    // la carpeta de Drive la ven solo los anotados, con una cuenta de Google de su mail (decisión de Ivan, 2026-11-14)
-    const ayudaDrive = h('p', { class: 'ayuda ayuda-link', id: 'album-drive-ayuda', hidden: true }, 'Se abre con una cuenta de Google de tu mail. Si no tenés, creala con tu mail en accounts.google.com.');
+    // Sin link a Drive (decisión de Ivan, 2026-11-14): la copia de Drive es un respaldo privado de la cuenta CEDI CLUB;
+    // las fotos se ven y se bajan (Guardar) desde la app, que ya controla quién ve qué.
     const elEstadoTxt = h('div', { class: 'album-estado-txt', 'aria-live': 'polite' });
     const elBarra = h('div', { class: 'barra', hidden: true }, h('i'));
     const elEstado = h('div', { class: 'album-estado' }, elEstadoTxt, elBarra);
@@ -117,7 +113,7 @@
         h('button', { type: 'button', id: 'album-camara', class: 'btn-primario btn-chico btn-con-ico', on: { click: abrirCamara } }, g.App.icono('camara'), 'Cámara'),
         h('button', { type: 'button', id: 'album-galeria', class: 'btn-sec btn-chico btn-con-ico', on: { click: () => inGaleria.click() } }, g.App.icono('galeria'), 'Galería'),
         inGaleria),
-      linkDrive, ayudaDrive, elEstado, elGrilla);
+      elEstado, elGrilla);
 
     // ---------- Pintar ----------
     function pintarEstado() {
@@ -129,9 +125,6 @@
       elBarra.hidden = e.estado === 'ok';
       elBarra.firstChild.style.width = e.pct + '%';
       g.Camara.pendientes(pend);
-      linkDrive.hidden = !driveUrl;
-      ayudaDrive.hidden = !driveUrl;
-      if (driveUrl) linkDrive.href = driveUrl;
     }
 
     async function firmarYPoner(imgs) {
@@ -183,9 +176,8 @@
       otraVez = false;
       enVuelo = (async () => {
         try {
-          const [r, a, u] = await Promise.all([
+          const [r, u] = await Promise.all([
             sb.from('fotos').select('*').eq('actividad', act).order('tomada', { ascending: false }).limit(A.LIMITE_FOTOS),
-            sb.from('actividades').select('drive_url').eq('id', act).maybeSingle(),
             sb.rpc('album_uso'),
           ]);
           if (r.error) throw r.error;
@@ -194,7 +186,6 @@
           if (cerrado) return;
           fotos = r.data || [];
           truncado = fotos.length >= A.LIMITE_FOTOS;
-          if (!a.error) driveUrl = (a.data && a.data.drive_url) || null;
           if (!u.error) uso = Number(u.data) || 0;
           estado = 'ok';
           if (actual && !fotos.some((x) => x.id === actual.id)) cerrarVisor();
@@ -236,10 +227,6 @@
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'fotos', filter: 'actividad=eq.' + act }, (p) => { meter(p.new); refrescarUso(); })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'fotos', filter: 'actividad=eq.' + act }, (p) => { if (p.new && fotos.some((x) => x.id === p.new.id)) meter(p.new); })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'fotos' }, (p) => { if (p.old && p.old.id) sacar(p.old.id); })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'actividades', filter: 'id=eq.' + act }, (p) => {
-        if (cerrado || !p.new) return;
-        driveUrl = p.new.drive_url || null; pintarEstado();
-      })
       .subscribe((st) => { if (st === 'SUBSCRIBED') sincronizar(); });
 
     const alVolver = () => { if (!document.hidden) { M.reintentarYa(); sincronizar(); } };

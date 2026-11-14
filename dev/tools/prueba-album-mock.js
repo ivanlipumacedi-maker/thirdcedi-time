@@ -1,7 +1,7 @@
 // Prueba de la UI del álbum SIN red ni usuarios reales: un Supabase falso en memoria que atiende a tres páginas
 // (Ana y Beto anotados, Cami no), con la regla de la base: solo ve y sube quien está anotado; borra solo el autor.
 // Verifica: error inicial con "Reintentar", galería, llegada en vivo a la otra ventana, cola sin señal que sube al volver,
-// cámara (dispositivo falso de Chrome), visor, borrar con confirmación en la página (solo el autor), "Ver en Drive" en vivo,
+// cámara (dispositivo falso de Chrome), visor, borrar con confirmación en la página (solo el autor), sin link a Drive,
 // "Mandar al chat", que quien no está anotado no ve el álbum y que con el álbum cerrado no se lee nada.
 // Capturas en dev/shots/album-*.png (claro y oscuro, 390x844). No toca el proyecto real ni necesita contraseñas.
 // Uso: servir la raíz con `npx --yes http-server -p 8080 -c-1` y correr `node dev/tools/prueba-album-mock.js`
@@ -274,11 +274,11 @@ const celdas = (p) => cuantos(p, '#album-act .album-cel');
       await esperar(pa, () => document.getElementById('camara').hidden);
     });
 
-    await paso('"Ver en Drive" aparece en vivo cuando el servidor pone drive_url', async () => {
+    await paso('nunca hay link a Drive, aunque el servidor ponga drive_url (Drive es un respaldo privado)', async () => {
       db.actividades[0].drive_url = 'https://drive.google.com/drive/folders/abc123';
       emitir('actividades', 'UPDATE', db.actividades[0]);
-      await esperar(pb, () => { const a = document.getElementById('album-drive'); return a && !a.hidden && a.href === 'https://drive.google.com/drive/folders/abc123'; });
-      await esperar(pa, () => !document.getElementById('album-drive').hidden);
+      await new Promise((r) => setTimeout(r, 400));
+      for (const p of [pa, pb]) assert.equal(await cuantos(p, 'a[href*="drive.google.com"], #album-drive'), 0, 'apareció un link a Drive');
     });
 
     await paso('capturas del álbum (claro y oscuro)', async () => {
