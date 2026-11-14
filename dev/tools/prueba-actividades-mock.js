@@ -348,6 +348,23 @@ const volver = (p) => p.evaluate(() => document.querySelector('#pantalla-activid
       assert.equal(await pa.$eval('#f-lugar', (e) => e.value), '');
       assert.match(await texto(pa, '#f-lugar-link'), /Link de Maps cargado/);
       await clic(pa, '#f-lugar-quitar');
+      // el portapapeles del teclado (sin evento paste) con un texto largo: el link está pasados los 120 caracteres
+      // y antes el campo lo cortaba; un link largo de google.com/maps/place también
+      const largo = 'Club Norte Pádel de la Costanera, Avenida del Libertador 12345, Vicente López, Provincia de Buenos Aires, Argentina https://maps.app.goo.gl/zzLargo1';
+      await pa.$eval('#f-lugar', (e, t) => { e.value = ''; e.focus(); document.execCommand('insertText', false, t); }, largo);
+      assert.equal(await pa.$eval('#f-lugar', (e) => e.value.includes('http')), false, 'el link quedó en el nombre');
+      assert.ok(await pa.$eval('#f-lugar', (e) => e.value.length <= 120), 'el nombre pasa de 120');
+      assert.match(await texto(pa, '#f-lugar-link'), /Link de Maps cargado/, 'no tomó el link del texto largo');
+      await clic(pa, '#f-lugar-quitar');
+      const lugarLargo = 'https://www.google.com/maps/place/Club+Norte+P%C3%A1del/@-34.5281234,-58.4712345,17z/data=!3m1!4b1!4m6!3m5!1s0x95bcb6e1234:0xabc!8m2!3d-34.52!4d-58.47';
+      await pa.$eval('#f-lugar', (e, t) => { e.value = ''; e.focus(); document.execCommand('insertText', false, t); }, lugarLargo);
+      assert.equal(await pa.$eval('#f-lugar', (e) => e.value), '');
+      assert.match(await texto(pa, '#f-lugar-link'), /Link de Maps cargado/, 'no tomó el link largo de google.com/maps');
+      await clic(pa, '#f-lugar-quitar');
+      // escrito a mano sigue con tope de 120
+      await pa.$eval('#f-lugar', (e) => { e.value = ''; e.focus(); });
+      await pa.type('#f-lugar', 'x'.repeat(125));
+      assert.equal(await pa.$eval('#f-lugar', (e) => e.value.length), 120);
       await pa.$eval('#f-lugar', (e) => { e.value = 'Club Norte Pádel https://maps.app.goo.gl/zzPrueba1'; e.dispatchEvent(new Event('input')); });
       assert.equal(await pa.$eval('#f-lugar', (e) => e.value), 'Club Norte Pádel');
       assert.match(await texto(pa, '#f-lugar-link'), /Link de Maps cargado/);

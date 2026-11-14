@@ -421,7 +421,7 @@
     const inOtro = h('input', { id: 'f-otro', type: 'text', maxLength: 60, value: v.tipo_otro || '', placeholder: '¿Qué actividad es?' });
     const inTitulo = h('input', { id: 'f-titulo', type: 'text', maxLength: 80, value: v.titulo || '', placeholder: 'Ej.: Pádel del jueves' });
     const inFecha = h('input', { id: 'f-fecha', type: 'datetime-local', value: L.aInputArg(v.fecha) });
-    const inLugar = h('input', { id: 'f-lugar', type: 'text', maxLength: 120, value: v.lugar || '' });
+    const inLugar = h('input', { id: 'f-lugar', type: 'text', value: v.lugar || '' });
     // Un campo por lugar: se escribe el nombre o se pega lo que copia Maps al compartir. El link queda aparte (abajo:
     // "Link de Maps cargado" con "Quitar") y en el campo queda el nombre. Un lugar ya usado con link lo trae solo.
     const campoLugar = (inNombre, link, queLink) => {
@@ -453,12 +453,19 @@
         mostrar();
         return true;
       };
+      // El tope de 120 va sobre el nombre, después de sacar el link: con maxLength en el campo, un pegado largo (o el
+      // portapapeles del teclado, que no manda el paste) llegaba cortado y el link se perdía.
+      const MAX_NOMBRE = 120;
+      const recortar = () => { if (inNombre.value.length > MAX_NOMBRE) inNombre.value = inNombre.value.slice(0, MAX_NOMBRE); };
       inNombre.addEventListener('input', (e) => {
         const deUnaVez = !e.inputType || /^insertFrom|^insertReplacementText$/.test(e.inputType) || (e.data && e.data.length > 1);
         if (deUnaVez) sacarLink();
+        if (!/https?:\/\//i.test(inNombre.value)) recortar(); // un link tecleado a mano se resuelve al salir
       });
       inNombre.addEventListener('change', () => {
-        if (sacarLink()) return;
+        const conLink = sacarLink();
+        recortar();
+        if (conLink) return;
         if (enlace && !auto) return;
         // vacío o con el de la última vez: se busca el del nombre nuevo (o se va, si ese nombre no tiene)
         enlace = L.linkDeLugarConocido(inNombre.value, actividades);
@@ -472,14 +479,14 @@
     const lblLugar = h('label', { for: 'f-lugar' });
     const clLugar = campoLugar(inLugar, v.lugar_link, 'del lugar');
     const ayudaLink = h('p', { class: 'ayuda ayuda-link' }, 'Escribí el nombre o pegá lo que copiás en Maps con Compartir. El link lo ven solo los anotados.');
-    const inDestino = h('input', { id: 'f-destino', type: 'text', maxLength: 120, value: v.destino || '' });
+    const inDestino = h('input', { id: 'f-destino', type: 'text', value: v.destino || '' });
     const lblDestino = h('label', { for: 'f-destino' });
     const clDestino = campoLugar(inDestino, v.destino_link, 'del destino');
     const bloqueDestino = h('div', { class: 'campo' }, lblDestino, inDestino, clDestino.estado);
     const inCupo = h('input', { id: 'f-cupo', type: 'number', min: '1', step: '1', inputMode: 'numeric', value: v.cupo != null ? String(v.cupo) : '', placeholder: 'Sin límite' });
     const inDesc = h('textarea', { id: 'f-desc', maxLength: 500, rows: 3, value: v.descripcion || '' });
     const chkTer = h('input', { id: 'f-tercer', type: 'checkbox', checked: !!v.tiene_tercer });
-    const inTerLugar = h('input', { id: 'f-ter-lugar', type: 'text', maxLength: 120, value: v.tercer_lugar || '', placeholder: 'Ej.: Parrilla de la esquina' });
+    const inTerLugar = h('input', { id: 'f-ter-lugar', type: 'text', value: v.tercer_lugar || '', placeholder: 'Ej.: Parrilla de la esquina' });
     const inTerFecha = h('input', { id: 'f-ter-fecha', type: 'datetime-local', value: L.aInputArg(v.tercer_fecha) });
     const clTer = campoLugar(inTerLugar, v.tercer_link, 'del tercer tiempo');
     const bloqueTer = h('div', { class: 'bloque-tercer' }, campo('f-ter-lugar', 'Lugar del tercer tiempo', [inTerLugar, clTer.estado]), campo('f-ter-fecha', 'Cuándo es el tercer tiempo', inTerFecha));
