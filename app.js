@@ -81,6 +81,63 @@
     return s;
   }
 
+  // Navegación dentro de una pantalla (Juegos → Nueva partida → partida; Actividades → detalle → editar): cada vista
+  // que no es la raíz queda en el historial (misma URL, con la vista en history.state), así el "atrás" de Android y
+  // los botones "Volver" vuelven un paso dentro de la pantalla en vez de salir al inicio.
+  // subnav(pantalla, { raiz, clave(v), aplicar(v) }) → { ir(v, { reemplazar }), atras(siNoHay) }
+  // * ir(raiz) vuelve hasta la raíz por el historial; ir(otra) agrega un paso (o reemplaza el actual con reemplazar).
+  // * atras(siNoHay): un paso atrás; si no hay pasos guardados (se entró directo), va a siNoHay.
+  // * Al volver con "atrás" se aplica la vista guardada; los pasos de las capas del chat o del álbum (que también usan
+  //   el historial) no cambian la vista: se compara por clave.
+  // * Tocar la pestaña de abajo abre la pantalla en su raíz (entrada nueva sin vista).
+  function subnav(pantalla, { raiz, clave, aplicar }) {
+    const k = 'nav_' + pantalla, kn = k + '_n';
+    const st = () => history.state || {};
+    const url = () => location.hash || '#/' + pantalla;
+    let actual = clave(raiz);
+    const poner = (v) => { actual = clave(v); aplicar(v); };
+    function ir(v, opc = {}) {
+      const n = st()[kn] || 0;
+      if (clave(v) === clave(raiz)) {
+        if (n > 0 && st()[k]) { history.go(-n); return; } // el popstate aplica la raíz
+        poner(v); return;
+      }
+      if (opc.reemplazar && n > 0) history.replaceState({ ...st(), [k]: v }, '', url());
+      else history.pushState({ ...st(), [k]: v, [kn]: n + 1 }, '', url());
+      poner(v);
+    }
+    function atras(siNoHay) {
+      if ((st()[kn] || 0) > 0 && st()[k]) history.back();
+      else ir(siNoHay || raiz);
+    }
+    g.addEventListener('popstate', () => {
+      if (rutaActual() !== pantalla) return;
+      const v = st()[k] || raiz;
+      if (clave(v) !== actual) poner(v);
+    });
+    return { ir, atras };
+  }
+
+  // iPhone/iPad con la app instalada (pantalla de inicio): iOS no trae el gesto de "atrás", así que lo hace la app.
+  // Deslizar desde el borde izquierdo (los primeros 24 px) hacia la derecha = history.back(), lo mismo que el botón
+  // de Android: vuelve un paso dentro de la pantalla (subnav) o cierra una capa del chat o del álbum.
+  (function gestoAtrasIOS() {
+    const ios = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const instalada = navigator.standalone === true || (g.matchMedia && g.matchMedia('(display-mode: standalone)').matches);
+    if (!ios || !instalada) return;
+    let x0 = null, y0 = 0, t0 = 0;
+    g.addEventListener('touchstart', (e) => {
+      const t = e.touches[0];
+      x0 = e.touches.length === 1 && t.clientX <= 24 ? t.clientX : null; y0 = t.clientY; t0 = Date.now();
+    }, { passive: true });
+    g.addEventListener('touchend', (e) => {
+      if (x0 == null) return;
+      const t = e.changedTouches[0], dx = t.clientX - x0, dy = Math.abs(t.clientY - y0);
+      x0 = null;
+      if (dx > 70 && dy < 60 && Date.now() - t0 < 800 && history.length > 1) history.back();
+    }, { passive: true });
+  })();
+
   let tToast = null;
   function toast(texto) {
     const el = document.getElementById('toast');
@@ -111,6 +168,6 @@
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
   }
 
-  g.App = { ir, rutaActual, sb, yo: () => perfil, setPerfil, modoAcceso, toast, icono, SUPABASE_URL, TURNSTILE_SITE_KEY, GIPHY_KEY };
+  g.App = { ir, rutaActual, subnav, sb, yo: () => perfil, setPerfil, modoAcceso, toast, icono, SUPABASE_URL, TURNSTILE_SITE_KEY, GIPHY_KEY };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar();
 })(window);

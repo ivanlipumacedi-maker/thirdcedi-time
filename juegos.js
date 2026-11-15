@@ -174,7 +174,14 @@
     clearTimeout(tRefresco);
   }
   // Cambiar de vista cambia qué se lee y a qué se suscribe: lo que vuelva de la vista anterior se descarta.
-  function irA(v) {
+  // cada vista que no es la lista queda en el historial: el "atrás" de Android vuelve un paso (App.subnav)
+  let nav = null;
+  function irA(v, opc) {
+    if (!nav) nav = g.App.subnav('juegos', { raiz: { tipo: 'lista' }, clave: (x) => x.tipo + ':' + (x.id || ''), aplicar: aplicarVista });
+    nav.ir(v, opc);
+  }
+  const volverALista = () => { if (!nav) irA({ tipo: 'lista' }); else nav.atras({ tipo: 'lista' }); };
+  function aplicarVista(v) {
     const cambia = (v.tipo === 'partida' ? 'par:' + v.id : 'lista') !== claveVista(); // 'nueva' usa los datos de la lista
     vista = v; confirmando = null;
     if (cambia) {
@@ -204,7 +211,7 @@
     const { data, error } = await rpc('crear_partida', { p_juego: juego });
     ocupado = false;
     if (error) { pintar(); return; }
-    irA({ tipo: 'partida', id: data });
+    irA({ tipo: 'partida', id: data }, { reemplazar: true });
   }
   // Edge Function juegos (36, 38): → {} o { error: 'motivo en español' }; si la partida cambió en el medio, se recarga
   async function funcion(cuerpo) {
@@ -299,7 +306,7 @@
         trucoAccion: (v, jugada) => funcion({ accion: 'truco_accion', partida: p.id, v, jugada }),
         // ajedrez (36): la jugada la valida y la guarda la Edge Function juegos
         mover: (n, desde, hasta, corona) => funcion({ accion: 'ajedrez_mover', partida: p.id, n, desde, hasta, corona }),
-        volver: () => irA({ tipo: 'lista' }),
+        volver: volverALista,
       });
     }
     juegoCtl.actualizar({ partida: p, jugadores, mias });
@@ -367,7 +374,7 @@
   function cerrarRanking() { if (rankingCtl) rankingCtl.cerrar(); rankingCtl = null; rankingEl = null; }
   function vistaRanking() {
     if (!rankingEl && g.Ranking) { rankingEl = h('section', { id: 'ranking-general' }); rankingCtl = g.Ranking.abrir(rankingEl); }
-    return [h('button', { type: 'button', class: 'btn-link btn-volver', on: { click: () => irA({ tipo: 'lista' }) } }, g.App.icono('volver'), 'Volver'), rankingEl];
+    return [h('button', { type: 'button', class: 'btn-link btn-volver', on: { click: volverALista } }, g.App.icono('volver'), 'Volver'), rankingEl];
   }
 
   function vistaLista() {
@@ -405,7 +412,7 @@
           h('span', { class: 'tarjeta-meta' }, j.desc)));
     };
     return [
-      h('button', { type: 'button', class: 'btn-link btn-volver', on: { click: () => irA({ tipo: 'lista' }) } }, g.App.icono('volver'), 'Volver'),
+      h('button', { type: 'button', class: 'btn-link btn-volver', on: { click: volverALista } }, g.App.icono('volver'), 'Volver'),
       h('h1', null, 'Nueva partida'),
       h('p', { class: 'ayuda' }, '¿A qué juegan? La partida queda abierta para que se sumen los demás.'),
       h('div', { class: 'lista-act' }, opcion('trivia'), opcion('impostor'), opcion('pictionary'), opcion('truco'), opcion('ajedrez')),
@@ -433,7 +440,7 @@
   }
 
   function vistaPartida() {
-    const volver = h('button', { type: 'button', class: 'btn-link btn-volver', on: { click: () => irA({ tipo: 'lista' }) } }, g.App.icono('volver'), 'Volver');
+    const volver = h('button', { type: 'button', class: 'btn-link btn-volver', on: { click: volverALista } }, g.App.icono('volver'), 'Volver');
     if (!cargado && estadoCarga === 'error') {
       cerrarChat(); cerrarJuego();
       return [volver, h('div', { class: 'vacio', role: 'alert' }, h('p', null, 'No pudimos cargar la partida.'),

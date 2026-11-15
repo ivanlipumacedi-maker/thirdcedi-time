@@ -222,7 +222,12 @@
     }
     return chatEl;
   }
-  function irA(v) { vista = v; if (v.tipo === 'form') vista.nuevoRender = true; confirmando = null; pintar(); }
+  function aplicarVista(v) { vista = { ...v }; if (v.tipo === 'form') vista.nuevoRender = true; confirmando = null; pintar(); }
+  // cada vista que no es la lista queda en el historial: el "atrás" de Android vuelve un paso (App.subnav)
+  let nav = null;
+  const navegador = () => nav || (nav = g.App.subnav('actividades', { raiz: { tipo: 'lista' }, clave: (x) => x.tipo + ':' + (x.id || ''), aplicar: aplicarVista }));
+  function irA(v, opc) { navegador().ir(v, opc); }
+  const atras = (siNoHay) => navegador().atras(siNoHay);
 
   function badge(texto, clase) { return h('span', { class: 'badge ' + (clase || '') }, texto); }
 
@@ -369,7 +374,7 @@
     const lugarCon = (nombre, link, id, etq) => h('span', { class: 'dato-lugar' },
       h('span', null, etq && h('span', { class: 'dato-etq' }, etq + ': '), nombre), botonMaps(nombre, link, id));
     const out = [
-      volverBtn(() => irA({ tipo: 'lista' })),
+      volverBtn(() => atras({ tipo: 'lista' })),
       h('div', { class: 'det-cab' + (cancelada ? ' cancelada' : '') },
         h('p', { class: 'tarjeta-tipo det-tipo' }, ico(t.icono), nombreTipo(a)),
         h('h1', null, a.titulo),
@@ -426,7 +431,7 @@
     const editando = !!a;
     if (editando && !L.editable(a)) {
       return h('div', { class: 'form-act paso' },
-        volverBtn(() => irA({ tipo: 'detalle', id: a.id })),
+        volverBtn(() => atras({ tipo: 'detalle', id: a.id })),
         h('h1', null, 'Editar actividad'),
         h('p', { id: 'act-no-editable', class: 'ayuda', role: 'alert' }, MSG_CANCELADA));
     }
@@ -531,7 +536,7 @@
     sync();
 
     const form = h('form', { class: 'form-act paso', noValidate: true },
-      volverBtn(() => irA(a ? { tipo: 'detalle', id: a.id } : { tipo: 'lista' })),
+      volverBtn(() => atras(a ? { tipo: 'detalle', id: a.id } : { tipo: 'lista' })),
       h('h1', null, editando ? 'Editar actividad' : 'Nueva actividad'),
       campo('f-tipo', 'Tipo', h('div', { class: 'f-tipo' }, icoTipo, selTipo)), bloqueOtro,
       campo('f-titulo', 'Título', inTitulo),
@@ -607,7 +612,8 @@
       }
       g.App.toast(linkMal ? 'La actividad se guardó, pero el link de Maps no. Probá de nuevo desde Editar.' : (editando ? 'Cambios guardados' : 'Actividad creada'));
       await refrescar();
-      irA({ tipo: 'detalle', id: data.id });
+      // editando se vuelve al detalle de donde vino; una nueva reemplaza el formulario por su detalle
+      if (editando) atras({ tipo: 'detalle', id: data.id }); else irA({ tipo: 'detalle', id: data.id }, { reemplazar: true });
     }
     form.addEventListener('submit', (ev) => { ev.preventDefault(); guardar(); });
     return form;
@@ -694,7 +700,7 @@
       albumAct = id;
       albumCerrar = g.Album.abrir(albumEl, id);
     }
-    return [volverBtn(() => irA({ tipo: 'lista' })),
+    return [volverBtn(() => atras({ tipo: 'lista' })),
       h('h1', { class: 'titulo-ico' }, ico('album'), 'Fotos de todos'),
       h('p', { class: 'ayuda' }, 'Lo que cualquiera comparte con la cámara de abajo. Lo ven todos y se guarda en el Drive.'),
       albumEl];
