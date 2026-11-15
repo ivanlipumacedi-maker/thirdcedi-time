@@ -132,7 +132,7 @@ h1 { font-size: 1.75rem; line-height: 1.15; letter-spacing: -.02em; margin: 0 0 
 .pestanas a:focus-visible .ind, .pestana-camara:focus-visible .ind { outline: 2px solid #fff; outline-offset: 2px; }
 .pestana-camara { color: #fff; }
 .pestana-camara .ind { background: var(--accent); color: #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, .22); }
-.pestana-camara .pc-ico { width: 22px; height: 22px; fill: currentColor; display: block; }
+.pestana-camara .pc-ico { width: 27px; height: 27px; display: block; }
 .pestana-camara:hover .ind { background: var(--accent-hover); }
 .pestana-camara:active .ind { transform: scale(.94); }
 /* modo claro: la barra blanca de siempre (con su borde fino arriba), con la misma forma (píldoras) */
