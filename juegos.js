@@ -12,7 +12,8 @@
   const VIGENCIA_TERMINADA = 24 * 3600e3;
   const VIGENCIA_EN_CURSO = 2 * 3600e3;   // una partida "en curso" sin movimiento hace más que esto quedó trabada
 
-  let vista = { tipo: 'lista' };  // { tipo:'lista' } | { tipo:'nueva' } | { tipo:'partida', id }
+  let vista = { tipo: 'lista' };  // { tipo:'lista' } | { tipo:'nueva' } | { tipo:'ranking' } | { tipo:'partida', id }
+  let rankingEl = null, rankingCtl = null; // el ranking general (ranking.js): se arma al entrar y se suelta al salir
   let partidas = [];              // lista
   let jugadores = [];             // lista: los de las partidas visibles; partida: los de esa partida
   let actual = null;              // partida abierta
@@ -298,7 +299,8 @@
       return;
     }
     cerrarChat(); cerrarJuego();
-    r.append(...nodos(vista.tipo === 'nueva' ? vistaNueva() : vistaLista()));
+    if (vista.tipo !== 'ranking') cerrarRanking();
+    r.append(...nodos(vista.tipo === 'nueva' ? vistaNueva() : vista.tipo === 'ranking' ? vistaRanking() : vistaLista()));
     restaurarFoco(r, foco);
   }
 
@@ -318,10 +320,18 @@
           soyActivo(p.id, jugadores) && p.estado !== 'terminada' && badge('Estás adentro'))));
   }
 
+  function cerrarRanking() { if (rankingCtl) rankingCtl.cerrar(); rankingCtl = null; rankingEl = null; }
+  function vistaRanking() {
+    if (!rankingEl && g.Ranking) { rankingEl = h('section', { id: 'ranking-general' }); rankingCtl = g.Ranking.abrir(rankingEl); }
+    return [h('button', { type: 'button', class: 'btn-link btn-volver', on: { click: () => irA({ tipo: 'lista' }) } }, g.App.icono('volver'), 'Volver'), rankingEl];
+  }
+
   function vistaLista() {
     const ahora = Date.now();
     const out = [h('div', { class: 'fila-titulo' }, h('h1', null, 'Juegos'),
-      h('button', { type: 'button', id: 'btn-nueva-partida', class: 'btn-primario btn-chico btn-con-ico', on: { click: () => irA({ tipo: 'nueva' }) } }, g.App.icono('mas'), 'Nueva partida'))];
+      h('div', { class: 'fila-botones-titulo' },
+        h('button', { type: 'button', id: 'btn-ranking', class: 'btn-sec btn-chico btn-con-ico', on: { click: () => irA({ tipo: 'ranking' }) } }, g.App.icono('trofeo'), 'Ranking'),
+        h('button', { type: 'button', id: 'btn-nueva-partida', class: 'btn-primario btn-chico btn-con-ico', on: { click: () => irA({ tipo: 'nueva' }) } }, g.App.icono('mas'), 'Nueva partida')))];
     if (!cargado && estadoCarga === 'error') {
       out.push(h('div', { class: 'vacio', role: 'alert' }, h('p', null, 'No pudimos cargar las partidas.'),
         h('button', { type: 'button', id: 'jue-reintentar', class: 'btn-sec btn-chico', on: { click: () => { estadoCarga = 'cargando'; pintar(); refrescar(); } } }, 'Reintentar')));

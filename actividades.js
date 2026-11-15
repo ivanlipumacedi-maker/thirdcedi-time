@@ -20,6 +20,7 @@
   let cuentasEl = null;           // sección de Cuentas claras de la actividad abierta (se conserva entre repintados)
   let cuentasAct = null;
   let cuentasApi = null;
+  let asistenciaEl = null, asistenciaApi = null, asistenciaAct = null; // asistencia confirmada (35, asistencia.js)
   let albumEl = null;             // álbum de la actividad abierta (se conserva entre repintados)
   let albumAct = null;
   let albumCerrar = null;
@@ -168,7 +169,23 @@
     if (albumCerrar) albumCerrar();
     albumCerrar = null; albumEl = null; albumAct = null;
   }
-  function cerrarAnexos() { cerrarChat(); cerrarCuentas(); cerrarAlbum(); }
+  function cerrarAsistencia() {
+    if (asistenciaApi) asistenciaApi.cerrar();
+    asistenciaApi = null; asistenciaEl = null; asistenciaAct = null;
+  }
+  function cerrarAnexos() { cerrarChat(); cerrarCuentas(); cerrarAlbum(); cerrarAsistencia(); }
+  // Asistencia confirmada para el ranking: la marca quien la armó; los anotados ven si ya está. Se abre una vez y se reusa.
+  function asistenciaDe(a, enAct, enTer, anotado) {
+    if (!g.Asistencia) return null;
+    const ctx = { actividad: a, anotados: { actividad: enAct, tercer: enTer }, perfilDe, yo: yoId(), anotado };
+    if (asistenciaAct !== a.id) {
+      cerrarAsistencia();
+      asistenciaEl = h('section', { class: 'asistencia', id: 'asistencia-act', hidden: true });
+      asistenciaAct = a.id;
+      asistenciaApi = g.Asistencia.abrir(asistenciaEl, ctx);
+    } else asistenciaApi.actualizar(ctx);
+    return asistenciaEl;
+  }
   // Álbum de fotos: como el chat, solo para quien está anotado a alguna de las partes. Se abre una vez y se reusa.
   function albumDe(a, anotado) {
     if (!anotado || !g.Album) { cerrarAlbum(); return null; }
@@ -381,6 +398,7 @@
         cancelada ? null : h('button', { type: 'button', id: 'btn-voy-tercer', class: voyTer ? 'btn-sec btn-ancho' : 'btn-primario btn-ancho', on: { click: alternar('tercer', voyTer) } }, voyTer ? 'Ya no voy al tercer tiempo' : 'Voy al tercer tiempo'),
         anotadosLista(enTer)));
     }
+    out.push(asistenciaDe(a, enAct, enTer, voy || voyTer));
     out.push(cuentasDe(a, enAct, enTer, voy || voyTer));
     out.push(albumDe(a, voy || voyTer));
     out.push(chatDe(a, voy || voyTer));
