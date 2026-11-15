@@ -3,14 +3,15 @@
 (function (g) {
   const DURACION_MAX_MS = 60 * 1000; // un video dura como mucho 60 s
   const AVISO_MS = 10 * 1000; // a los 50 s avisa que faltan 10
-  const LIMITE_BYTES = 100 * 1024 * 1024; // y pesa como mucho 100 MB (lo que acepta el bucket)
+  // y pesa como mucho 25 MB (2026-11-15, plan gratis de Supabase: antes 100 MB, lo que acepta el bucket). Así además todo
+  // video grabado con la app entra en la copia a Drive (tope 35 MB).
+  const LIMITE_BYTES = 25 * 1024 * 1024;
   const AUDIO_BPS = 128000;
 
-  // bitrate de referencia por resolución (a 30 cuadros); el real tiene un tope para que 60 s entren en 100 MB
+  // bitrate de referencia por resolución (a 30 cuadros); el real tiene un tope para que 60 s entren en LIMITE_BYTES
+  // (con 25 MB queda en unos 3 Mbps). Solo 720p desde el 2026-11-15 (antes también 1080p y 4K).
   const RESOLUCIONES = [
     { id: '720p', nombre: '720p', ancho: 1280, alto: 720, bps: 5e6 },
-    { id: '1080p', nombre: '1080p', ancho: 1920, alto: 1080, bps: 10e6 },
-    { id: '4k', nombre: '4K', ancho: 3840, alto: 2160, bps: 35e6 },
   ];
   const FPS = [24, 30, 60];
   // en orden de preferencia: MP4 (H.264) primero, porque se ve en todos los teléfonos; WebM si no hay otra. El codec va sin perfil
@@ -22,10 +23,10 @@
   ];
 
   const max = (c) => (c && typeof c.max === 'number' ? c.max : null);
-  /** las resoluciones que da la cámara, según getCapabilities() del track (width/height). Sin datos: 720p y 1080p (se piden como ideal). */
+  /** las resoluciones que da la cámara, según getCapabilities() del track (width/height). Sin datos: 720p (se pide como ideal). */
   function resolucionesSoportadas(caps) {
     const w = max(caps && caps.width), h = max(caps && caps.height);
-    if (!w || !h) return ['720p', '1080p'];
+    if (!w || !h) return ['720p'];
     const largo = Math.max(w, h), corto = Math.min(w, h); // el track puede venir en vertical
     const r = RESOLUCIONES.filter((x) => largo >= x.ancho && corto >= x.alto).map((x) => x.id);
     return r.length ? r : ['720p'];
@@ -56,13 +57,13 @@
     const tope = (LIMITE_BYTES * 8 * 0.9) / (DURACION_MAX_MS / 1000) - (audio ? AUDIO_BPS : 0); // 10 % de margen (el codificador no es exacto)
     return Math.round(Math.min(ref, tope));
   }
-  /** opciones guardadas + lo que da el teléfono → opciones válidas (MP4, 1080p y 30 por defecto si están) */
+  /** opciones guardadas + lo que da el teléfono → opciones válidas (MP4, 720p y 30 por defecto si están) */
   function normalizar(guardadas, { resoluciones, fps, formatos }) {
     const o = guardadas || {};
     const elegir = (v, lista, pref) => (lista.includes(v) ? v : lista.includes(pref) ? pref : lista[lista.length - 1]);
     const ids = formatos.map((f) => f.id);
     return {
-      res: elegir(o.res, resoluciones, '1080p'),
+      res: elegir(o.res, resoluciones, '720p'),
       fps: elegir(o.fps, fps, 30),
       formato: ids.includes(o.formato) ? o.formato : ids[0] || null,
       audio: o.audio !== false,
@@ -72,7 +73,7 @@
   const chip = (o) => `${(RESOLUCIONES.find((x) => x.id === o.res) || RESOLUCIONES[0]).nombre} · ${o.fps}`;
   /** restricciones de getUserMedia para esas opciones (horizontal; el teléfono la gira si está en vertical) */
   function restricciones(o, base) {
-    const r = RESOLUCIONES.find((x) => x.id === o.res) || RESOLUCIONES[1];
+    const r = RESOLUCIONES.find((x) => x.id === o.res) || RESOLUCIONES[0];
     return { ...(base || {}), width: { ideal: r.ancho }, height: { ideal: r.alto }, frameRate: { ideal: o.fps } };
   }
   /** "0:07", "1:00" */

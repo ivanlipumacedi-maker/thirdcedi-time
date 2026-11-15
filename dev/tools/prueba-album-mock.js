@@ -472,7 +472,7 @@ const celdas = (p) => cuantos(p, '#album-act .album-cel');
       assert.match(await texto(pa, '#camara [data-c="opc"]'), /^(720p|1080p|4K) · \d+$/);
       await pa.click('#camara [data-c="opc"]');
       await pa.waitForSelector('#camara .panel:not([hidden])');
-      assert.match(await texto(pa, '#camara .panel'), /Resolución.*Cuadros por segundo.*Formato.*Sonido/s);
+      assert.match(await texto(pa, '#camara .panel'), /Cuadros por segundo.*Formato.*Sonido.*720p/s);
       await pa.screenshot({ path: path.join(shots, 'album-camara-video-opciones-claro.png') });
       await pa.keyboard.press('Escape');
       await esperar(pa, () => document.querySelector('#camara .panel').hidden && !document.getElementById('camara').hidden);

@@ -3,13 +3,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const C = require('../../camara-logica.js');
 
-test('resoluciones: solo las que da la cámara (también si el track viene en vertical)', () => {
-  assert.deepEqual(C.resolucionesSoportadas({ width: { min: 1, max: 1920 }, height: { min: 1, max: 1080 } }), ['720p', '1080p']);
-  assert.deepEqual(C.resolucionesSoportadas({ width: { max: 4032 }, height: { max: 3024 } }), ['720p', '1080p', '4k']);
-  assert.deepEqual(C.resolucionesSoportadas({ width: { max: 1080 }, height: { max: 1920 } }), ['720p', '1080p']);
+test('resoluciones: solo 720p desde el 2026-11-15 (plan gratis de Supabase)', () => {
+  assert.deepEqual(C.RESOLUCIONES.map((r) => r.id), ['720p']);
+  assert.deepEqual(C.resolucionesSoportadas({ width: { max: 4032 }, height: { max: 3024 } }), ['720p']);
+  assert.deepEqual(C.resolucionesSoportadas({ width: { max: 1080 }, height: { max: 1920 } }), ['720p'], 'track en vertical');
   assert.deepEqual(C.resolucionesSoportadas({ width: { max: 640 }, height: { max: 480 } }), ['720p'], 'una cámara chica: 720p como ideal');
-  assert.deepEqual(C.resolucionesSoportadas({}), ['720p', '1080p'], 'sin getCapabilities');
-  assert.deepEqual(C.resolucionesSoportadas(undefined), ['720p', '1080p']);
+  assert.deepEqual(C.resolucionesSoportadas({}), ['720p'], 'sin getCapabilities');
+  assert.deepEqual(C.resolucionesSoportadas(undefined), ['720p']);
 });
 
 test('FPS: 24, 30 y 60, solo los que entran en el rango de frameRate', () => {
@@ -36,40 +36,37 @@ test('formatos: MP4 (H.264) primero si está; si no, un solo WebM (VP9 antes que
   assert.deepEqual(C.formatosSoportados(() => { throw new Error('x'); }), []);
 });
 
-test('bitrate: unos 5, 10 y 35 Mbps, con tope para que 60 s entren en 100 MB', () => {
-  assert.equal(C.bitrate('720p', 30), 5e6);
-  assert.equal(C.bitrate('1080p', 30), 10e6);
-  assert.ok(C.bitrate('1080p', 60) > C.bitrate('1080p', 30));
-  assert.ok(C.bitrate('720p', 24) < C.bitrate('720p', 30));
-  for (const r of ['720p', '1080p', '4k']) for (const fps of [24, 30, 60]) for (const audio of [true, false]) {
-    const total = ((C.bitrate(r, fps, audio) + (audio ? 128000 : 0)) * 60) / 8;
-    assert.ok(total <= C.LIMITE_BYTES * 0.9 + 1, `${r} ${fps} ${audio}: ${Math.round(total / 1048576)} MB`);
+test('bitrate: con tope para que 60 s entren en 25 MB (unos 3 Mbps en 720p)', () => {
+  assert.ok(C.bitrate('720p', 30) <= 3.2e6 && C.bitrate('720p', 30) >= 2.5e6, String(C.bitrate('720p', 30)));
+  for (const fps of [24, 30, 60]) for (const audio of [true, false]) {
+    const total = ((C.bitrate('720p', fps, audio) + (audio ? 128000 : 0)) * 60) / 8;
+    assert.ok(total <= C.LIMITE_BYTES * 0.9 + 1, `720p ${fps} ${audio}: ${Math.round(total / 1048576)} MB`);
   }
-  assert.ok(C.bitrate('4k', 30) < 35e6, '4K queda topeado');
+  assert.equal(C.bitrate('1080p', 30), C.bitrate('720p', 30), 'una resolución vieja guardada cae en 720p');
 });
 
-test('normalizar: MP4, 1080p y 30 por defecto; lo guardado se respeta si el teléfono lo da', () => {
-  const tel = { resoluciones: ['720p', '1080p', '4k'], fps: [24, 30, 60], formatos: [{ id: 'mp4' }, { id: 'webm-vp9' }] };
-  assert.deepEqual(C.normalizar(null, tel), { res: '1080p', fps: 30, formato: 'mp4', audio: true });
-  assert.deepEqual(C.normalizar({ res: '4k', fps: 60, formato: 'webm-vp9', audio: false }, tel), { res: '4k', fps: 60, formato: 'webm-vp9', audio: false });
+test('normalizar: MP4, 720p y 30 por defecto; una resolución vieja guardada (1080p, 4K) pasa a 720p', () => {
+  const tel = { resoluciones: ['720p'], fps: [24, 30, 60], formatos: [{ id: 'mp4' }, { id: 'webm-vp9' }] };
+  assert.deepEqual(C.normalizar(null, tel), { res: '720p', fps: 30, formato: 'mp4', audio: true });
+  assert.deepEqual(C.normalizar({ res: '4k', fps: 60, formato: 'webm-vp9', audio: false }, tel), { res: '720p', fps: 60, formato: 'webm-vp9', audio: false });
   const chico = { resoluciones: ['720p'], fps: [24, 30], formatos: [{ id: 'webm-vp8' }] };
-  assert.deepEqual(C.normalizar({ res: '4k', fps: 60, formato: 'mp4' }, chico), { res: '720p', fps: 30, formato: 'webm-vp8', audio: true });
+  assert.deepEqual(C.normalizar({ res: '1080p', fps: 60, formato: 'mp4' }, chico), { res: '720p', fps: 30, formato: 'webm-vp8', audio: true });
   assert.equal(C.normalizar({}, { resoluciones: ['720p'], fps: [30], formatos: [] }).formato, null);
 });
 
 test('chip, tiempo y restricciones', () => {
-  assert.equal(C.chip({ res: '1080p', fps: 30 }), '1080p · 30');
-  assert.equal(C.chip({ res: '4k', fps: 60 }), '4K · 60');
+  assert.equal(C.chip({ res: '720p', fps: 30 }), '720p · 30');
+  assert.equal(C.chip({ res: '4k', fps: 60 }), '720p · 60', 'una resolución vieja guardada se muestra como 720p');
   assert.equal(C.tiempo(0), '0:00'); assert.equal(C.tiempo(7900), '0:07'); assert.equal(C.tiempo(60000), '1:00'); assert.equal(C.tiempo(-5), '0:00');
   assert.deepEqual(C.restricciones({ res: '720p', fps: 60 }, { facingMode: 'user' }), { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 } });
 });
 
-test('límites: aviso a los 50 s, corte a los 60 s o cerca de 100 MB', () => {
-  assert.equal(C.DURACION_MAX_MS, 60000); assert.equal(C.LIMITE_BYTES, 100 * 1024 * 1024);
+test('límites: aviso a los 50 s, corte a los 60 s o cerca de 25 MB', () => {
+  assert.equal(C.DURACION_MAX_MS, 60000); assert.equal(C.LIMITE_BYTES, 25 * 1024 * 1024);
   assert.equal(C.limite(10000, 1e6), null);
   assert.equal(C.limite(50000, 1e6), 'aviso');
   assert.equal(C.limite(60000, 1e6), 'tiempo');
-  assert.equal(C.limite(20000, 99.5 * 1024 * 1024), 'tamano');
+  assert.equal(C.limite(20000, 24.5 * 1024 * 1024), 'tamano');
 });
 
 test('extensión y mime base', () => {

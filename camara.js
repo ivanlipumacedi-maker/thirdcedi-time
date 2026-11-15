@@ -193,8 +193,8 @@
     let zoom = 1, digital = false, ultima = null, ocupado = false, turno = 0, nPend = 0, fotoCaps = null;
     let modo = 'foto', flash = 'no', puedeFlash = false, flashFoto = false, segs = 0; const TIMERS = [0, 3, 10];
     const hayTakePhoto = 'ImageCapture' in g && typeof g.ImageCapture?.prototype?.takePhoto === 'function';
-    let soporte = { resoluciones: ['720p', '1080p'], fps: [30], formatos: [] };
-    let opc = { res: '1080p', fps: 30, formato: null, audio: true };
+    let soporte = { resoluciones: ['720p'], fps: [30], formatos: [] };
+    let opc = { res: '720p', fps: 30, formato: null, audio: true };
     try { opc = { ...opc, ...JSON.parse(localStorage.getItem('camVideo') || '{}') }; } catch {}
     let opcF = C.normalizarFoto();
     try { opcF = C.normalizarFoto(JSON.parse(localStorage.getItem('camFoto2') || '{}')); } catch {}
@@ -407,7 +407,7 @@
 
     // ---------- Panel de opciones (foto o video) ----------
     function pintarPanel() {
-      const p = $('.panel'), R = C.RESOLUCIONES;
+      const p = $('.panel');
       const fila = (titulo, items) => [h('h3', null, titulo), h('div', { class: 'fila-o', role: 'group', 'aria-label': titulo }, items)];
       // o: el objeto de opciones (opc de video u opcF de foto); alCambiar: qué hacer después (por defecto, reabrir la cámara)
       const op1 = (o, clave, valor, contenido, etiqueta, alCambiar) => {
@@ -442,12 +442,11 @@
         return;
       }
       p.replaceChildren(
-        ...fila('Resolución', soporte.resoluciones.map((id) => { const r = R.find((x) => x.id === id); return op1(opc, 'res', id, r.nombre, 'Resolución ' + r.nombre); })),
         ...fila('Cuadros por segundo', soporte.fps.map((f) => op1(opc, 'fps', f, String(f), f + ' cuadros por segundo'))),
         ...(soporte.formatos.length ? fila('Formato', soporte.formatos.map((f) => op1(opc, 'formato', f.id, [f.nombre, h('small', null, f.detalle)], 'Formato ' + f.nombre + ' ' + f.detalle))) : []),
         ...fila('Sonido', [op1(opc, 'audio', true, [ico('microfono'), 'Con sonido'], 'Con sonido'), op1(opc, 'audio', false, [ico('microfono-no'), 'Sin sonido'], 'Sin sonido')]),
         ...brilloFila,
-        h('p', { class: 'nota' }, soporte.formatos.length ? 'Hasta 1 minuto por video.' : 'Este navegador no puede grabar video.'));
+        h('p', { class: 'nota' }, soporte.formatos.length ? 'Hasta 1 minuto por video, en 720p.' : 'Este navegador no puede grabar video.'));
     }
     function panel(abrir) {
       const p = $('.panel');
