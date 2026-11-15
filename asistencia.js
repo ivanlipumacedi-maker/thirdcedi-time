@@ -42,11 +42,15 @@
     }
 
     const pts = (n) => R.numero(n);
+    const anotadosDe = (parte) => (ctx.anotados && ctx.anotados[parte]) || [];
+    const seleccionBase = (parte) => (confirmadas[parte].size ? confirmadas[parte] : new Set(anotadosDe(parte)));
     const inicio = (parte) => Date.parse(parte === 'tercer' ? ctx.actividad.tercer_fecha : ctx.actividad.fecha);
 
     async function guardar(parte) {
       if (guardando) return;
-      const ids = [...(marcados[parte] || confirmadas[parte])];
+      // lo que se ve tildado: lo que cambió el organizador o, si no tocó nada, lo de la base (y sin nada confirmado
+      // todavía, todos los anotados: así arranca la lista)
+      const ids = [...(marcados[parte] || seleccionBase(parte))];
       guardando = true; pintar();
       let r;
       try { r = await sb.rpc('confirmar_asistencia', { p_actividad: act, p_parte: parte, p_personas: ids }); } catch (e) { r = { error: e }; }
@@ -71,7 +75,7 @@
       const valor = parte === 'tercer' ? R.PUNTOS.tercer : R.PUNTOS.asistencia;
       const nombre = (id) => (ctx.perfilDe(id) || { nombre: 'Compañero' }).nombre + (id === ctx.yo ? ' (vos)' : '');
       const soyOrg = a.creador === ctx.yo;
-      const tituloParte = parte === 'tercer' ? 'tercer tiempo' : 'actividad';
+      const tituloParte = parte === 'tercer' ? 'del tercer tiempo' : 'de la actividad';
       if (!soyOrg) {
         if (!anotados.includes(ctx.yo)) return null;
         if (!empezo) return parte === 'actividad' ? h('p', { class: 'ayuda as-aviso', id: 'as-aviso' }, 'Si vas, sumás ' + pts(valor) + ' puntos en el ranking. Los confirma quien la armó.') : null;
@@ -86,7 +90,7 @@
       }
       if (!anotados.length && !confirmadas[parte].size) return null;
       // sin nada confirmado todavía, arranca con todos los anotados tildados
-      const base = confirmadas[parte].size ? confirmadas[parte] : new Set(anotados);
+      const base = seleccionBase(parte);
       const sel = marcados[parte] || base;
       const lista = [...new Set([...anotados, ...confirmadas[parte]])];
       const cambio = marcados[parte] != null || !confirmadas[parte].size;
@@ -101,7 +105,7 @@
             marcados[parte] = s; pintar();
           } } }), ' ' + nombre(id))),
         !vencio && h('button', { type: 'button', id: 'as-guardar-' + parte, class: cambio ? 'btn-primario btn-ancho' : 'btn-sec btn-ancho', on: { click: () => guardar(parte) } },
-          guardando ? 'Guardando…' : confirmadas[parte].size ? (cambio ? 'Guardar cambios' : 'Asistencia confirmada') : 'Confirmar asistencia del ' + tituloParte),
+          guardando ? 'Guardando…' : confirmadas[parte].size ? (cambio ? 'Guardar cambios' : 'Asistencia confirmada') : 'Confirmar asistencia ' + tituloParte),
         confirmadas[parte].size > 0 && !cambio && h('p', { class: 'as-estado ok' }, 'Confirmaste ' + confirmadas[parte].size + (confirmadas[parte].size === 1 ? ' persona.' : ' personas.')));
     }
 
