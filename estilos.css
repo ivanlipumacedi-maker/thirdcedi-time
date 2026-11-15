@@ -737,12 +737,14 @@ h1.titulo-ico > .ico-propio { width: 2.7rem; height: 2.7rem; }
   padding: 0 .25rem .5rem; margin: 0; border: 0; background: none; cursor: pointer;
   font: inherit; font-size: .72rem; font-weight: 600; color: var(--tinta-fuerte); -webkit-tap-highlight-color: transparent;
 }
+/* círculo sólido adentro de la barra (sin anillo ni sombra que pise el contenido) y un ícono simétrico, con el lente al
+   centro: el de antes tenía el lente corrido y el flash a un costado, y aunque estaba centrado parecía torcido */
 .pestana-camara .pc-boton {
-  width: 58px; height: 58px; margin-top: -20px; border-radius: 50%; display: grid; place-items: center;
-  background: var(--accent); color: #fff; box-shadow: 0 0 0 4px var(--bg), 0 6px 16px rgba(0, 47, 104, .28);
+  width: 42px; height: 42px; margin-top: -4px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--accent); color: #fff;
   transition: transform .15s ease, background-color .2s;
 }
-.pestana-camara .pc-boton .ico-propio { width: 32px; height: 32px; margin: 0; vertical-align: 0; }
+.pestana-camara .pc-boton .pc-ico { width: 24px; height: 24px; margin: 0; display: block; fill: currentColor; }
 .pestana-camara:hover .pc-boton { background: var(--accent-hover); }
 .pestana-camara:active .pc-boton { transform: scale(.92); }
 .pestana-camara:focus-visible { outline: none; }
@@ -750,7 +752,7 @@ h1.titulo-ico > .ico-propio { width: 2.7rem; height: 2.7rem; }
 @media (max-height: 500px) and (orientation: landscape) {
   .pestana-camara { flex-direction: row; gap: .45rem; padding: .2rem .5rem; font-size: .78rem; }
   .pestana-camara .pc-boton { width: 36px; height: 36px; margin-top: 0; box-shadow: none; }
-  .pestana-camara .pc-boton .ico-propio { width: 22px; height: 22px; }
+  .pestana-camara .pc-boton .pc-ico { width: 20px; height: 20px; }
 }
 
 /* Hoja de abajo: ¿para qué actividad es la foto? */
