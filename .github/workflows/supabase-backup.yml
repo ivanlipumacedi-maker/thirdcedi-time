@@ -1,0 +1,75 @@
+# Backup semanal de la base de Supabase (esquema + datos de public, auth y storage) como artifact del repo, 90 días.
+#
+# El repo es PÚBLICO: cualquier persona logueada en GitHub puede bajar los artifacts. Por eso el dump se cifra
+# (AES-256, openssl con pbkdf2) antes de subirlo; sin la clave no sirve para nada.
+#
+# Secretos del repo (Settings → Secrets and variables → Actions → New repository secret), los carga Ivan:
+#   SUPABASE_DB_URL  cadena de conexión del "Session pooler" (Supabase → Connect → Session pooler → URI), con la
+#                    contraseña de la base adentro. Los runners de GitHub no tienen IPv6: la conexión directa no anda.
+#   BACKUP_CLAVE     la clave para cifrar (vive también en el .env de Ivan; sin ella no se puede abrir ningún backup).
+#
+# Lo que NO entra: los archivos de Storage (fotos, videos, audios; el dump solo trae su lista) ni los secretos de Vault.
+#
+# Restaurar (en una base vacía o local):
+#   openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in cediclub-AAAA-MM-DD.dump.enc -out cediclub.dump -pass env:BACKUP_CLAVE
+#   pg_restore --no-owner --no-privileges -d "<url de destino>" cediclub.dump
+name: Supabase backup
+
+on:
+  schedule:
+    - cron: '23 7 * * 1'   # lunes 04:23 de Argentina
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Instalar pg_dump 17 (tiene que ser igual o más nuevo que la base)
+        run: |
+          set -euo pipefail
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSo /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17
+          /usr/lib/postgresql/17/bin/pg_dump --version
+
+      - name: Dump cifrado
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_CLAVE: ${{ secrets.BACKUP_CLAVE }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_DB_URL:-}" ]; then echo "::error::Falta el secreto SUPABASE_DB_URL"; exit 1; fi
+          if [ -z "${BACKUP_CLAVE:-}" ] || [ "${#BACKUP_CLAVE}" -lt 24 ]; then echo "::error::Falta el secreto BACKUP_CLAVE (24 caracteres o más)"; exit 1; fi
+          umask 077
+          mkdir -p salida
+          f="cediclub-$(date -u +%F).dump"
+          /usr/lib/postgresql/17/bin/pg_dump "$SUPABASE_DB_URL" --format=custom --no-owner --no-privileges \
+            --schema=public --schema=auth --schema=storage --file="$RUNNER_TEMP/$f"
+          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:BACKUP_CLAVE \
+            -in "$RUNNER_TEMP/$f" -out "salida/$f.enc"
+          shred -u "$RUNNER_TEMP/$f" 2>/dev/null || rm -f "$RUNNER_TEMP/$f"
+          # prueba de que se puede abrir: descifra a la nada y lista el contenido
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:BACKUP_CLAVE -in "salida/$f.enc" \
+            | /usr/lib/postgresql/17/bin/pg_restore --list > /dev/null
+          ls -lh salida
+          echo "ARCHIVO=$f.enc" >> "$GITHUB_ENV"
+
+      - name: Guardar como artifact (90 días)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARCHIVO }}
+          path: salida/${{ env.ARCHIVO }}
+          retention-days: 90
+          if-no-files-found: error
+          compression-level: 0
