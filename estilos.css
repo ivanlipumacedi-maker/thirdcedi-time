@@ -104,19 +104,37 @@ h1 { font-size: 1.75rem; line-height: 1.15; letter-spacing: -.02em; margin: 0 0 
 .vacio-acciones { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .35rem 1rem; }
 .vacio-acciones .btn-link { margin-top: .25rem; }
 
+/* Barra de abajo (2026-11-15): del azul de la marca en los dos temas, igual que la franja de los botones de Android (que
+   toma el theme_color del manifest, #002F68), así no hay corte entre las dos. La pestaña activa se marca con una
+   píldora detrás del ícono y la cámara es una píldora celeste del mismo tamaño: todo alineado, nada sobresale. */
 .pestanas {
-  flex: none; display: flex;
-  padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-  background: var(--bg); border-top: 1px solid var(--border);
+  --barra: #002F68;
+  flex: none; display: grid; grid-template-columns: repeat(3, 1fr);
+  padding: .45rem env(safe-area-inset-right) calc(.4rem + env(safe-area-inset-bottom)) env(safe-area-inset-left);
+  background: var(--barra); border-top: 0;
 }
-.pestanas a {
-  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
-  padding: .55rem 0 .5rem; color: var(--muted); text-decoration: none;
-  font-size: .72rem; font-weight: 600; border-top: 3px solid transparent; margin-top: -1px;
+.pestanas a, .pestana-camara {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0;
+  padding: 0; margin: 0; border: 0; background: none; cursor: pointer; text-decoration: none;
+  font: inherit; font-size: .72rem; font-weight: 600; letter-spacing: .01em;
+  color: rgba(255, 255, 255, .72); -webkit-tap-highlight-color: transparent;
+}
+.pestanas .ind {
+  display: grid; place-items: center; width: 60px; height: 32px; border-radius: 16px;
+  transition: background-color .2s, transform .15s ease;
 }
 .pestanas .ico { width: 24px; height: 24px; }
-.pestanas a.activa { color: var(--tinta-fuerte); border-top-color: var(--accent); }
-.pestanas a:focus-visible { outline-offset: -3px; }
+.pestanas .ico-propio { width: 26px; height: 26px; margin: 0; }
+.pestanas a.activa { color: #fff; }
+.pestanas a.activa .ind { background: rgba(255, 255, 255, .16); }
+.pestanas a:active .ind { transform: scale(.94); }
+.pestanas a:focus-visible, .pestana-camara:focus-visible { outline: none; }
+.pestanas a:focus-visible .ind, .pestana-camara:focus-visible .ind { outline: 2px solid #fff; outline-offset: 2px; }
+.pestana-camara { color: #fff; }
+.pestana-camara .ind { background: var(--accent); color: #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, .22); }
+.pestana-camara .pc-ico { width: 22px; height: 22px; fill: currentColor; display: block; }
+.pestana-camara:hover .ind { background: var(--accent-hover); }
+.pestana-camara:active .ind { transform: scale(.94); }
 
 .toast {
   position: fixed; left: 50%; transform: translateX(-50%);
@@ -695,8 +713,10 @@ h1.titulo-ico > .ico { width: 1.9rem; height: 1.9rem; }
   .logo { height: 20px; }
   .titulo-app { font-size: .9rem; }
   .btn-icono { width: 32px; height: 32px; font-size: 1rem; }
-  .pestanas a { flex-direction: row; justify-content: center; gap: .45rem; padding: .3rem 0 .25rem; font-size: .78rem; }
-  .pestanas .ico { width: 20px; height: 20px; }
+  .pestanas { padding-top: .25rem; padding-bottom: calc(.2rem + env(safe-area-inset-bottom)); }
+  .pestanas a, .pestana-camara { flex-direction: row; justify-content: center; gap: .45rem; font-size: .78rem; }
+  .pestanas .ind { width: 44px; height: 28px; }
+  .pestanas .ico, .pestanas .ico-propio { width: 20px; height: 20px; }
   .pantalla { padding-top: .75rem; }
   .chat-lista { height: min(70vh, 420px); }
   .toast { bottom: calc(env(safe-area-inset-bottom) + 48px); }
@@ -722,39 +742,6 @@ h1.titulo-ico > .ico-propio { width: 2.7rem; height: 2.7rem; }
 .f-tipo-ico .ico-propio { width: 38px; height: 38px; }
 .tarjeta-pict .ico-propio { width: 44px; height: 44px; }
 .vacio-act .vacio-ico.ico-propio { width: 3.6rem; height: 3.6rem; }
-/* Barra de abajo: toman el color de la pestaña (activa con el acento, las otras apagadas), como el resto de los íconos */
-.pestanas .ico-propio { width: 30px; height: 30px; margin-top: -3px; }
-@media (max-height: 500px) and (orientation: landscape) {
-  .pestanas .ico-propio { width: 24px; height: 24px; margin-top: 0; }
-}
-
-/* Barra de abajo: Actividades, Cámara (al centro) y Juegos, del mismo ancho; Perfil está arriba, al lado del tema.
-   La cámara se destaca (redonda, celeste y más alta). Es un botón (no una sección): abre la
-   cámara del álbum de la actividad en curso o pregunta a cuál va la foto. */
-.pestanas { display: grid; grid-template-columns: repeat(3, 1fr); }
-.pestana-camara {
-  display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0;
-  padding: 0 .25rem .5rem; margin: 0; border: 0; background: none; cursor: pointer;
-  font: inherit; font-size: .72rem; font-weight: 600; color: var(--tinta-fuerte); -webkit-tap-highlight-color: transparent;
-}
-/* círculo sólido adentro de la barra (sin anillo ni sombra que pise el contenido) y un ícono simétrico, con el lente al
-   centro: el de antes tenía el lente corrido y el flash a un costado, y aunque estaba centrado parecía torcido */
-.pestana-camara .pc-boton {
-  width: 42px; height: 42px; margin-top: -4px; border-radius: 50%; display: grid; place-items: center;
-  background: var(--accent); color: #fff;
-  transition: transform .15s ease, background-color .2s;
-}
-.pestana-camara .pc-boton .pc-ico { width: 24px; height: 24px; margin: 0; display: block; fill: currentColor; }
-.pestana-camara:hover .pc-boton { background: var(--accent-hover); }
-.pestana-camara:active .pc-boton { transform: scale(.92); }
-.pestana-camara:focus-visible { outline: none; }
-.pestana-camara:focus-visible .pc-boton { outline: 3px solid var(--tinta-fuerte); outline-offset: 3px; }
-@media (max-height: 500px) and (orientation: landscape) {
-  .pestana-camara { flex-direction: row; gap: .45rem; padding: .2rem .5rem; font-size: .78rem; }
-  .pestana-camara .pc-boton { width: 36px; height: 36px; margin-top: 0; box-shadow: none; }
-  .pestana-camara .pc-boton .pc-ico { width: 20px; height: 20px; }
-}
-
 /* Hoja de abajo: ¿para qué actividad es la foto? */
 .hoja { margin: auto auto 0; width: min(100%, 520px); max-width: 100%; max-height: 80vh; border: 0; border-radius: 20px 20px 0 0;
   padding: 1.1rem 1rem calc(1rem + env(safe-area-inset-bottom)); background: var(--bg); color: var(--tinta-fuerte, inherit);
