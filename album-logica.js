@@ -2,6 +2,8 @@
 (function (g) {
   const LIMITE_BYTES = 1024 * 1024 * 1024; // plan gratis de Supabase: 1 GB de Storage por proyecto
   const MAX_LADO = 4096;
+  // lo que se guarda de una foto nueva (2026-11-15): 1600 px de lado largo, JPEG 80 %
+  const MAX_FOTO = 1600, CALIDAD_FOTO = 0.8;
   const ZONA = 'America/Argentina/Buenos_Aires';
 
   // bucket 'album': <actividad>/<id>.jpg (original), .t.webp (miniatura) y .m.jpg (1600 px, queda siempre en la app)
@@ -102,7 +104,7 @@
   /** duración de un video para la grilla: "0:07", "1:00" */
   const duracion = (ms) => { const s = Math.max(0, Math.round((ms || 0) / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
 
-  const A = { esVideo, duracion, LIMITE_BYTES, LIMITE_FOTOS, MAX_LADO, rutaFoto, rutaMini, rutaMedia, verFoto, escala, porDia, espacio, fusionar, quitar, espera,
+  const A = { MAX_FOTO, CALIDAD_FOTO, esVideo, duracion, LIMITE_BYTES, LIMITE_FOTOS, MAX_LADO, rutaFoto, rutaMini, rutaMedia, verFoto, escala, porDia, espacio, fusionar, quitar, espera,
     carpetaDrive, nombreDrive, soloMias, pendientesDe, zoomPasos, lentesTraseras, textoEstado, clasificarError };
   if (typeof module !== 'undefined' && module.exports) module.exports = A; else g.AlbumLogica = A;
 })(typeof window !== 'undefined' ? window : globalThis);

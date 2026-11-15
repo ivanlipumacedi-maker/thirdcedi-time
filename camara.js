@@ -123,8 +123,9 @@
   const ico = (n) => g.App.icono(n);
   const coma = (v) => String(Math.round(v * 10) / 10).replace('.', ',');
 
-  /** Endereza, recorta (opcional), achica (4096 px o el lado pedido) y genera JPEG 0,92 + miniatura WebP 480 px + media JPEG
-   *  1600 px. Acepta Blob/File/ImageBitmap/canvas. o = { recorte(ancho, alto) → { x, y, ancho, alto }, lado } */
+  /** Endereza, recorta (opcional), achica a 1600 px (A.MAX_FOTO; antes 4096) y genera JPEG 0,8 + miniatura WebP 480 px.
+   *  Ya no hay media aparte: la foto misma es de 1600 px (2026-11-15, para que el plan gratis de Supabase alcance).
+   *  Acepta Blob/File/ImageBitmap/canvas. o = { recorte(ancho, alto) → { x, y, ancho, alto } } */
   async function preparar(fuente, o = {}) {
     const A = g.AlbumLogica, M = g.ChatMedios;
     const propio = !(fuente instanceof Blob);
@@ -132,15 +133,13 @@
     try {
       const r = o.recorte ? o.recorte(bm.width, bm.height) : { x: 0, y: 0, ancho: bm.width, alto: bm.height };
       const dib = (cv, w, hh) => { const x = cv.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(bm, r.x, r.y, r.ancho, r.alto, 0, 0, w, hh); };
-      const { ancho, alto } = A.escala(r.ancho, r.alto, Math.min(A.MAX_LADO, o.lado || A.MAX_LADO));
+      const { ancho, alto } = A.escala(r.ancho, r.alto, A.MAX_FOTO);
       const c = document.createElement('canvas'); c.width = ancho; c.height = alto; dib(c, ancho, alto);
-      const foto = await new Promise((res) => c.toBlob(res, 'image/jpeg', 0.92));
+      const foto = await new Promise((res) => c.toBlob(res, 'image/jpeg', A.CALIDAD_FOTO));
       const m = A.escala(r.ancho, r.alto, 480), cm = document.createElement('canvas'); cm.width = m.ancho; cm.height = m.alto; dib(cm, m.ancho, m.alto);
       const mini = await M.aBlob(cm, 0.75);
-      const md = A.escala(r.ancho, r.alto, 1600), cmd = document.createElement('canvas'); cmd.width = md.ancho; cmd.height = md.alto; dib(cmd, md.ancho, md.alto);
-      const media = await new Promise((res) => cmd.toBlob(res, 'image/jpeg', 0.82));
-      if (!foto || !mini || !media) throw new Error('no se pudo codificar la foto');
-      return { foto, mini, media, ancho, alto };
+      if (!foto || !mini) throw new Error('no se pudo codificar la foto');
+      return { foto, mini, media: null, ancho, alto };
     } finally { bm.close?.(); }
   }
 
@@ -434,15 +433,12 @@
         brilloFila.push(h('h3', null, 'Brillo'), h('div', { class: 'brillo' }, rango, out, auto));
       }
       if (modo === 'foto') {
-        const s = sensor();
         p.replaceChildren(
           // 16:9 necesita otra vista previa; entre 4:3 y 1:1 solo cambia el marco
           ...fila('Proporción', C.PROPORCIONES.map((x) => op1(opcF, 'prop', x.id, x.nombre, 'Proporción ' + x.nombre,
             (antes) => { if ((antes === '16:9') !== (opcF.prop === '16:9')) encender(); else ajustarGrilla(); }))),
-          ...fila('Resolución', C.RES_FOTO.map((x) => op1(opcF, 'res', x.id, [x.nombre, h('small', null, String(C.megapixeles(x.id, opcF.prop, s)).replace('.', ',') + ' MP')],
-            'Resolución ' + x.nombre, () => {}))),
           ...brilloFila,
-          h('p', { class: 'nota' }, opcF.res === 'alta' ? 'La más nítida. Liviana sube más rápido con poca señal.' : 'Menos peso: sube más rápido con poca señal.'));
+          h('p', { class: 'nota' }, 'Las fotos se guardan a 1600 px: suben rápido con poca señal y no llenan el espacio del grupo.'));
         return;
       }
       p.replaceChildren(

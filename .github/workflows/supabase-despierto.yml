@@ -1,0 +1,37 @@
+# Keep-alive del plan gratis de Supabase: un proyecto sin actividad durante 7 días se pausa.
+# Cada 3 días hace una consulta liviana a la base (select 1) y pide el estado de Auth.
+# Secreto: SUPABASE_DB_URL (el mismo del backup; ver supabase-backup.yml).
+# Ojo: GitHub apaga los workflows programados de un repo público después de 60 días sin commits (avisa por mail antes).
+name: Supabase despierto
+
+on:
+  schedule:
+    - cron: '17 12 */3 * *'   # 09:17 de Argentina, cada 3 días
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: supabase-despierto
+  cancel-in-progress: true
+
+jobs:
+  latido:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Consulta liviana a la base
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_DB_URL:-}" ]; then echo "::error::Falta el secreto SUPABASE_DB_URL"; exit 1; fi
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -tAc 'select 1' > /dev/null
+          echo "Base: responde"
+      - name: Estado de Auth (API pública)
+        run: |
+          set -euo pipefail
+          # la clave publishable es pública (está en app.js)
+          curl -fsS -o /dev/null -H 'apikey: sb_publishable_nHg5W-1bGZwudTST-ejzeA_w_gUNYXQ' \
+            https://qvezbnkrfqewanlcejha.supabase.co/auth/v1/health
+          echo "API: responde"

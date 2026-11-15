@@ -235,9 +235,10 @@ const celdas = (p) => cuantos(p, '#album-act .album-cel');
       await esperar(pb, () => document.querySelectorAll('#album-act .album-cel').length === 1);
       assert.equal(db.fotos.length, 1);
       const f = db.fotos[0];
-      assert.equal(f.ruta, `${ACT}/${f.id}.jpg`); assert.equal(f.mini, `${ACT}/${f.id}.t.webp`); assert.equal(f.media, `${ACT}/${f.id}.m.jpg`);
+      assert.equal(f.ruta, `${ACT}/${f.id}.jpg`); assert.equal(f.mini, `${ACT}/${f.id}.t.webp`); assert.equal(f.media, null, 'desde 2026-11-15 la foto ya es de 1600 px: sin media aparte');
       assert.ok(!('autor' in JSON.parse(JSON.stringify(f)) && f.autor !== UA), 'autor lo pone el servidor');
-      assert.ok(db.storage.has(f.ruta) && db.storage.has(f.mini) && db.storage.has(f.media), 'subió original, miniatura y media');
+      assert.ok(db.storage.has(f.ruta) && db.storage.has(f.mini), 'subió la foto y la miniatura');
+      assert.ok(Math.max(f.ancho, f.alto) <= 1600, 'la foto pasa de 1600 px: ' + f.ancho + 'x' + f.alto);
       assert.match(await texto(pb, '#album-act .album-estado'), /1 foto/);
     });
 
