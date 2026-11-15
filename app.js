@@ -165,7 +165,21 @@
     g.addEventListener('hashchange', mostrar);
     if (!location.hash) history.replaceState(null, '', '#/' + RUTA_INICIAL);
     mostrar();
-    if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+    if ('serviceWorker' in navigator) {
+      // Actualización sola: en Android la app instalada queda en memoria y al volver no relee los archivos. Cada vez que
+      // vuelve a primer plano se busca un service worker nuevo; si hay (se publicó una versión), toma el control
+      // (skipWaiting + clients.claim en sw.js) y la página se recarga una vez con lo nuevo.
+      const habiaControlador = !!navigator.serviceWorker.controller;
+      let recargando = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!habiaControlador || recargando) return;
+        recargando = true;
+        location.reload();
+      });
+      navigator.serviceWorker.register('sw.js').then((reg) => {
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
+      }).catch(() => {});
+    }
   }
 
   g.App = { ir, rutaActual, subnav, sb, yo: () => perfil, setPerfil, modoAcceso, toast, icono, SUPABASE_URL, TURNSTILE_SITE_KEY, GIPHY_KEY };
