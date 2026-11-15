@@ -7,6 +7,7 @@
   const JUEGOS = {
     trivia: { icono: 'trivia', nombre: 'Trivia', desc: '10 preguntas, 15 segundos cada una. Se puede jugar solo.', minimo: 1 },
     impostor: { icono: 'impostor', nombre: 'El Impostor', desc: 'De 3 jugadores en adelante. Todos tienen la misma palabra menos el impostor: descubrilo.', minimo: 3 },
+    ajedrez: { icono: 'ajedrez', nombre: 'Ajedrez', desc: 'De a dos, cada uno en su teléfono. Los colores se sortean.', minimo: 2, maximo: 2 },
   };
   const VIGENCIA_ESPERA = 12 * 3600e3;   // una partida abierta más vieja que esto ya no se ofrece para unirse
   const VIGENCIA_TERMINADA = 24 * 3600e3;
@@ -185,7 +186,7 @@
   }
 
   // ---------- Acciones ----------
-  const MSG = /^(La partida|Solo quien|El Impostor|Todavía no|No estás|No hay preguntas|Ya tenés)/;
+  const MSG = /^(La partida|Solo quien|El Impostor|El ajedrez|Todavía no|No estás|No hay preguntas|Ya tenés)/;
   async function rpc(fn, args) {
     let res;
     try { res = await sb().rpc(fn, args); } catch (e) { res = { data: null, error: e }; }
@@ -233,7 +234,7 @@
   }
   // El juego en curso (Trivia) se monta una vez por partida y se actualiza con cada cambio: así conserva sus timers.
   function juegoDe(p) {
-    const mod = p.juego === 'trivia' ? g.Trivia : g.Impostor;
+    const mod = { trivia: g.Trivia, impostor: g.Impostor, ajedrez: g.Ajedrez }[p.juego];
     if (!mod) { cerrarJuego(); return h('p', { class: 'vacio' }, 'Este juego llega pronto.'); }
     if (juegoId !== p.id) {
       cerrarJuego();
@@ -255,6 +256,16 @@
           }
           return r;
         }),
+        // ajedrez (36): la jugada la valida y la guarda la Edge Function juegos
+        mover: async (n, desde, hasta, corona) => {
+          let r;
+          try { r = await sb().functions.invoke('juegos', { body: { accion: 'ajedrez_mover', partida: p.id, n, desde, hasta, corona } }); } catch (e) { r = { error: e }; }
+          if (!r.error) return {};
+          let msg = '';
+          try { const ctx = r.error.context; if (ctx && typeof ctx.json === 'function') msg = ((await ctx.json()) || {}).error || ''; } catch {}
+          if (/cambió/.test(msg)) refrescar();
+          return { error: msg || 'No se pudo mandar la jugada. Revisá la señal y probá de nuevo.' };
+        },
         volver: () => irA({ tipo: 'lista' }),
       });
     }
@@ -364,7 +375,7 @@
       h('button', { type: 'button', class: 'btn-link btn-volver', on: { click: () => irA({ tipo: 'lista' }) } }, g.App.icono('volver'), 'Volver'),
       h('h1', null, 'Nueva partida'),
       h('p', { class: 'ayuda' }, '¿A qué juegan? La partida queda abierta para que se sumen los demás.'),
-      h('div', { class: 'lista-act' }, opcion('trivia'), opcion('impostor')),
+      h('div', { class: 'lista-act' }, opcion('trivia'), opcion('impostor'), opcion('ajedrez')),
     ];
   }
 
@@ -408,14 +419,16 @@
     if (p.estado === 'espera') {
       cerrarJuego();
       const n = activosDe(p.id, jugadores).length;
-      const faltan = Math.max(0, j.minimo - n);
+      const faltan = Math.max(0, j.minimo - n), sobran = j.maximo ? Math.max(0, n - j.maximo) : 0;
       out.push(h('p', { class: 'tarjeta-badges' }, badge('Sala de espera', 'acento')),
         h('h2', { class: 'sub' }, 'Jugadores (' + n + ')'), listaJugadores(p));
       if (!activo) {
-        out.push(h('button', { type: 'button', id: 'btn-unirme', class: 'btn-primario btn-ancho', disabled: ocupado, on: { click: () => accion('unirse_partida', { p: p.id }, '¡Adentro!') } }, 'Unirme'));
+        out.push(j.maximo && n >= j.maximo ? h('p', { class: 'ayuda', id: 'partida-llena' }, 'La partida está llena: es de a ' + j.maximo + '.')
+          : h('button', { type: 'button', id: 'btn-unirme', class: 'btn-primario btn-ancho', disabled: ocupado, on: { click: () => accion('unirse_partida', { p: p.id }, '¡Adentro!') } }, 'Unirme'));
       } else if (p.creador === yo) {
         out.push(faltan ? h('p', { class: 'ayuda', id: 'faltan-jugadores' }, (faltan === 1 ? 'Falta 1 jugador' : 'Faltan ' + faltan + ' jugadores') + ' para arrancar.') : null,
-          h('button', { type: 'button', id: 'btn-arrancar', class: 'btn-primario btn-ancho', disabled: ocupado || faltan > 0, on: { click: () => accion('avanzar_partida', { p: p.id, p_ronda: 0, p_fase: 'espera' }) } }, n === 1 ? 'Arrancar (jugás solo)' : 'Arrancar'));
+          sobran ? h('p', { class: 'ayuda' }, 'Sobran ' + sobran + ': es de a ' + j.maximo + '.') : null,
+          h('button', { type: 'button', id: 'btn-arrancar', class: 'btn-primario btn-ancho', disabled: ocupado || faltan > 0 || sobran > 0, on: { click: () => accion('avanzar_partida', { p: p.id, p_ronda: 0, p_fase: 'espera' }) } }, n === 1 ? 'Arrancar (jugás solo)' : 'Arrancar'));
       } else {
         out.push(h('p', { class: 'ayuda', id: 'esperando-creador' }, 'Esperando que ' + perfilDe(p.creador).nombre + ' arranque la partida.'));
       }

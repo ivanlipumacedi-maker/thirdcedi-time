@@ -15,8 +15,8 @@ test('la asistencia a una actividad es lo que más suma', () => {
   assert.equal(R.REGLAS[0].destacada, true);
 });
 
-test('los puntos de la app son los de la base (dev/supabase/35-ranking.sql)', () => {
-  const sql = fs.readFileSync(path.join(__dirname, '../supabase/35-ranking.sql'), 'utf8');
+test('los puntos de la app son los de la base (la última ranking(): dev/supabase/36-ajedrez.sql)', () => {
+  const sql = fs.readFileSync(path.join(__dirname, '../supabase/36-ajedrez.sql'), 'utf8');
   const P = R.PUNTOS;
   assert.ok(sql.includes('coalesce(asis.n, 0) * ' + P.asistencia + ' as asistencia'));
   assert.ok(sql.includes('coalesce(ter.n, 0) * ' + P.tercer + ' as tercer'));
@@ -26,6 +26,10 @@ test('los puntos de la app son los de la base (dev/supabase/35-ranking.sql)', ()
   assert.ok(new RegExp("'grupo' and .* then " + P.impostorGrupo).test(sql));
   assert.ok(new RegExp("'impostor' and .* then " + P.impostorImpostor).test(sql));
   assert.ok(sql.includes('t.rn <= ' + R.TOPE_PARTIDAS_DIA));
+  assert.ok(sql.includes("coalesce(jsonb_array_length(jug.e -> 'jugadas'), 0) < " + require('../../ajedrez-logica.js').MIN_JUGADAS_RANKING));
+  assert.ok(sql.includes('else ' + P.ajedrezJugar + ' + case'));
+  assert.ok(sql.includes("'tablas' then " + P.ajedrezTablas));
+  assert.ok(sql.includes("jug.e ->> 'negras') then " + P.ajedrezGanar));
 });
 
 test('desglose: solo lo que tiene puntos, de mayor a menor, con la cuenta en palabras', () => {

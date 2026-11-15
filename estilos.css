@@ -819,3 +819,32 @@ body.sin-sesion #btn-perfil { display: none; }
 .as-estado { margin: .5rem 0 0; font-size: .9rem; color: var(--muted); }
 .as-estado.ok { color: var(--ok); font-weight: 600; }
 .as-aviso { margin-top: 1rem; }
+
+/* ---------- Ajedrez (ajedrez.js) ---------- */
+.tablero { display: grid; grid-template-columns: repeat(8, 1fr); width: 100%; max-width: 480px; aspect-ratio: 1; margin: .5rem auto; border: 2px solid var(--border); border-radius: 6px; overflow: hidden; user-select: none; }
+.casilla { position: relative; display: flex; align-items: center; justify-content: center; padding: 0; margin: 0; border: 0; border-radius: 0; min-height: 0; aspect-ratio: 1; cursor: pointer; font: inherit; }
+.casilla:disabled { cursor: default; opacity: 1; }
+.casilla.clara { background: #e9dcc2; }
+.casilla.oscura { background: #a97d5d; }
+.casilla.ultima { box-shadow: inset 0 0 0 100vmax rgba(255, 213, 79, .38); }
+.casilla.sel { box-shadow: inset 0 0 0 100vmax rgba(0, 174, 239, .45); }
+.casilla.jaque { box-shadow: inset 0 0 0 100vmax rgba(220, 38, 38, .55); }
+.casilla.destino::after { content: ""; width: 30%; height: 30%; border-radius: 50%; background: rgba(0, 0, 0, .28); }
+.casilla.captura::after { content: ""; position: absolute; inset: 6%; border-radius: 50%; border: 4px solid rgba(0, 0, 0, .3); }
+.pieza { font-size: clamp(1.4rem, 9vw, 3rem); line-height: 1; font-family: "Segoe UI Symbol", "Noto Sans Symbols 2", "DejaVu Sans", serif; }
+.pieza.blanca { color: #fff; text-shadow: 0 0 2px #000, 0 0 1px #000, 0 1px 1px #000; }
+.pieza.negra { color: #1b1b1b; text-shadow: 0 0 1px rgba(255,255,255,.35); }
+.coord { position: absolute; font-size: .6rem; font-weight: 700; opacity: .7; color: #3b2a1e; pointer-events: none; }
+.coord.fila { top: 2px; left: 3px; }
+.coord.col { bottom: 1px; right: 3px; }
+.aj-quien { margin: 0; color: var(--muted); }
+.aj-estado { margin: .25rem 0; font-weight: 700; font-size: 1.1rem; }
+.aj-estado.turno { color: var(--accent-hover, var(--accent)); }
+.aj-estado.bien { color: var(--ok); }
+.aj-estado.mal { color: var(--mal); }
+.aj-corona { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; justify-content: center; margin: .5rem 0; padding: .6rem; border: 1px solid var(--accent); border-radius: var(--r-ctrl); }
+.aj-corona p { flex-basis: 100%; margin: 0; text-align: center; font-weight: 600; }
+.aj-corona .btn-sec { width: 3.4rem; height: 3.4rem; padding: 0; background: #e9dcc2; }
+.aj-jugadas { margin-top: .75rem; }
+.aj-jugadas ol { list-style: none; margin: .4rem 0 0; padding: 0; columns: 2; font-variant-numeric: tabular-nums; font-size: .9rem; }
+.aj-num { color: var(--muted); }
