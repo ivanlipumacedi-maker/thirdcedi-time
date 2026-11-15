@@ -6,7 +6,7 @@
 (function (g) {
   const JUEGOS = {
     trivia: { icono: 'trivia', nombre: 'Trivia', desc: '10 preguntas, 15 segundos cada una. Se puede jugar solo.', minimo: 1 },
-    impostor: { icono: 'impostor', nombre: 'El Impostor', desc: 'De 3 jugadores en adelante. Uno tiene otra palabra: descubrilo.', minimo: 3 },
+    impostor: { icono: 'impostor', nombre: 'El Impostor', desc: 'De 3 jugadores en adelante. Todos tienen la misma palabra menos el impostor: descubrilo.', minimo: 3 },
   };
   const VIGENCIA_ESPERA = 12 * 3600e3;   // una partida abierta más vieja que esto ya no se ofrece para unirse
   const VIGENCIA_TERMINADA = 24 * 3600e3;
@@ -246,7 +246,14 @@
         responder: (ronda, opcion) => Promise.resolve(sb().rpc('responder', { p: p.id, p_ronda: ronda, p_opcion: opcion })),
         avanzar: (ronda, fase) => Promise.resolve(sb().rpc('avanzar_partida', { p: p.id, p_ronda: ronda, p_fase: fase })),
         votar: (ronda, persona) => Promise.resolve(sb().rpc('votar', { p: p.id, p_ronda: ronda, p_persona: persona })),
-        miPalabra: () => Promise.resolve(sb().rpc('mi_palabra', { p: p.id })),
+        // { impostor, palabra } (34). Si la base todavía no tiene mi_rol, la palabra sola de mi_palabra (sin saber el rol).
+        miRol: () => Promise.resolve(sb().rpc('mi_rol', { p: p.id })).then((r) => {
+          if (r && r.error && /PGRST202|mi_rol/.test(String(r.error.code) + ' ' + String(r.error.message))) {
+            return Promise.resolve(sb().rpc('mi_palabra', { p: p.id })).then((v) => (v && !v.error && typeof v.data === 'string'
+              ? { data: { impostor: v.data === 'Sos el impostor', palabra: v.data === 'Sos el impostor' ? null : v.data }, error: null } : v));
+          }
+          return r;
+        }),
         volver: () => irA({ tipo: 'lista' }),
       });
     }

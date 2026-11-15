@@ -19,11 +19,12 @@
     };
   }
 
-  // A uno al azar le toca par.impostor; al resto, par.palabra. Nadie sabe si es el impostor: solo ve su palabra.
+  // A uno al azar le toca ser el impostor, sin palabra (null, desde la 34; antes la parecida, par.impostor); al resto,
+  // par.palabra. El impostor sabe que lo es (la app le dice "Sos el impostor").
   function repartir(jugadores, par, semilla) {
     const r = azar(semilla);
     const impostor = jugadores[Math.floor(r() * jugadores.length)];
-    const palabras = new Map(jugadores.map((j) => [j, j === impostor ? par.impostor : par.palabra]));
+    const palabras = new Map(jugadores.map((j) => [j, j === impostor ? null : par.palabra]));
     return { impostor, palabras };
   }
 

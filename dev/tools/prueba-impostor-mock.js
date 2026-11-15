@@ -134,10 +134,10 @@ function rpc(uid, fn, a) {
     else if (e.fase === 'votacion' && votaronActivos(p.id) >= activos(p.id).length) terminar(p, 'votacion');
     return { data: null };
   }
-  if (fn === 'mi_palabra') {
+  if (fn === 'mi_rol') {
     if (p.juego !== 'impostor' || p.estado !== 'jugando') return err('No hay palabra para esta partida');
     const s = secretos.get(p.id);
-    return { data: uid === s.impostor ? s.palabra_impostor : s.palabra };
+    return { data: uid === s.impostor ? { impostor: true, palabra: null } : { impostor: false, palabra: s.palabra } };
   }
   if (fn === 'avanzar_partida') {
     if (a.p_ronda != null && (e.ronda || 0) !== a.p_ronda) return { data: e };
@@ -321,7 +321,7 @@ async function capturas(p, nombre) {
     });
 
     let palabras = {};
-    await paso('al arrancar cada ventana ve solo su palabra: 2 iguales y 1 distinta', async () => {
+    await paso('34: al arrancar, 2 ven la misma palabra y el impostor ve "Sos el impostor" (sin palabra)', async () => {
       TODAS.forEach((r) => { r.recibido.length = 0; });
       await clic(pa, '#btn-arrancar');
       for (const r of TODAS) {
@@ -329,21 +329,30 @@ async function capturas(p, nombre) {
         palabras[LETRA[r.uid]] = (await texto(r.page, '#impostor-palabra')).trim();
       }
       const s = secretos.get(par);
-      assert.equal(palabras[LETRA[s.impostor]], s.palabra_impostor);
+      assert.equal(palabras[LETRA[s.impostor]], 'Sos el impostor');
       TODAS.filter((r) => r.uid !== s.impostor).forEach((r) => assert.equal(palabras[LETRA[r.uid]], s.palabra));
-      assert.match(await texto(pa, '#impostor-fase'), /Tu palabra/);
+      assert.match(await texto(de(s.impostor).page, '#impostor-fase'), /Tu rol/);
+      assert.match(await texto(de(s.impostor).page, '#impostor-estado'), /No tenés palabra\. Prestá atención/);
+      const otro = TODAS.find((r) => r.uid !== s.impostor);
+      assert.match(await texto(otro.page, '#impostor-fase'), /Tu palabra/);
+      assert.match(await texto(otro.page, '#impostor-estado'), /el impostor, que no tiene ninguna/);
       assert.equal(await cuantos(pb, '#btn-imp-avanzar'), 0, 'solo el creador ve el botón para avanzar');
       await capturas(de(s.impostor === UA ? UB : UA).page, 'palabra');
     });
 
     const sinFiltrar = (r) => {
       const s = secretos.get(par);
-      const mia = r.uid === s.impostor ? s.palabra_impostor : s.palabra;
-      const ajena = r.uid === s.impostor ? s.palabra : s.palabra_impostor;
       const todo = r.recibido.join('\n');
-      assert.ok(todo.includes(JSON.stringify(mia)), LETRA[r.uid] + ': no se capturó ni su propia palabra (la prueba no estaría mirando nada)');
-      assert.ok(!todo.includes(JSON.stringify(ajena)), LETRA[r.uid] + ' recibió la palabra ajena');
-      assert.ok(!/"impostor"\s*:/.test(todo), LETRA[r.uid] + ' recibió quién es el impostor');
+      // 34: el impostor recibe { impostor: true, palabra: null }; el resto, { impostor: false, palabra }
+      if (r.uid === s.impostor) {
+        assert.ok(/"impostor"\s*:\s*true/.test(todo), 'el impostor no recibió su rol (la prueba no estaría mirando nada)');
+        assert.ok(!todo.includes(JSON.stringify(s.palabra)), 'el impostor recibió la palabra del grupo');
+      } else {
+        assert.ok(todo.includes(JSON.stringify(s.palabra)), LETRA[r.uid] + ': no se capturó ni su propia palabra (la prueba no estaría mirando nada)');
+        assert.ok(!/"impostor"\s*:\s*true/.test(todo), LETRA[r.uid] + ' recibió el rol de impostor');
+      }
+      assert.ok(!todo.includes(JSON.stringify(s.palabra_impostor)), LETRA[r.uid] + ' recibió la palabra parecida (ya no se usa)');
+      assert.ok(!/"impostor"\s*:\s*"/.test(todo), LETRA[r.uid] + ' recibió quién es el impostor');
       assert.ok(!/"votos"\s*:/.test(todo), LETRA[r.uid] + ' recibió los votos');
     };
     await paso('a ninguna ventana le llega la palabra ajena ni quién es el impostor', async () => {
@@ -414,7 +423,8 @@ async function capturas(p, nombre) {
       for (const r of TODAS) {
         assert.match(await texto(r.page, '#impostor-resultado'), esp.ganoGrupo ? /Ganó el grupo/ : /Ganó el impostor/);
         assert.match(await texto(r.page, '#impostor-era'), new RegExp(db.perfiles.find((x) => x.id === s.impostor).nombre));
-        assert.match(await texto(r.page, '#impostor-palabras'), new RegExp(s.palabra + '.*' + s.palabra_impostor));
+        assert.match(await texto(r.page, '#impostor-palabras'), new RegExp('La palabra era' + s.palabra));
+        assert.doesNotMatch(await texto(r.page, '#impostor-palabras'), new RegExp(s.palabra_impostor));
       }
       assert.match(await texto(de(s.impostor).page, '#impostor-era'), /Eras vos/);
       for (const r of TODAS) {

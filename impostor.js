@@ -1,4 +1,4 @@
-// El Impostor en curso: palabra (cada uno ve solo la suya, con mi_palabra) → pistas (una por jugador, en el chat
+// El Impostor en curso: palabra (cada uno ve solo la suya, con mi_rol; desde la 34 el impostor no tiene palabra) → pistas (una por jugador, en el chat
 // de la partida) → votación (botones con los jugadores) → revelación. La monta juegos.js:
 // Impostor.montar(contenedor, api) → { actualizar({partida, jugadores, mias}), cerrar() }.
 // La base manda (dev/supabase/14-impostor.sql): elige el par y el impostor, mide el tiempo, cuenta los votos y
@@ -29,7 +29,7 @@
     let tic = null, tAvance = null, claveAvance = null, intentos = 0;
     let pendiente = false;          // pedido automático programado o en vuelo (si se agotó, el resync lo rearma)
     let avanzando = false;
-    let palabra = null;             // la mía (solo la mía)
+    let rol = null;                 // el mío (solo el mío): { impostor, palabra } — el impostor no tiene palabra (34)
     let pidiendo = false, tPalabra = null, intentosPalabra = 0;
     let miVoto = null;              // a quién voté desde acá
     let votoAjeno = false;          // "Ya votaste": voté desde otra pestaña y este estado todavía no lo muestra
@@ -48,12 +48,15 @@
 
     // ---------- Mi palabra ----------
     function pedirPalabra() {
-      if (cerrado || palabra != null || pidiendo || !enJuego() || !soyActivo()) return;
+      if (cerrado || rol != null || pidiendo || !enJuego() || !soyActivo()) return;
       pidiendo = true;
-      api.miPalabra().then((r) => {
+      api.miRol().then((r) => {
         pidiendo = false;
         if (cerrado) return;
-        if (r && !r.error && typeof r.data === 'string') { palabra = r.data; pintar(); return; }
+        if (r && !r.error && r.data && typeof r.data === 'object' && (r.data.impostor === true || typeof r.data.palabra === 'string')) {
+          rol = { impostor: r.data.impostor === true, palabra: r.data.impostor === true ? null : r.data.palabra };
+          pintar(); return;
+        }
         if (intentosPalabra++ < 5) tPalabra = setTimeout(pedirPalabra, 1500);
         else pintar();
       }, () => { pidiendo = false; if (!cerrado && intentosPalabra++ < 5) tPalabra = setTimeout(pedirPalabra, 1500); });
@@ -126,11 +129,12 @@
         h('div', { class: 'barra-tiempo' }, elBarra),
       ];
     }
+    const soyImpostor = () => !!(rol && rol.impostor);
     function cartaPalabra(chica) {
-      return h('div', { class: 'carta-trivia carta-impostor' + (chica ? ' chica' : ''), id: 'carta-impostor' },
-        h('div', { class: 'carta-meta' }, h('span', null, 'Tu palabra')),
+      return h('div', { class: 'carta-trivia carta-impostor' + (chica ? ' chica' : '') + (soyImpostor() ? ' soy-impostor' : ''), id: 'carta-impostor' },
+        h('div', { class: 'carta-meta' }, h('span', null, soyImpostor() ? 'Tu rol' : 'Tu palabra')),
         h('p', { class: 'carta-pregunta palabra-impostor', id: 'impostor-palabra' },
-          palabra != null ? palabra : (intentosPalabra > 5 ? 'No pudimos traerla' : 'Cargando…')));
+          rol ? (rol.impostor ? 'Sos el impostor' : rol.palabra) : (intentosPalabra > 5 ? 'No pudimos traerla' : 'Cargando…')));
     }
     function botonAvanzar() {
       return esCreador() && soyActivo() && SIGUE[estado().fase]
@@ -140,10 +144,11 @@
 
     function vistaPalabra() {
       return [
-        ...cabecera('Tu palabra'),
+        ...cabecera(soyImpostor() ? 'Tu rol' : 'Tu palabra'),
         cartaPalabra(false),
-        h('p', { class: 'ayuda', id: 'impostor-estado' },
-          'Todos tienen la misma palabra menos uno, el impostor, que tiene otra parecida. Nadie sabe si es el impostor: ni vos. Las pistas arrancan solas.'),
+        h('p', { class: 'ayuda', id: 'impostor-estado' }, soyImpostor()
+          ? 'No tenés palabra. Prestá atención a las pistas de tus compañeros, adiviná de qué hablan y tirá una pista que no te delate. Que no te descubran.'
+          : 'Todos tienen esta palabra menos uno: el impostor, que no tiene ninguna y va a tratar de disimular. Las pistas arrancan solas.'),
         botonAvanzar(),
       ];
     }
@@ -154,7 +159,9 @@
       return [
         ...cabecera('Pistas'),
         cartaPalabra(true),
-        h('p', { class: 'ayuda', id: 'impostor-estado' }, 'Escribí en el chat de abajo una sola pista sobre tu palabra, sin decirla. Si te parece que la tuya es distinta, disimulá.'),
+        h('p', { class: 'ayuda', id: 'impostor-estado' }, soyImpostor()
+          ? 'Escuchá lo que dicen los demás y escribí en el chat de abajo una pista que suene a su palabra. Si te equivocás, te descubren.'
+          : 'Escribí en el chat de abajo una sola pista sobre tu palabra, sin decirla ni dejarla muy servida: el impostor está escuchando.'),
         h('h2', { class: 'sub' }, 'Orden para las pistas'),
         h('ol', { class: 'ranking orden-pistas', id: 'impostor-orden' }, orden.map((id, i) =>
           h('li', { class: 'fila-ranking' + (id === yo() ? ' yo' : '') + (fueron.has(id) ? ' apagada' : '') },
@@ -208,8 +215,7 @@
           h('div', { class: 'impostor-quien' }, g.Perfiles.avatar(api.perfil(imp), 40), h('span', { class: 'carta-pregunta' }, nombre(imp))),
           imp === yo() ? h('p', { class: 'impostor-vos' }, '¡Eras vos!') : null) : null,
         h('dl', { class: 'palabras-final', id: 'impostor-palabras' },
-          h('dt', null, 'Palabra del grupo'), h('dd', null, e.palabra || ''),
-          h('dt', null, 'Palabra del impostor'), h('dd', null, e.palabra_impostor || '')),
+          h('dt', null, 'La palabra era'), h('dd', null, e.palabra || '')),
         h('h2', { class: 'sub' }, 'Votos'),
         h('ol', { class: 'ranking', id: 'impostor-votos' }, filas.map((j) => {
           const n = conteo[j.persona] || 0;

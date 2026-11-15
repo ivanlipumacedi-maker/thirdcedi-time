@@ -1,5 +1,5 @@
-// Pares de palabras de El Impostor: la mayoría recibe `palabra` y el impostor recibe `impostor`,
-// una palabra parecida pero distinta, para que pueda disimular sin saber cuál es la de los demás.
+// Pares de palabras de El Impostor. Desde la 34 el grupo recibe `palabra` y el impostor no recibe ninguna; la segunda
+// del par (`impostor`, la parecida) queda en el banco pero ya no se muestra.
 (function (g) {
   const pares = [
     // Comida y bebida

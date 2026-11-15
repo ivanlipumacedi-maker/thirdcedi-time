@@ -5,11 +5,11 @@ const I = require('../../impostor-logica.js');
 const J4 = ['a1', 'b2', 'c3', 'd4'];
 const PAR = { palabra: 'Mate', impostor: 'Tereré' };
 
-test('repartir con 4 jugadores: exactamente 1 tiene la palabra del impostor', () => {
+test('repartir con 4 jugadores: el impostor no tiene palabra (34) y los otros 3 tienen la misma', () => {
   const r = I.repartir(J4, PAR, 42);
   assert.ok(J4.includes(r.impostor));
   assert.equal(r.palabras.size, 4);
-  const conImpostor = [...r.palabras.entries()].filter(([, w]) => w === 'Tereré');
+  const conImpostor = [...r.palabras.entries()].filter(([, w]) => w === null);
   assert.equal(conImpostor.length, 1);
   assert.equal(conImpostor[0][0], r.impostor);
   assert.equal([...r.palabras.values()].filter((w) => w === 'Mate').length, 3);
