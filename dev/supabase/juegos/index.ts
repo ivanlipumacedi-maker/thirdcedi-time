@@ -9,8 +9,16 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 import './chess.js';
 import './ajedrez-logica.js';
+import './truco-logica.js';
 
+// Truco (38): el estado completo (con las cartas) vive en truco_secretos; cada acción la aplica truco-logica.js (copia
+// idéntica de la raíz) y se guarda con truco_guardar (lo público en partidas.estado_juego, sin cartas).
+// POST { accion: 'truco_arrancar', partida } → 200 { ok: true } (solo quien la armó, con 2, 4 o 6 jugadores)
+// POST { accion: 'truco_accion', partida, v, jugada: { tipo, carta?, canto? } } → 200 { ok: true } | 4xx { error }
+//   v: la versión del estado que vio la app (estado_juego.v); si alguien movió en el medio, 409.
 const A = (globalThis as any).AjedrezLogica;
+const T = (globalThis as any).TrucoLogica;
+const rnd = () => crypto.getRandomValues(new Uint32Array(1))[0] / 4294967296;
 const URL_SB = Deno.env.get('SUPABASE_URL')!;
 const SERVICIO = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const sb = createClient(URL_SB, SERVICIO, { auth: { persistSession: false, autoRefreshToken: false } });
@@ -52,6 +60,56 @@ async function ajedrezMover(uid: string, d: Record<string, unknown>) {
   return [200, { ok: true, estado: nuevo }] as const;
 }
 
+async function trucoArrancar(uid: string, d: Record<string, unknown>) {
+  const partida = String(d.partida || '');
+  if (!/^[0-9a-f-]{36}$/.test(partida)) return [400, { error: 'Partida inválida' }] as const;
+  const { data: p, error } = await sb.from('partidas').select('id,juego,estado,creador,estado_juego').eq('id', partida).maybeSingle();
+  if (error) throw error;
+  if (!p || p.juego !== 'truco') return [404, { error: 'La partida no existe' }] as const;
+  if (p.estado !== 'espera') return [409, { error: 'La partida ya empezó' }] as const;
+  if (p.creador !== uid) return [403, { error: 'Solo quien armó la partida la puede arrancar' }] as const;
+  const { data: js, error: e1 } = await sb.from('jugadores').select('persona').eq('partida', partida).eq('se_fue', false);
+  if (e1) throw e1;
+  const ids = (js || []).map((j: { persona: string }) => j.persona);
+  if (![2, 4, 6].includes(ids.length)) return [400, { error: 'El truco es de a 2, 4 o 6: ahora son ' + ids.length }] as const;
+  // asientos al azar: las parejas quedan cruzadas (0, 2, 4 contra 1, 3, 5)
+  for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]]; }
+  const cfg = p.estado_juego || {};
+  const S = T.nuevo({ jugadores: ids, a: cfg.a === 15 ? 15 : 30, flor: !!cfg.flor }, rnd);
+  const { data: ok, error: e2 } = await sb.rpc('truco_guardar', { p: partida, p_v: 0, p_completo: S, p_publico: T.publico(S), p_terminar: false });
+  if (e2) throw e2;
+  if (!ok) return [409, { error: 'La partida ya empezó' }] as const;
+  return [200, { ok: true }] as const;
+}
+
+async function trucoAccion(uid: string, d: Record<string, unknown>) {
+  const partida = String(d.partida || '');
+  if (!/^[0-9a-f-]{36}$/.test(partida)) return [400, { error: 'Partida inválida' }] as const;
+  const { data: s, error } = await sb.from('truco_secretos').select('estado,v').eq('partida', partida).maybeSingle();
+  if (error) throw error;
+  if (!s) return [404, { error: 'La partida todavía no arrancó' }] as const;
+  const { data: p } = await sb.from('partidas').select('estado').eq('id', partida).maybeSingle();
+  if (!p || p.estado !== 'jugando') return [409, { error: 'La partida terminó' }] as const;
+  if (Number(d.v) !== s.v) return [409, { error: 'La partida cambió: se actualiza' }] as const;
+  const S = s.estado;
+  const asiento = T.asientoDe(S, uid);
+  if (asiento < 0) return [403, { error: 'No estás en esta partida' }] as const;
+  const { data: j } = await sb.from('jugadores').select('persona').eq('partida', partida).eq('persona', uid).eq('se_fue', false).maybeSingle();
+  if (!j) return [403, { error: 'No estás en esta partida' }] as const;
+  const jg = (d.jugada || {}) as Record<string, unknown>;
+  const accion = { tipo: String(jg.tipo || ''), carta: jg.carta == null ? undefined : String(jg.carta), canto: jg.canto == null ? undefined : String(jg.canto) };
+  const r = T.aplicar(S, asiento, accion, rnd);
+  if (r.error) return [400, { error: r.error }] as const;
+  const { data: ok, error: e2 } = await sb.rpc('truco_guardar', { p: partida, p_v: s.v, p_completo: r.S, p_publico: T.publico(r.S), p_terminar: r.S.fase === 'final' });
+  if (e2) throw e2;
+  if (!ok) return [409, { error: 'La partida cambió: se actualiza' }] as const;
+  return [200, { ok: true }] as const;
+}
+
+const ACCIONES: Record<string, (u: string, x: Record<string, unknown>) => Promise<readonly [number, unknown]>> = {
+  ajedrez_mover: ajedrezMover, truco_arrancar: trucoArrancar, truco_accion: trucoAccion,
+};
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(req) });
   if (req.method !== 'POST') return responder(req, 405, { error: 'Método no permitido' });
@@ -63,8 +121,9 @@ Deno.serve(async (req) => {
     const { data: perfil } = await sb.from('perfiles').select('activo').eq('id', uid).maybeSingle();
     if (!perfil || !perfil.activo) return responder(req, 403, { error: 'No sos miembro' });
     const d = await req.json().catch(() => ({}));
-    if (d && d.accion === 'ajedrez_mover') {
-      const [status, cuerpo] = await ajedrezMover(uid, d);
+    const fn = d && ACCIONES[String(d.accion)];
+    if (fn) {
+      const [status, cuerpo] = await fn(uid, d);
       return responder(req, status, cuerpo);
     }
     return responder(req, 400, { error: 'Acción inválida' });

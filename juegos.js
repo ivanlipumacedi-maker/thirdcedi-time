@@ -8,6 +8,7 @@
     trivia: { icono: 'trivia', nombre: 'Trivia', desc: '10 preguntas, 15 segundos cada una. Se puede jugar solo.', minimo: 1 },
     impostor: { icono: 'impostor', nombre: 'El Impostor', desc: 'De 3 jugadores en adelante. Todos tienen la misma palabra menos el impostor: descubrilo.', minimo: 3 },
     ajedrez: { icono: 'ajedrez', nombre: 'Ajedrez', desc: 'De a dos, cada uno en su teléfono. Los colores se sortean.', minimo: 2, maximo: 2 },
+    truco: { icono: 'truco', nombre: 'Truco', desc: 'De a 2, 4 o 6, en parejas. A 15 o a 30, con o sin flor.', minimo: 2, maximo: 6, pares: true },
     pictionary: { icono: 'pictionary', nombre: 'Pictionary', desc: 'De 2 a 8. Uno dibuja con el dedo y los demás adivinan. Todos dibujan una vez.', minimo: 2, maximo: 8 },
   };
   const VIGENCIA_ESPERA = 12 * 3600e3;   // una partida abierta más vieja que esto ya no se ofrece para unirse
@@ -187,7 +188,7 @@
   }
 
   // ---------- Acciones ----------
-  const MSG = /^(La partida|Solo quien|El Impostor|El ajedrez|El Pictionary|No hay palabras|Todavía no|No estás|No hay preguntas|Ya tenés)/;
+  const MSG = /^(La partida|Solo quien|El Impostor|El ajedrez|El Pictionary|El truco|No hay palabras|Todavía no|No estás|No hay preguntas|Ya tenés)/;
   async function rpc(fn, args) {
     let res;
     try { res = await sb().rpc(fn, args); } catch (e) { res = { data: null, error: e }; }
@@ -205,6 +206,39 @@
     if (error) { pintar(); return; }
     irA({ tipo: 'partida', id: data });
   }
+  // Edge Function juegos (36, 38): → {} o { error: 'motivo en español' }; si la partida cambió en el medio, se recarga
+  async function funcion(cuerpo) {
+    let res;
+    try { res = await sb().functions.invoke('juegos', { body: cuerpo }); } catch (e) { res = { error: e }; }
+    if (!res.error) return {};
+    let msg = '';
+    try { const ctx = res.error.context; if (ctx && typeof ctx.json === 'function') msg = ((await ctx.json()) || {}).error || ''; } catch {}
+    if (/cambió/.test(msg)) refrescar();
+    return { error: msg || 'No se pudo mandar. Revisá la señal y probá de nuevo.' };
+  }
+  async function arrancar(p) {
+    if (p.juego !== 'truco') return accion('avanzar_partida', { p: p.id, p_ronda: 0, p_fase: 'espera' });
+    if (ocupado) return null;
+    ocupado = true; pintar();
+    const r = await funcion({ accion: 'truco_arrancar', partida: p.id });
+    ocupado = false;
+    if (r.error) g.App.toast(r.error);
+    await refrescar();
+    return r;
+  }
+  // configuración del truco en la sala: a 15 o 30, con o sin flor (la elige quien la armó)
+  function configTruco(p, puedo) {
+    const c = p.estado_juego || {}, a = c.a === 15 ? 15 : 30, flor = !!c.flor;
+    const cambiar = (na, nf) => accion('truco_config', { p: p.id, p_a: na, p_flor: nf });
+    if (!puedo) return h('p', { class: 'ayuda', id: 'truco-config' }, 'Se juega a ' + a + (flor ? ', con flor.' : ', sin flor.'));
+    const seg = (id, opciones, actual, fn) => h('div', { class: 'segmentos', role: 'group', id }, opciones.map(([v, t]) =>
+      h('button', { type: 'button', class: 'chip seg' + (actual === v ? ' activo' : ''), 'aria-pressed': actual === v ? 'true' : 'false', disabled: ocupado, on: { click: () => { if (actual !== v) fn(v); } } }, t)));
+    return h('div', { class: 'truco-config', id: 'truco-config' },
+      h('p', { class: 'ayuda' }, 'Cómo se juega:'),
+      seg('truco-a', [[15, 'A 15'], [30, 'A 30']], a, (v) => cambiar(v, flor)),
+      seg('truco-flor', [[false, 'Sin flor'], [true, 'Con flor']], flor, (v) => cambiar(a, v)));
+  }
+
   async function accion(fn, args, okMsg) {
     if (ocupado) return null;
     ocupado = true; confirmando = null; pintar();
@@ -235,7 +269,7 @@
   }
   // El juego en curso (Trivia) se monta una vez por partida y se actualiza con cada cambio: así conserva sus timers.
   function juegoDe(p) {
-    const mod = { trivia: g.Trivia, impostor: g.Impostor, ajedrez: g.Ajedrez, pictionary: g.Pictionary }[p.juego];
+    const mod = { trivia: g.Trivia, impostor: g.Impostor, ajedrez: g.Ajedrez, pictionary: g.Pictionary, truco: g.Truco }[p.juego];
     if (!mod) { cerrarJuego(); return h('p', { class: 'vacio' }, 'Este juego llega pronto.'); }
     if (juegoId !== p.id) {
       cerrarJuego();
@@ -260,16 +294,11 @@
         // pictionary (37): la palabra (solo a quien dibuja) y adivinar
         palabraPic: () => Promise.resolve(sb().rpc('pictionary_mi_palabra', { p: p.id })),
         adivinarPic: (ronda, texto) => Promise.resolve(sb().rpc('pictionary_adivinar', { p: p.id, p_ronda: ronda, p_texto: texto })),
+        // truco (38): tus cartas (solo las tuyas) y cada acción, que la valida y la guarda la Edge Function juegos
+        misCartas: () => Promise.resolve(sb().rpc('truco_mis_cartas', { p: p.id })),
+        trucoAccion: (v, jugada) => funcion({ accion: 'truco_accion', partida: p.id, v, jugada }),
         // ajedrez (36): la jugada la valida y la guarda la Edge Function juegos
-        mover: async (n, desde, hasta, corona) => {
-          let r;
-          try { r = await sb().functions.invoke('juegos', { body: { accion: 'ajedrez_mover', partida: p.id, n, desde, hasta, corona } }); } catch (e) { r = { error: e }; }
-          if (!r.error) return {};
-          let msg = '';
-          try { const ctx = r.error.context; if (ctx && typeof ctx.json === 'function') msg = ((await ctx.json()) || {}).error || ''; } catch {}
-          if (/cambió/.test(msg)) refrescar();
-          return { error: msg || 'No se pudo mandar la jugada. Revisá la señal y probá de nuevo.' };
-        },
+        mover: (n, desde, hasta, corona) => funcion({ accion: 'ajedrez_mover', partida: p.id, n, desde, hasta, corona }),
         volver: () => irA({ tipo: 'lista' }),
       });
     }
@@ -379,7 +408,7 @@
       h('button', { type: 'button', class: 'btn-link btn-volver', on: { click: () => irA({ tipo: 'lista' }) } }, g.App.icono('volver'), 'Volver'),
       h('h1', null, 'Nueva partida'),
       h('p', { class: 'ayuda' }, '¿A qué juegan? La partida queda abierta para que se sumen los demás.'),
-      h('div', { class: 'lista-act' }, opcion('trivia'), opcion('impostor'), opcion('pictionary'), opcion('ajedrez')),
+      h('div', { class: 'lista-act' }, opcion('trivia'), opcion('impostor'), opcion('pictionary'), opcion('truco'), opcion('ajedrez')),
     ];
   }
 
@@ -424,6 +453,8 @@
       cerrarJuego();
       const n = activosDe(p.id, jugadores).length;
       const faltan = Math.max(0, j.minimo - n), sobran = j.maximo ? Math.max(0, n - j.maximo) : 0;
+      const impar = j.pares && n % 2 === 1 && !faltan && !sobran;
+      if (p.juego === 'truco') out.push(configTruco(p, p.creador === yo && activo));
       out.push(h('p', { class: 'tarjeta-badges' }, badge('Sala de espera', 'acento')),
         h('h2', { class: 'sub' }, 'Jugadores (' + n + ')'), listaJugadores(p));
       if (!activo) {
@@ -432,7 +463,8 @@
       } else if (p.creador === yo) {
         out.push(faltan ? h('p', { class: 'ayuda', id: 'faltan-jugadores' }, (faltan === 1 ? 'Falta 1 jugador' : 'Faltan ' + faltan + ' jugadores') + ' para arrancar.') : null,
           sobran ? h('p', { class: 'ayuda' }, 'Sobran ' + sobran + ': es de a ' + j.maximo + '.') : null,
-          h('button', { type: 'button', id: 'btn-arrancar', class: 'btn-primario btn-ancho', disabled: ocupado || faltan > 0 || sobran > 0, on: { click: () => accion('avanzar_partida', { p: p.id, p_ronda: 0, p_fase: 'espera' }) } }, n === 1 ? 'Arrancar (jugás solo)' : 'Arrancar'));
+          impar ? h('p', { class: 'ayuda', id: 'jugadores-impar' }, 'Tienen que ser 2, 4 o 6 para armar las parejas.') : null,
+          h('button', { type: 'button', id: 'btn-arrancar', class: 'btn-primario btn-ancho', disabled: ocupado || faltan > 0 || sobran > 0 || impar, on: { click: () => arrancar(p) } }, n === 1 ? 'Arrancar (jugás solo)' : 'Arrancar'));
       } else {
         out.push(h('p', { class: 'ayuda', id: 'esperando-creador' }, 'Esperando que ' + perfilDe(p.creador).nombre + ' arranque la partida.'));
       }

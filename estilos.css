@@ -862,3 +862,36 @@ body.sin-sesion #btn-perfil { display: none; }
 .pic-color.activo { outline: 3px solid var(--accent); outline-offset: 2px; }
 .pic-form { display: flex; gap: .5rem; margin-top: .25rem; }
 .pic-form input { flex: 1; min-width: 0; }
+
+/* ---------- Truco (truco.js) ---------- */
+.truco-config { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin: .5rem 0; }
+.truco-config .ayuda { margin: 0; flex-basis: 100%; }
+.anotador { margin: .25rem 0 .5rem; padding: .6rem .8rem; border: 1px solid var(--border); border-radius: var(--r-tarjeta); background: var(--bg-alt); }
+.anot-fila { display: flex; align-items: center; gap: .6rem; min-height: 2rem; }
+.anot-fila + .anot-fila { border-top: 1px dashed var(--border); margin-top: .3rem; padding-top: .3rem; }
+.anot-fila.mia .anot-eq { color: var(--accent-hover, var(--accent)); }
+.anot-eq { flex: none; width: 5.5rem; font-weight: 700; }
+.anot-pts { margin-left: auto; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.anot-meta { margin: .3rem 0 0; font-size: .78rem; color: var(--muted); }
+.palitos { display: flex; flex-wrap: wrap; gap: 3px; min-width: 0; }
+.palito-grupo { width: 22px; height: 22px; stroke: currentColor; stroke-width: 3; stroke-linecap: round; fill: none; }
+.naipe { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; width: 4.6rem; height: 6.6rem; padding: .3rem; margin: 0; border-radius: 10px; border: 2px solid #c9c2b4; background: #fffdf7; color: #222; font: inherit; box-shadow: 0 2px 6px rgba(0, 0, 0, .25); }
+.naipe-num { font-size: 2rem; font-weight: 800; line-height: 1; }
+.naipe-palo { font-size: .8rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+.naipe.palo-e { color: #1d4ed8; } .naipe.palo-b { color: #15803d; } .naipe.palo-o { color: #b7791f; } .naipe.palo-c { color: #c62828; }
+.naipe.chico { width: 2.9rem; height: 4.1rem; border-radius: 7px; box-shadow: none; }
+.naipe.chico .naipe-num { font-size: 1.2rem; }
+.naipe.chico .naipe-palo { font-size: .55rem; }
+button.naipe { cursor: pointer; }
+button.naipe:disabled { opacity: .55; cursor: default; }
+button.naipe.jugable { border-color: var(--accent); transform: translateY(-4px); }
+.truco-mano { display: flex; gap: .6rem; justify-content: center; margin: .75rem 0; min-height: 6.8rem; align-items: flex-end; }
+.truco-mesa { display: flex; flex-direction: column; gap: .4rem; margin: .5rem 0; }
+.baza { padding: .4rem .6rem; border: 1px solid var(--border); border-radius: var(--r-ctrl); }
+.baza-tit { margin: 0 0 .25rem; font-size: .8rem; color: var(--muted); font-weight: 600; }
+.baza-cartas { display: flex; flex-wrap: wrap; gap: .5rem; }
+.baza-j { display: inline-flex; flex-direction: column; align-items: center; gap: .1rem; }
+.baza-j small { font-size: .7rem; color: var(--muted); max-width: 4.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.baza-falta { margin: .2rem 0 0; font-size: .8rem; color: var(--muted); }
+.truco-resp, .truco-cantos { margin: .4rem 0; flex-wrap: wrap; }
+#truco-mazo { display: block; margin: .5rem auto 0; }
