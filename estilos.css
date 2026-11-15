@@ -104,7 +104,7 @@ h1 { font-size: 1.75rem; line-height: 1.15; letter-spacing: -.02em; margin: 0 0 
 .vacio-acciones { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .35rem 1rem; }
 .vacio-acciones .btn-link { margin-top: .25rem; }
 
-/* Barra de abajo (2026-11-15): del azul de la marca en los dos temas, igual que la franja de los botones de Android (que
+/* Barra de abajo (2026-11-15): en modo oscuro, del azul de la marca, igual que la franja de los botones de Android (que
    toma el theme_color del manifest, #002F68), así no hay corte entre las dos. La pestaña activa se marca con una
    píldora detrás del ícono y la cámara es una píldora celeste del mismo tamaño: todo alineado, nada sobresale. */
 .pestanas {
@@ -135,6 +135,14 @@ h1 { font-size: 1.75rem; line-height: 1.15; letter-spacing: -.02em; margin: 0 0 
 .pestana-camara .pc-ico { width: 22px; height: 22px; fill: currentColor; display: block; }
 .pestana-camara:hover .ind { background: var(--accent-hover); }
 .pestana-camara:active .ind { transform: scale(.94); }
+/* modo claro: la barra blanca de siempre (con su borde fino arriba), con la misma forma (píldoras) */
+:root:not([data-tema="oscuro"]) .pestanas { background: var(--bg); border-top: 1px solid var(--border); }
+:root:not([data-tema="oscuro"]) .pestanas a { color: var(--muted); }
+:root:not([data-tema="oscuro"]) .pestanas a.activa { color: var(--tinta-fuerte); }
+:root:not([data-tema="oscuro"]) .pestanas a.activa .ind { background: rgba(0, 177, 239, .16); }
+:root:not([data-tema="oscuro"]) .pestana-camara { color: var(--tinta-fuerte); }
+:root:not([data-tema="oscuro"]) .pestana-camara .ind { box-shadow: none; }
+:root:not([data-tema="oscuro"]) .pestanas a:focus-visible .ind, :root:not([data-tema="oscuro"]) .pestana-camara:focus-visible .ind { outline-color: var(--tinta-fuerte); }
 
 .toast {
   position: fixed; left: 50%; transform: translateX(-50%);
