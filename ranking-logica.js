@@ -1,5 +1,5 @@
 // Lógica pura del ranking general (sin DOM). Los números son los mismos que usa la base en ranking() (la última
-// versión está en dev/supabase/36-ajedrez.sql): si se cambia uno, cambiar los dos. En el navegador queda en window.RankingLogica.
+// versión está en dev/supabase/37-pictionary.sql): si se cambia uno, cambiar los dos. En el navegador queda en window.RankingLogica.
 (function (g) {
   const PUNTOS = {
     asistencia: 1000,     // ir a una actividad (lo confirma quien la armó): lo que más suma
@@ -13,6 +13,10 @@
     ajedrezJugar: 50,     // partidas de 10 jugadas o más
     ajedrezGanar: 150,    // + al que gana
     ajedrezTablas: 50,    // + a cada uno si son tablas
+    pictionaryJugar: 50,  // con 2 o más
+    pictionaryGanar: 150, // + al que termina con más puntos
+    trucoJugar: 50,
+    trucoGanar: 150,      // + a cada uno del equipo que gana
   };
   const TOPE_PARTIDAS_DIA = 10;
 
@@ -26,6 +30,7 @@
     { clave: 'organizar', titulo: 'Armar una actividad', puntos: PUNTOS.organizar, detalle: 'Si fueron 3 o más, sin contarte.' },
     { clave: 'tercer', titulo: 'Ir al tercer tiempo', puntos: PUNTOS.tercer, detalle: 'También lo confirma quien la armó.' },
     { clave: 'ajedrez', titulo: 'Ajedrez', puntos: PUNTOS.ajedrezJugar, detalle: 'Partidas de 10 jugadas o más. +' + PUNTOS.ajedrezGanar + ' al que gana, +' + PUNTOS.ajedrezTablas + ' a cada uno si son tablas.' },
+    { clave: 'pictionary', titulo: 'Pictionary', puntos: PUNTOS.pictionaryJugar, detalle: '+' + PUNTOS.pictionaryGanar + ' al que termina con más puntos.' },
     { clave: 'impostor', titulo: 'El Impostor', puntos: PUNTOS.impostorJugar, detalle: '+' + PUNTOS.impostorGrupo + ' si gana el grupo, +' + PUNTOS.impostorImpostor + ' al impostor si gana él.' },
     { clave: 'trivia', titulo: 'Trivia', puntos: PUNTOS.triviaJugar, detalle: 'Con 2 o más jugadores. +' + PUNTOS.triviaGanar + ' al que sale primero.' },
   ];
@@ -39,6 +44,8 @@
       { clave: 'trivia', nombre: 'Trivia', puntos: f.trivia || 0, n: f.n_trivia || 0, cuenta: (n) => plural(n, 'partida', 'partidas') },
       { clave: 'impostor', nombre: 'El Impostor', puntos: f.impostor || 0, n: f.n_impostor || 0, cuenta: (n) => plural(n, 'partida', 'partidas') },
       { clave: 'ajedrez', nombre: 'Ajedrez', puntos: f.ajedrez || 0, n: f.n_ajedrez || 0, cuenta: (n) => plural(n, 'partida', 'partidas') },
+      { clave: 'pictionary', nombre: 'Pictionary', puntos: f.pictionary || 0, n: f.n_pictionary || 0, cuenta: (n) => plural(n, 'partida', 'partidas') },
+      { clave: 'truco', nombre: 'Truco', puntos: f.truco || 0, n: f.n_truco || 0, cuenta: (n) => plural(n, 'partida', 'partidas') },
     ];
     return it.filter((x) => x.puntos > 0).sort((a, b) => b.puntos - a.puntos).map((x) => ({ clave: x.clave, nombre: x.nombre, puntos: x.puntos, detalle: x.cuenta(x.n) }));
   }

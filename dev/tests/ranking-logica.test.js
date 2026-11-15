@@ -15,8 +15,8 @@ test('la asistencia a una actividad es lo que más suma', () => {
   assert.equal(R.REGLAS[0].destacada, true);
 });
 
-test('los puntos de la app son los de la base (la última ranking(): dev/supabase/36-ajedrez.sql)', () => {
-  const sql = fs.readFileSync(path.join(__dirname, '../supabase/36-ajedrez.sql'), 'utf8');
+test('los puntos de la app son los de la base (la última ranking(): dev/supabase/37-pictionary.sql)', () => {
+  const sql = fs.readFileSync(path.join(__dirname, '../supabase/37-pictionary.sql'), 'utf8');
   const P = R.PUNTOS;
   assert.ok(sql.includes('coalesce(asis.n, 0) * ' + P.asistencia + ' as asistencia'));
   assert.ok(sql.includes('coalesce(ter.n, 0) * ' + P.tercer + ' as tercer'));
@@ -30,6 +30,8 @@ test('los puntos de la app son los de la base (la última ranking(): dev/supabas
   assert.ok(sql.includes('else ' + P.ajedrezJugar + ' + case'));
   assert.ok(sql.includes("'tablas' then " + P.ajedrezTablas));
   assert.ok(sql.includes("jug.e ->> 'negras') then " + P.ajedrezGanar));
+  assert.ok(sql.replace(/\r\n/g, '\n').includes("when 'pictionary' then case when jug.n_act < 2 then 0\n                                     else " + P.pictionaryJugar + ' + case when jug.puntos = jug.max_pts and jug.puntos > 0 then ' + P.pictionaryGanar));
+  assert.ok(sql.includes('else ' + P.trucoJugar + " + case when coalesce(jug.e -> 'ganadores', '[]'::jsonb) ? jug.persona::text then " + P.trucoGanar));
 });
 
 test('desglose: solo lo que tiene puntos, de mayor a menor, con la cuenta en palabras', () => {

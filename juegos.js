@@ -8,6 +8,7 @@
     trivia: { icono: 'trivia', nombre: 'Trivia', desc: '10 preguntas, 15 segundos cada una. Se puede jugar solo.', minimo: 1 },
     impostor: { icono: 'impostor', nombre: 'El Impostor', desc: 'De 3 jugadores en adelante. Todos tienen la misma palabra menos el impostor: descubrilo.', minimo: 3 },
     ajedrez: { icono: 'ajedrez', nombre: 'Ajedrez', desc: 'De a dos, cada uno en su teléfono. Los colores se sortean.', minimo: 2, maximo: 2 },
+    pictionary: { icono: 'pictionary', nombre: 'Pictionary', desc: 'De 2 a 8. Uno dibuja con el dedo y los demás adivinan. Todos dibujan una vez.', minimo: 2, maximo: 8 },
   };
   const VIGENCIA_ESPERA = 12 * 3600e3;   // una partida abierta más vieja que esto ya no se ofrece para unirse
   const VIGENCIA_TERMINADA = 24 * 3600e3;
@@ -186,7 +187,7 @@
   }
 
   // ---------- Acciones ----------
-  const MSG = /^(La partida|Solo quien|El Impostor|El ajedrez|Todavía no|No estás|No hay preguntas|Ya tenés)/;
+  const MSG = /^(La partida|Solo quien|El Impostor|El ajedrez|El Pictionary|No hay palabras|Todavía no|No estás|No hay preguntas|Ya tenés)/;
   async function rpc(fn, args) {
     let res;
     try { res = await sb().rpc(fn, args); } catch (e) { res = { data: null, error: e }; }
@@ -234,7 +235,7 @@
   }
   // El juego en curso (Trivia) se monta una vez por partida y se actualiza con cada cambio: así conserva sus timers.
   function juegoDe(p) {
-    const mod = { trivia: g.Trivia, impostor: g.Impostor, ajedrez: g.Ajedrez }[p.juego];
+    const mod = { trivia: g.Trivia, impostor: g.Impostor, ajedrez: g.Ajedrez, pictionary: g.Pictionary }[p.juego];
     if (!mod) { cerrarJuego(); return h('p', { class: 'vacio' }, 'Este juego llega pronto.'); }
     if (juegoId !== p.id) {
       cerrarJuego();
@@ -256,6 +257,9 @@
           }
           return r;
         }),
+        // pictionary (37): la palabra (solo a quien dibuja) y adivinar
+        palabraPic: () => Promise.resolve(sb().rpc('pictionary_mi_palabra', { p: p.id })),
+        adivinarPic: (ronda, texto) => Promise.resolve(sb().rpc('pictionary_adivinar', { p: p.id, p_ronda: ronda, p_texto: texto })),
         // ajedrez (36): la jugada la valida y la guarda la Edge Function juegos
         mover: async (n, desde, hasta, corona) => {
           let r;
@@ -375,7 +379,7 @@
       h('button', { type: 'button', class: 'btn-link btn-volver', on: { click: () => irA({ tipo: 'lista' }) } }, g.App.icono('volver'), 'Volver'),
       h('h1', null, 'Nueva partida'),
       h('p', { class: 'ayuda' }, '¿A qué juegan? La partida queda abierta para que se sumen los demás.'),
-      h('div', { class: 'lista-act' }, opcion('trivia'), opcion('impostor'), opcion('ajedrez')),
+      h('div', { class: 'lista-act' }, opcion('trivia'), opcion('impostor'), opcion('pictionary'), opcion('ajedrez')),
     ];
   }
 

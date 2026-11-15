@@ -848,3 +848,17 @@ body.sin-sesion #btn-perfil { display: none; }
 .aj-jugadas { margin-top: .75rem; }
 .aj-jugadas ol { list-style: none; margin: .4rem 0 0; padding: 0; columns: 2; font-variant-numeric: tabular-nums; font-size: .9rem; }
 .aj-num { color: var(--muted); }
+
+/* ---------- Pictionary (pictionary.js) ---------- */
+.pic-lienzo { display: block; width: 100%; max-width: 480px; aspect-ratio: 1; margin: .5rem auto; background: #fff; border: 2px solid var(--border); border-radius: 8px; touch-action: none; }
+.pic-lienzo.dibujable { cursor: crosshair; border-color: var(--accent); }
+.pic-palabra { margin: .5rem 0 0; font-size: 1.1rem; }
+.pic-palabra strong { font-size: 1.35rem; }
+.pic-pista { font-family: ui-monospace, Menlo, Consolas, monospace; letter-spacing: .05em; font-weight: 700; white-space: pre-wrap; }
+.pic-herr { display: flex; flex-wrap: wrap; gap: .5rem .6rem; align-items: center; margin-top: .5rem; }
+.pic-herr .segmentos { margin: 0; }
+.pic-herr #pic-borrar { margin-left: auto; }
+.pic-color { width: 2rem; height: 2rem; padding: 0; border-radius: 50%; border: 2px solid var(--border); min-height: 0; }
+.pic-color.activo { outline: 3px solid var(--accent); outline-offset: 2px; }
+.pic-form { display: flex; gap: .5rem; margin-top: .25rem; }
+.pic-form input { flex: 1; min-width: 0; }
