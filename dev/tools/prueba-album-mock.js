@@ -257,6 +257,33 @@ const celdas = (p) => cuantos(p, '#album-act .album-cel');
       assert.equal(db.fotos.length, 2);
     });
 
+    await paso('"Bajar todas": un .zip con las 2 fotos, con nombre de la actividad, fecha y autor', async () => {
+      assert.equal(await texto(pa, '#album-bajar'), 'Bajar todas (2)');
+      await pa.evaluate(() => {
+        window.__zip = null;
+        const orig = HTMLAnchorElement.prototype.click;
+        HTMLAnchorElement.prototype.click = function () {
+          if (this.download && /\.zip$/.test(this.download)) { window.__zip = { nombre: this.download, href: this.href }; return; }
+          return orig.call(this);
+        };
+      });
+      await pa.click('#album-bajar');
+      await esperar(pa, () => window.__zip && !document.getElementById('album-bajar').disabled);
+      const r = await pa.evaluate(async () => {
+        const b = new Uint8Array(await (await fetch(window.__zip.href)).arrayBuffer());
+        const v = new DataView(b.buffer), fin = b.length - 22, td = new TextDecoder();
+        const n = v.getUint16(fin + 10, true);
+        let p = v.getUint32(fin + 16, true); const nombres = [];
+        for (let i = 0; i < n; i++) { const l = v.getUint16(p + 28, true); nombres.push(td.decode(b.subarray(p + 46, p + 46 + l))); p += 46 + l; }
+        return { nombre: window.__zip.nombre, firma: v.getUint32(0, true), nombres };
+      });
+      assert.equal(r.firma, 0x04034b50, 'no es un zip');
+      assert.equal(r.nombre, 'Asado de fin de año - CEDI CLUB.zip');
+      assert.equal(r.nombres.length, 2);
+      assert.ok(r.nombres.every((x) => /^\d{4}-\d\d-\d\d \d\d\.\d\d\.\d\d Ana Pérez( \(2\))?\.jpg$/.test(x)), JSON.stringify(r.nombres));
+      assert.equal(await texto(pa, '#album-bajar'), 'Bajar todas (2)');
+    });
+
     // WebKit no tiene la cámara falsa de Chrome: en Safari la cámara se prueba en el teléfono
     if (SAFARI) await paso('(WebKit) en lugar de la cámara, otra foto de la galería', async () => {
       await (await pa.$('#album-act input[type=file]')).uploadFile(fixture);

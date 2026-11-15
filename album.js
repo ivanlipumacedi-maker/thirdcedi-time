@@ -8,6 +8,7 @@
 .album [hidden] { display: none !important }
 .album .album-acciones { display: flex; gap: 8px; flex-wrap: wrap; align-items: center }
 .album .album-acciones .btn-sec, .album .album-acciones .btn-primario { flex: 1; margin-top: 0; text-align: center; cursor: pointer }
+.album .album-bajar { margin-top: 8px; justify-content: center }
 .album .album-estado { font-size: .88rem; color: var(--muted); margin: .6rem 0 0 }
 .album .album-estado .barra { height: 5px; border-radius: 3px; background: var(--border); margin-top: 5px; overflow: hidden }
 .album .album-estado .barra i { display: block; height: 100%; background: var(--accent) }
@@ -93,7 +94,7 @@
     let cerrado = false;
     let enVuelo = null;           // la sincronización en curso (una sola a la vez)
     let otraVez = false;          // la pidieron de nuevo con una en vuelo: al terminar se corre una más
-    let actual = null, borrando = false, abriendoEditor = false;
+    let actual = null, borrando = false, abriendoEditor = false, bajando = false;
     const perfiles = new Map();
 
     const perfilDe = (id) => perfiles.get(id) || { id, nombre: 'Compañero', foto: null };
@@ -102,6 +103,9 @@
     const inGaleria = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, id: 'album-galeria-' + act.slice(0, 8) });
     // Sin link a Drive (decisión de Ivan, 2026-11-14): la copia de Drive es un respaldo privado de la cuenta CEDI CLUB;
     // las fotos se ven y se bajan (Guardar) desde la app, que ya controla quién ve qué.
+    // "Bajar todas" (2026-11-15): un .zip con todas las fotos y videos del álbum, en la mejor calidad que haya en la app
+    const btnBajar = h('button', { type: 'button', id: 'album-bajar', class: 'btn-sec btn-ancho btn-con-ico album-bajar', hidden: true, on: { click: bajarTodas } },
+      g.App.icono('bajar'), h('span', null, 'Bajar todas'));
     const elEstadoTxt = h('div', { class: 'album-estado-txt', 'aria-live': 'polite' });
     const elBarra = h('div', { class: 'barra', hidden: true }, h('i'));
     const elEstado = h('div', { class: 'album-estado' }, elEstadoTxt, elBarra);
@@ -113,7 +117,7 @@
         h('button', { type: 'button', id: 'album-camara', class: 'btn-primario btn-chico btn-con-ico', on: { click: abrirCamara } }, g.App.icono('camara'), 'Cámara'),
         h('button', { type: 'button', id: 'album-galeria', class: 'btn-sec btn-chico btn-con-ico', on: { click: () => inGaleria.click() } }, g.App.icono('galeria'), 'Galería'),
         inGaleria),
-      elEstado, elGrilla);
+      btnBajar, elEstado, elGrilla);
 
     // ---------- Pintar ----------
     function pintarEstado() {
@@ -125,6 +129,9 @@
       elBarra.hidden = e.estado === 'ok';
       elBarra.firstChild.style.width = e.pct + '%';
       g.Camara.pendientes(pend);
+      btnBajar.hidden = !fotos.length;
+      btnBajar.disabled = bajando;
+      if (!bajando) btnBajar.lastChild.textContent = fotos.length === 1 ? (A.esVideo(fotos[0]) ? 'Bajar el video' : 'Bajar la foto') : 'Bajar todas (' + fotos.length + ')';
     }
 
     async function firmarYPoner(imgs) {
@@ -400,6 +407,50 @@
         const r = await fetch(u); if (r.ok) return r.blob();
       }
       throw new Error('sin la foto');
+    }
+    // Todas las fotos y videos en un .zip (sin compresión: ya vienen comprimidos), de la más vieja a la más nueva, con
+    // nombre "AAAA-MM-DD HH.MM.SS Autor.jpg". Se bajan de a una; si alguna falla, sigue con las demás y avisa cuántas.
+    async function bajarTodas() {
+      if (bajando || !fotos.length) return;
+      const lista = [...fotos].sort((x, y) => (x.tomada < y.tomada ? -1 : x.tomada > y.tomada ? 1 : 0));
+      const MAX = 600 * 1024 * 1024; // más que esto no entra cómodo en la memoria de un teléfono
+      if (lista.reduce((s, f) => s + (f.bytes || 0), 0) > MAX) { toast('Son demasiadas para un solo archivo. Bajalas de a una desde el visor.'); return; }
+      bajando = true; pintarEstado();
+      const archivos = [];
+      let fallas = 0;
+      const dos = (n) => String(n).padStart(2, '0');
+      try {
+        let titulo = act === TODOS ? 'Fotos de todos' : null;
+        if (!titulo) {
+          try { const r = await sb.from('actividades').select('titulo').eq('id', act).maybeSingle(); titulo = (r.data && r.data.titulo) || null; } catch {}
+        }
+        for (let i = 0; i < lista.length; i++) {
+          if (cerrado) return;
+          btnBajar.lastChild.textContent = 'Bajando ' + (i + 1) + ' de ' + lista.length + '…';
+          const f = lista[i];
+          try {
+            const b = await blobDe(f);
+            const d = new Date(f.tomada);
+            const ext = (/\.(mp4|webm)$/.exec(f.ruta || '') || [])[1] || 'jpg';
+            const nombre = d.getFullYear() + '-' + dos(d.getMonth() + 1) + '-' + dos(d.getDate()) + ' ' + dos(d.getHours()) + '.' + dos(d.getMinutes()) + '.' + dos(d.getSeconds())
+              + ' ' + perfilDe(f.autor).nombre + '.' + ext;
+            archivos.push({ nombre, datos: new Uint8Array(await b.arrayBuffer()), fecha: d });
+          } catch (x) { console.warn('bajar todas:', f.id, x && x.message); fallas++; }
+        }
+        if (cerrado) return;
+        if (!archivos.length) { toast('No se pudo bajar ninguna. Revisá la señal y probá de nuevo.'); return; }
+        btnBajar.lastChild.textContent = 'Armando el archivo…';
+        const zip = g.Zip.armar(archivos), u = URL.createObjectURL(zip);
+        const nombreZip = (titulo || 'Álbum').replace(/[\\/:*?"<>|]+/g, '-').trim() + ' - CEDI CLUB.zip';
+        const a = h('a', { href: u, download: nombreZip });
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(u), 60000);
+        toast(fallas ? 'Se bajaron ' + archivos.length + '. ' + fallas + ' no se pudieron: revisá la señal y probá de nuevo.'
+          : 'Listo: ' + (archivos.length === 1 ? 'la foto está' : 'las ' + archivos.length + ' están') + ' en el .zip.');
+      } finally {
+        bajando = false;
+        if (!cerrado) pintarEstado();
+      }
     }
     async function guardar(e) {
       e.preventDefault(); if (!actual) return;
